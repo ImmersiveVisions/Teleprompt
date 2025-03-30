@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import db from '../database/db';
 import { registerMessageHandler } from '../services/websocket';
+import { parseScript } from '../services/scriptParser';
 import '../styles.css';
 
 const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
@@ -214,10 +215,32 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
     if (!script) return null;
     
     // Use body if available, fall back to content for backwards compatibility
-    const body = script.body || script.content;
-    if (!body) return null;
+    const rawContent = script.body || script.content;
+    if (!rawContent) return null;
     
-    const lines = body.split('\n');
+    // For HTML files, display directly without any processing
+    if (script.isHtml || (script.title && script.title.toLowerCase().endsWith('.html'))) {
+      console.log('Rendering HTML content in ScriptViewer iframe');
+      return (
+        <iframe
+          srcDoc={rawContent}
+          style={{
+            width: '100%', 
+            height: '100%',
+            border: 'none',
+            backgroundColor: 'black'
+          }}
+          sandbox="allow-same-origin"
+          title={`${script.title} preview`}
+          loading="eager"
+          id="html-script-preview-frame"
+          onLoad={() => console.log('HTML iframe loaded in ScriptViewer')}
+        />
+      );
+    }
+    
+    // For non-HTML content, use the existing line-by-line rendering
+    const lines = rawContent.split('\n');
     
     return lines.map((line, index) => {
       // Check if line contains 'FILM CLIP'

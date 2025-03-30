@@ -2,6 +2,7 @@
 // An ultra-simple script player that just focuses on scrolling
 
 import React, { useEffect, useRef } from 'react';
+import { parseScript } from '../services/scriptParser';
 
 const ScriptPlayer = ({ 
   script, 
@@ -36,11 +37,47 @@ const ScriptPlayer = ({
       scriptContent = script.body;
     } else if (script.content) {
       scriptContent = script.content;
-      // For compatibility, set body from content if missing
-      script.body = script.content;
+    } else {
+      console.error('Script has neither body nor content:', script.id);
+    }
+    
+    // For HTML content, make sure we're not encoding it by accident
+    // This ensures the HTML is properly interpreted and not treated as text
+    if (script.isHtml || (script.title && script.title.toLowerCase().endsWith('.html'))) {
+      console.log('Preparing HTML content for iframe rendering');
+      
+      // Ensure we have a proper doctype for HTML
+      if (scriptContent && !scriptContent.trim().toLowerCase().startsWith('<!doctype html>')) {
+        scriptContent = '<!DOCTYPE html>\n' + scriptContent;
+      }
+      
+      // Ensure basic styling if not already in the HTML
+      if (scriptContent && !scriptContent.includes('<style')) {
+        scriptContent = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body, html {
+                background-color: black !important;
+                color: white !important;
+                font-family: 'Courier New', monospace;
+                margin: 0;
+                padding: 0;
+              }
+            </style>
+          </head>
+          <body>
+            ${scriptContent}
+          </body>
+          </html>
+        `;
+      }
     }
   }
   
+
   // Simple scrolling animation - only cares about scrolling, nothing else
   useEffect(() => {
     // Don't do anything if no script or container
@@ -93,10 +130,24 @@ const ScriptPlayer = ({
       const beforeScroll = container.scrollTop;
       
       // Do the actual scrolling
-      container.scrollTop += pixelsToScroll;
+      if (script.title && script.title.toLowerCase().endsWith('.html')) {
+        // For HTML content, find the iframe and scroll it
+        const iframe = container.querySelector('iframe');
+        if (iframe && iframe.contentWindow) {
+          // Using the contentWindow to scroll the iframe
+          iframe.contentWindow.scrollBy(0, pixelsToScroll);
+        } else {
+          // Fallback to container scrolling
+          container.scrollTop += pixelsToScroll;
+        }
+      } else {
+        // For regular text content
+        container.scrollTop += pixelsToScroll;
+      }
       
       // Check if scroll actually happened
-      if (Math.abs(container.scrollTop - beforeScroll) < 0.01 && pixelsToScroll > 0) {
+      if (Math.abs(container.scrollTop - beforeScroll) < 0.01 && pixelsToScroll > 0 && 
+          !(script.title && script.title.toLowerCase().endsWith('.html'))) {
         console.log('WARNING: Scroll not changing despite request!', {
           before: beforeScroll,
           after: container.scrollTop,
@@ -152,23 +203,48 @@ const ScriptPlayer = ({
     const percentage = Math.max(0, Math.min(position, maxLength)) / maxLength;
     
     // Apply the scroll
-    const maxScroll = container.scrollHeight - container.clientHeight;
-    const targetScroll = percentage * maxScroll;
-    
-    // TODO: Improve scrolling accuracy when jumping to search results
-    // Current issues:
-    // 1. The scroll position calculation needs adjustment to center the found text in the viewport
-    // 2. For long scripts, the linear percentage calculation may not be accurate enough
-    // 3. Consider highlighting the found text temporarily for better visibility
-    
-    // Use smooth scrolling for a better experience
-    container.style.scrollBehavior = 'smooth';
-    container.scrollTop = targetScroll;
-    
-    // Reset scroll behavior
-    setTimeout(() => {
-      container.style.scrollBehavior = 'auto';
-    }, 500);
+    if (script.title && script.title.toLowerCase().endsWith('.html')) {
+      // For HTML content, find the iframe and scroll it
+      const iframe = container.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        // Wait for iframe to load
+        const checkIframeLoaded = () => {
+          try {
+            // Try to access contentDocument to check if loaded
+            if (iframe.contentDocument && iframe.contentDocument.body) {
+              const maxScroll = iframe.contentDocument.body.scrollHeight - iframe.clientHeight;
+              const targetScroll = percentage * maxScroll;
+              
+              // Scroll the iframe content
+              iframe.contentWindow.scrollTo({
+                top: targetScroll,
+                behavior: 'smooth'
+              });
+            } else {
+              // Try again in a moment
+              setTimeout(checkIframeLoaded, 100);
+            }
+          } catch (e) {
+            console.error('Error accessing iframe content:', e);
+          }
+        };
+        
+        checkIframeLoaded();
+      }
+    } else {
+      // For regular text content
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      const targetScroll = percentage * maxScroll;
+      
+      // Use smooth scrolling for a better experience
+      container.style.scrollBehavior = 'smooth';
+      container.scrollTop = targetScroll;
+      
+      // Reset scroll behavior
+      setTimeout(() => {
+        container.style.scrollBehavior = 'auto';
+      }, 500);
+    }
   };
   
   // Expose jump method to parent
@@ -258,8 +334,26 @@ const ScriptPlayer = ({
             boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)',
             textAlign: 'center'
           }}
+          className="script-content-container"
         >
-          {scriptContent}
+          {script.isHtml || (script.title && script.title.toLowerCase().endsWith('.html')) ? (
+            <iframe 
+              srcDoc={scriptContent}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                backgroundColor: 'black'
+              }}
+              sandbox="allow-same-origin"
+              title={`${script.title} content`}
+              loading="eager"
+              id="html-script-frame"
+              onLoad={() => console.log('HTML iframe loaded in ScriptPlayer')}
+            />
+          ) : (
+            scriptContent
+          )}
         </div>
       </div>
     </div>

@@ -19,6 +19,113 @@ const ViewerPage = () => {
   
   // Reference to the script player component
   const scriptPlayerRef = useRef(null);
+  const viewerContainerRef = useRef(null);
+  
+  // This effect injects CSS directly into iframes to control font size
+  useEffect(() => {
+    console.log('Setting up iframe style observer with font size:', fontSize);
+    
+    // Function to update iframe styling
+    const updateIframeStyles = () => {
+      // Find all iframes in the viewer page
+      const iframes = document.querySelectorAll('.viewer-page iframe');
+      console.log(`Found ${iframes.length} iframes in the viewer page`);
+      
+      // For each iframe, set up a load handler to inject CSS
+      iframes.forEach(iframe => {
+        console.log('Setting up iframe load handler');
+        
+        // Handle iframe load to inject styles
+        iframe.onload = () => {
+          try {
+            console.log('iframe loaded, attempting to inject styles');
+            if (iframe.contentDocument) {
+              // Create a style element
+              const style = document.createElement('style');
+              style.textContent = `
+                body, html {
+                  color: white !important;
+                  background-color: black !important;
+                  font-size: ${fontSize}px !important;
+                }
+                
+                /* Ensure all text is readable */
+                p, div, span, h1, h2, h3, h4, h5, h6 {
+                  color: white !important;
+                }
+                
+                /* Make links visible but not distracting */
+                a {
+                  color: #ADD8E6 !important;
+                }
+              `;
+              
+              // Add to iframe head
+              iframe.contentDocument.head.appendChild(style);
+              console.log('Successfully injected styles into iframe');
+              
+              // Also attempt to handle HTML content specifically
+              if (iframe.contentDocument.body) {
+                // Set background and text color directly on the body
+                iframe.contentDocument.body.style.backgroundColor = 'black';
+                iframe.contentDocument.body.style.color = 'white';
+                iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+                
+                // Remove any blockers to rendering
+                iframe.contentDocument.documentElement.style.display = 'block';
+                iframe.contentDocument.body.style.display = 'block';
+                
+                console.log('Applied direct styles to iframe body element');
+              }
+            } else {
+              console.warn('Could not access iframe contentDocument - may be cross-origin restricted');
+            }
+          } catch (e) {
+            console.error('Error injecting styles into iframe:', e);
+          }
+        };
+        
+        // If already loaded, try to inject now
+        try {
+          if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+            console.log('Iframe already loaded, running onload handler now');
+            iframe.onload();
+          } else {
+            console.log('Iframe not yet loaded, waiting for load event');
+          }
+        } catch (e) {
+          console.error('Error checking iframe load status:', e);
+        }
+      });
+    };
+    
+    // Run the update function
+    updateIframeStyles();
+    
+    // Set up a mutation observer to detect when new iframes are added
+    const observer = new MutationObserver((mutations) => {
+      console.log('DOM mutation detected, checking for new iframes');
+      // When DOM changes, check for new iframes
+      updateIframeStyles();
+    });
+    
+    // Start observing the viewport container
+    if (viewerContainerRef.current) {
+      observer.observe(viewerContainerRef.current, { 
+        childList: true,
+        subtree: true 
+      });
+      console.log('Mutation observer started on viewer container');
+    } else {
+      console.warn('viewerContainerRef.current not available for observer');
+    }
+    
+    return () => {
+      // Clean up observer
+      observer.disconnect();
+      console.log('Mutation observer disconnected');
+    };
+  }, [fontSize]); // Re-run when fontSize changes
   
   useEffect(() => {
     // Register for state updates
@@ -112,7 +219,7 @@ const ViewerPage = () => {
   };
   
   return (
-    <div className="viewer-page">
+    <div className="viewer-page" ref={viewerContainerRef}>
       {!connected && (
         <div className="connection-overlay">
           <div className="connection-message">
