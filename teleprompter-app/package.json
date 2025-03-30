@@ -1,7 +1,7 @@
 {
   "name": "teleprompter-app",
   "version": "1.0.0",
-  "description": "A web-based teleprompter application for Windows",
+  "description": "A web-based teleprompter application that supports both web and desktop modes",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -9,8 +9,9 @@
     "dev": "concurrently \"nodemon server.js\" \"react-scripts start\"",
     "test": "react-scripts test",
     "web:start": "node server.js",
-    "electron:build": "npm run build && electron-builder build --win portable",
-    "electron:build:headless": "node electron-build.js"
+    "electron:build": "npm run build && electron-builder build",
+    "electron:build:win": "npm run build && electron-builder build --win portable",
+    "electron:build:linux": "npm run build && electron-builder build --linux AppImage"
   },
   "dependencies": {
     "concurrently": "^8.2.1",
@@ -37,10 +38,15 @@
       "build/**/*",
       "node_modules/**/*",
       "main.js",
+      "server-utils.js",
       "src/services/websocket.js"
     ],
     "win": {
       "target": "portable"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Utility"
     }
   },
   "browserslist": {

@@ -1,5 +1,18 @@
 // src/services/websocket.js
-import { Server as WebSocketServer } from 'ws';
+let WebSocketServer;
+try {
+  // ES modules environment
+  WebSocketServer = require('ws').Server;
+} catch (e) {
+  try {
+    // CommonJS environment
+    const ws = require('ws');
+    WebSocketServer = ws.Server;
+  } catch (e) {
+    // Browser environment - will use import
+    WebSocketServer = null;
+  }
+}
 
 let wsServer = null;
 let connections = [];
@@ -203,3 +216,14 @@ export const getWebSocketStatus = () => {
     default: return 'unknown';
   }
 };
+
+// CommonJS compatibility
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    initWebSocketServer,
+    initWebSocket,
+    sendControlMessage,
+    registerMessageHandler,
+    getWebSocketStatus
+  };
+}

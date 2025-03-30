@@ -2,7 +2,7 @@
 const express = require('express');
 const path = require('path');
 const http = require('http');
-const { initWebSocketServer } = require('./server-utils');
+const websocketService = require('./src/services/websocket');
 const os = require('os');
 const qrcode = require('qrcode-terminal');
 
@@ -21,7 +21,7 @@ app.get('*', (req, res) => {
 const server = http.createServer(app);
 
 // Initialize WebSocket server
-const wss = initWebSocketServer(server);
+const wss = websocketService.initWebSocketServer(server);
 
 // Start the server
 server.listen(PORT, () => {
