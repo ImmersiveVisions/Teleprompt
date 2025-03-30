@@ -52,7 +52,7 @@ const ScriptEntryModal = ({ isOpen, onClose, onSave, initialTitle = '', initialB
               id="script-body" 
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Enter your script here. Use 'FILM CLIP' to mark chapter breaks."
+              placeholder="Enter your script here. Use 'FILM CLIP' to mark chapter breaks. Formatting will be preserved exactly as entered."
               required
               className="form-control script-body-textarea"
               rows="20"

@@ -168,7 +168,7 @@ const ScriptViewer = ({ fullScreen = false }) => {
       
       return (
         <div key={index} className="script-line">
-          {line}
+          {line || ' '} {/* Use space for empty lines to preserve line breaks */}
         </div>
       );
     });

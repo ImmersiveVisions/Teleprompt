@@ -72,6 +72,7 @@
   min-height: 300px;
   font-family: 'Courier New', monospace;
   resize: vertical;
+  white-space: pre-wrap;
 }
 
 .form-help {
@@ -523,6 +524,13 @@ input, select, textarea {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background-color: #343a40;
+  border-radius: 4px;
+}
+
+.preview-container h3 {
+  color: white;
+  margin-bottom: 1rem;
 }
 
 /* Admin Sidebar */
@@ -566,6 +574,11 @@ input, select, textarea {
   border-radius: 4px;
 }
 
+.script-line {
+  margin-bottom: 0.5rem;
+  color: white;
+}
+
 .script-viewer.fullscreen {
   position: fixed;
   top: 0;
@@ -590,6 +603,8 @@ input, select, textarea {
   overflow-y: auto;
   font-size: 24px;
   line-height: 1.8;
+  white-space: pre-wrap;
+  font-family: 'Courier New', monospace;
 }
 
 .film-clip-marker {
