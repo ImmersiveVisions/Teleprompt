@@ -36,6 +36,42 @@ const ScriptPlayer = ({
   }
   
 
+  // Apply font size to iframe content when it changes
+  useEffect(() => {
+    // Only proceed if we have a script
+    if (!script) return;
+    
+    // Try to find the iframe element directly
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const iframe = container.querySelector('iframe');
+    if (!iframe) return;
+    
+    // Try direct style setting first (may fail due to cross-origin issues)
+    try {
+      if (iframe.contentDocument && iframe.contentDocument.body) {
+        // Set font size on body element
+        iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+        console.log(`Updated font size to ${fontSize}px in iframe content (direct method)`);
+      }
+    } catch (e) {
+      console.warn('Could not directly set font size on iframe content:', e);
+    }
+    
+    // Always attempt to send a postMessage as a fallback
+    try {
+      // Send a message to the iframe content to update font size
+      iframe.contentWindow.postMessage({
+        type: 'SET_FONT_SIZE',
+        fontSize: fontSize
+      }, '*');
+      console.log(`Sent postMessage to set font size to ${fontSize}px`);
+    } catch (e) {
+      console.error('Error sending postMessage to iframe:', e);
+    }
+  }, [fontSize, script]);
+
   // jQuery-based smooth scrolling approach
   useEffect(() => {
     // Don't do anything if no script or container
@@ -474,7 +510,52 @@ const ScriptPlayer = ({
             title={`${script.title} content`}
             loading="eager"
             id="html-script-frame"
-            onLoad={() => console.log('HTML iframe loaded in ScriptPlayer')}
+            onLoad={(e) => {
+              console.log('HTML iframe loaded in ScriptPlayer');
+              
+              // Apply font size when iframe loads
+              try {
+                const iframe = e.target;
+                if (iframe.contentDocument && iframe.contentDocument.body) {
+                  // Set font size on body element
+                  iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+                  
+                  // Add a style element to the iframe head for more comprehensive font sizing
+                  const style = iframe.contentDocument.createElement('style');
+                  style.textContent = `
+                    body {
+                      font-size: ${fontSize}px !important;
+                    }
+                    p, div, span, h1, h2, h3, h4, h5, h6 {
+                      font-size: ${fontSize}px !important;
+                    }
+                  `;
+                  iframe.contentDocument.head.appendChild(style);
+                  
+                  // Set up a message listener in the iframe for font size changes
+                  iframe.contentWindow.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'SET_FONT_SIZE') {
+                      const newSize = event.data.fontSize;
+                      iframe.contentDocument.body.style.fontSize = `${newSize}px`;
+                      
+                      // Update style element
+                      style.textContent = `
+                        body {
+                          font-size: ${newSize}px !important;
+                        }
+                        p, div, span, h1, h2, h3, h4, h5, h6 {
+                          font-size: ${newSize}px !important;
+                        }
+                      `;
+                    }
+                  });
+                  
+                  console.log(`Applied font size ${fontSize}px to iframe content with style injection`);
+                }
+              } catch (err) {
+                console.error('Error setting font size on iframe:', err);
+              }
+            }}
           />
         </div>
       </div>

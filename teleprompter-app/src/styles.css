@@ -1126,6 +1126,7 @@ input, select, textarea {
   font-size: 1.5rem;
   width: 80%;
   max-width: 300px;
+  font-weight: bold;
 }
 
 .direction-control {
