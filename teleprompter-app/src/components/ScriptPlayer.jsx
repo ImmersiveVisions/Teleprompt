@@ -204,7 +204,8 @@ const ScriptPlayer = ({
             paddingBottom: '150vh', // Extra padding for smooth scrolling
             backgroundColor: 'black',
             border: '1px solid #333',
-            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)'
+            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)',
+            textAlign: 'center'
           }}
         >
           {scriptContent}

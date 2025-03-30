@@ -807,6 +807,7 @@ input, select, textarea {
 .script-line {
   margin-bottom: 1rem;
   color: white;
+  text-align: center;
 }
 
 .script-viewer.fullscreen {
@@ -841,6 +842,7 @@ input, select, textarea {
   color: white;
   scrollbar-width: thin;
   scrollbar-color: #555 #000;
+  text-align: center;
 }
 
 
@@ -862,10 +864,11 @@ input, select, textarea {
   background-color: #007bff;
   color: white;
   padding: 0.5rem 1rem;
-  margin: 1.5rem 0;
+  margin: 1.5rem auto;
   font-weight: bold;
   border-radius: 4px;
   text-align: center;
+  max-width: 80%;
 }
 
 .no-script-message {
