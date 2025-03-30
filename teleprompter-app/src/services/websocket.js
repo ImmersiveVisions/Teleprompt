@@ -13,9 +13,32 @@ const initWebSocket = (statusCb) => {
   try {
     statusCallback = statusCb;
     
+    // Only run in browser environment
     if (typeof window === 'undefined') {
       console.warn('WebSocket cannot be initialized in non-browser environment');
       return;
+    }
+    
+    // If already initialized and connected, don't do it again
+    if (clientWs && (clientWs.readyState === WebSocket.OPEN || clientWs.readyState === WebSocket.CONNECTING)) {
+      console.log('WebSocket already initialized and connected/connecting');
+      if (statusCallback) statusCallback(getWebSocketStatus());
+      return;
+    }
+    
+    // Clean up any existing connection that might be in closing/closed state
+    if (clientWs) {
+      console.log('Cleaning up existing WebSocket connection');
+      clientWs.onclose = null; // Remove reconnect handler
+      clientWs.onerror = null;
+      clientWs.onmessage = null;
+      clientWs.onopen = null;
+      try {
+        clientWs.close();
+      } catch (err) {
+        console.log('Error closing existing WebSocket:', err);
+      }
+      clientWs = null;
     }
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -25,7 +48,6 @@ const initWebSocket = (statusCb) => {
     
     try {
       // Use native browser WebSocket
-      console.log('Creating WebSocket with URL:', wsUrl);
       clientWs = new window.WebSocket(wsUrl);
     } catch (err) {
       console.error('Error creating WebSocket:', err);
@@ -50,9 +72,14 @@ const initWebSocket = (statusCb) => {
     clientWs.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log('WebSocket received message:', message.type);
         
-        // Dispatch message to all registered handlers
-        messageHandlers.forEach(handler => handler(message));
+        // Add a small delay to prevent browser rendering issues
+        // This helps ensure animation frames aren't interrupted by state changes
+        setTimeout(() => {
+          // Dispatch message to all registered handlers
+          messageHandlers.forEach(handler => handler(message));
+        }, 5);
       } catch (error) {
         console.error('Error handling message:', error);
       }
@@ -85,6 +112,7 @@ const initWebSocket = (statusCb) => {
  */
 const sendControlMessage = (action, value = null) => {
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+    console.log('Sending control message:', action, value);
     clientWs.send(JSON.stringify({
       type: 'CONTROL',
       action,
@@ -123,24 +151,25 @@ const getWebSocketStatus = () => {
   }
 };
 
-// Server-side stub exports (for compatibility)
-const initWebSocketServer = (server) => {
-  console.warn('initWebSocketServer called in browser environment');
-  return null;
-};
-
-// Module exports for browser environment
-// For browser - export to window if available
+// Initialize global WebSocket service for browser
 if (typeof window !== 'undefined') {
-  window.websocketService = {
-    initWebSocket,
-    sendControlMessage,
-    registerMessageHandler,
-    getWebSocketStatus
-  };
+  // Only create the service if it doesn't already exist
+  if (!window.websocketService) {
+    console.log('Creating websocketService global object');
+    window.websocketService = {
+      initWebSocket,
+      sendControlMessage, 
+      registerMessageHandler,
+      getWebSocketStatus
+    };
+    
+    // We'll let the App component initialize the connection
+  } else {
+    console.log('websocketService already exists, not reinitializing');
+  }
 }
 
-// Browser-friendly exports
+// For imports in other files
 export {
   initWebSocket,
   sendControlMessage,

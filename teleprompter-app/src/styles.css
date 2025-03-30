@@ -762,6 +762,57 @@ input, select, textarea {
   color: white;
 }
 
+/* Directory selector */
+.directory-selector {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #495057;
+}
+
+.directory-selector h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #ecf0f1;
+}
+
+.current-directory {
+  font-size: 0.9rem;
+  background-color: #222;
+  padding: 0.5rem;
+  border-radius: 3px;
+  margin-bottom: 0.75rem;
+  word-break: break-all;
+  height: auto;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.directory-path {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #3498db;
+}
+
+.select-directory-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background-color: #2980b9;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.select-directory-btn:hover {
+  background-color: #3498db;
+}
+
+.select-directory-btn:active {
+  background-color: #1c638e;
+}
+
 /* Admin Sidebar */
 .connection-panel, .help-panel, .qr-code-panel {
   padding: 1rem;
@@ -810,6 +861,96 @@ input, select, textarea {
   text-align: center;
 }
 
+/* HTML content styling for script viewer */
+.script-content-container {
+  color: white;
+}
+
+.html-content {
+  color: white;
+  text-align: center;
+}
+
+/* Film script specific styling */
+.html-content p[style*="padding-left: 166pt"],
+.html-content p[style*="padding-left: 165pt"],
+.html-content p[style*="padding-left: 178pt"],
+.html-content p[style*="padding-left: 142pt"],
+.html-content p[style*="padding-left: 40pt"],
+.html-content p[style*="padding-left: 84pt"],
+.html-content p[style*="padding-left: 65pt"],
+.html-content p[style*="padding-left: 77pt"] {
+  color: #FFD700 !important; /* Gold color for character names */
+  font-weight: bold !important;
+  text-align: center !important;
+  margin-bottom: 0 !important;
+}
+
+/* Dialog text */
+.html-content p[style*="padding-left: 94pt"],
+.html-content p[style*="padding-left: 93pt"] {
+  color: white !important;
+  text-align: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 1em !important;
+}
+
+/* Parentheticals in dialog */
+.html-content p[style*="padding-left: 123pt"],
+.html-content p[style*="padding-left: 129pt"],
+.html-content p[style*="padding-left: 121pt"],
+.html-content p[style*="padding-left: 122pt"],
+.html-content p[style*="padding-left: 136pt"] {
+  color: #BBBBBB !important; /* Light gray for parentheticals */
+  font-style: italic !important;
+  text-align: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Scene headings */
+.html-content p[style*="padding-left: 22pt"] {
+  color: #ADD8E6 !important; /* Light blue for scene headings */
+  font-weight: bold !important;
+  text-align: center !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.5em !important;
+}
+
+/* Transitions */
+.html-content p[style*="text-align: right"] {
+  color: #FFA07A !important; /* Light salmon for transitions */
+  font-weight: bold !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  margin-top: 1em !important;
+  margin-bottom: 1em !important;
+}
+
+/* Film clip markers */
+.html-content p:contains("FILM CLIP") {
+  background-color: #007bff !important;
+  color: white !important;
+  padding: 0.5rem 1rem !important;
+  margin: 1.5rem auto !important;
+  font-weight: bold !important;
+  border-radius: 4px !important;
+  text-align: center !important;
+  max-width: 80% !important;
+}
+
+.html-content b, .html-content strong {
+  font-weight: bold;
+}
+
+.html-content i, .html-content em {
+  font-style: italic;
+}
+
+.html-content u {
+  text-decoration: underline;
+}
+
 .script-viewer.fullscreen {
   position: fixed;
   top: 0;
@@ -843,6 +984,61 @@ input, select, textarea {
   scrollbar-width: thin;
   scrollbar-color: #555 #000;
   text-align: center;
+}
+
+.script-content-html {
+  font-size: 28px;
+  line-height: 1.8;
+  font-family: 'Courier New', monospace;
+  background-color: #000;
+  color: white;
+  text-align: center;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.script-content-html p {
+  margin-bottom: 1rem;
+}
+
+.script-content-html h1, 
+.script-content-html h2, 
+.script-content-html h3, 
+.script-content-html h4, 
+.script-content-html h5, 
+.script-content-html h6 {
+  color: #fff;
+  text-align: center;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.script-content-html strong, 
+.script-content-html b {
+  font-weight: bold;
+}
+
+.script-content-html em, 
+.script-content-html i {
+  font-style: italic;
+}
+
+.script-content-html u {
+  text-decoration: underline;
+}
+
+/* Film clip markers in HTML content */
+.script-content-html *:contains("FILM CLIP") {
+  background-color: #007bff !important;
+  color: white !important;
+  padding: 0.5rem 1rem !important;
+  margin: 1.5rem auto !important;
+  font-weight: bold !important;
+  border-radius: 4px !important;
+  text-align: center !important;
+  max-width: 80% !important;
+  display: block !important;
 }
 
 

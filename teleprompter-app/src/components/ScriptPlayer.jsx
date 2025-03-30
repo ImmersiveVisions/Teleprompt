@@ -3,6 +3,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { parseScript } from '../services/scriptParser';
+import $ from 'jquery'; // Import jQuery for smooth scrolling
 
 const ScriptPlayer = ({ 
   script, 
@@ -35,7 +36,7 @@ const ScriptPlayer = ({
   }
   
 
-  // Simple scrolling animation - only cares about scrolling, nothing else
+  // jQuery-based smooth scrolling approach
   useEffect(() => {
     // Don't do anything if no script or container
     if (!script || !containerRef.current) {
@@ -43,124 +44,291 @@ const ScriptPlayer = ({
       return;
     }
     
-    console.log('ScriptPlayer: Setting up animation for script:', script.title);
+    console.log('ScriptPlayer: Setting up jQuery animation for script:', script.title);
     
     const container = containerRef.current;
-    let lastTimestamp = 0;
-    
-    // Basic animation function
-    const scroll = (timestamp) => {
-      // Initialize timestamp on first call
-      if (!lastTimestamp) {
-        lastTimestamp = timestamp;
-        console.log('Animation starting, first frame');
-        animationRef.current = requestAnimationFrame(scroll);
-        return;
-      }
-      
-      // Calculate elapsed time (with safety cap)
-      const elapsed = Math.min(timestamp - lastTimestamp, 100);
-      lastTimestamp = timestamp;
-      
-      // Calculate pixels to scroll this frame
-      const baseSpeed = 80; // pixels per second - doubled for more visible movement
-      const pixelsToScroll = direction === 'forward' 
-        ? (baseSpeed * speed * elapsed) / 1000 
-        : -(baseSpeed * speed * elapsed) / 1000;
-      
-      // Simple boundary check
-      const maxScroll = container.scrollHeight - container.clientHeight;
-      
-      // Debug scroll state
-      if (Math.floor(timestamp) % 60 === 0) { // Log only occasionally to avoid console spam
-        console.log(`Scrolling: ${container.scrollTop.toFixed(2)}/${maxScroll.toFixed(2)} by ${pixelsToScroll.toFixed(2)}px`);
-      }
-      
-      if ((direction === 'forward' && container.scrollTop >= maxScroll) ||
-          (direction === 'backward' && container.scrollTop <= 0)) {
-        console.log('Reached end of scroll');
-        animationRef.current = null;
-        return;
-      }
-      
-      // Store previous value for debugging
-      const beforeScroll = container.scrollTop;
-      
-      // Do the actual scrolling
-      if (script.title && script.title.toLowerCase().endsWith('.html')) {
-        // For HTML content, find the iframe and scroll it
-        const iframe = container.querySelector('iframe');
-        if (iframe && iframe.contentWindow) {
-          // Using the contentWindow to scroll the iframe
-          iframe.contentWindow.scrollBy(0, pixelsToScroll);
-        } else {
-          // Fallback to container scrolling
-          container.scrollTop += pixelsToScroll;
-        }
-      } else {
-        // For regular text content
-        container.scrollTop += pixelsToScroll;
-      }
-      
-      // Check if scroll actually happened
-      if (Math.abs(container.scrollTop - beforeScroll) < 0.01 && pixelsToScroll > 0 && 
-          !(script.title && script.title.toLowerCase().endsWith('.html'))) {
-        console.log('WARNING: Scroll not changing despite request!', {
-          before: beforeScroll,
-          after: container.scrollTop,
-          requested: pixelsToScroll
-        });
-      }
-      
-      // Continue the animation loop
-      animationRef.current = requestAnimationFrame(scroll);
-    };
     
     // Clean up any existing animation
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-      lastTimestamp = 0;
-    }
-    
-    // Start or stop animation based on isPlaying
-    if (isPlaying) {
-      console.log('Starting scroll animation', { 
-        speed, 
-        direction, 
-        fontSize,
-        container: {
-          scrollHeight: container.scrollHeight,
-          clientHeight: container.clientHeight,
-          hasScroll: container.scrollHeight > container.clientHeight
+    const cleanupAnimation = () => {
+      // Stop any ongoing jQuery animation first
+      try {
+        // Use jQuery to stop the animation
+        $(container).stop(true, false);
+        
+        // For iframe content
+        const iframe = container.querySelector('iframe');
+        if (iframe && iframe.contentWindow && iframe.contentDocument) {
+          try {
+            // Try to stop animation in iframe using jQuery
+            // This might not work due to cross-origin restrictions
+            const iframeJQuery = iframe.contentWindow.$;
+            if (iframeJQuery) {
+              iframeJQuery('html, body').stop(true, false);
+            }
+          } catch (e) {
+            console.warn('Could not stop iframe jQuery animation');
+          }
         }
-      });
-      animationRef.current = requestAnimationFrame(scroll);
-    } else {
-      console.log('Animation not started - isPlaying is false');
-    }
-    
-    // Clean up on unmount
-    return () => {
+      } catch (e) {
+        console.error('Error stopping animation:', e);
+      }
+      
+      // Clear any tracked timeouts or animation frames
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+        if (typeof animationRef.current === 'number') {
+          cancelAnimationFrame(animationRef.current);
+        } else if (animationRef.current.type === 'timeout') {
+          clearTimeout(animationRef.current.id);
+        }
         animationRef.current = null;
       }
     };
-  }, [isPlaying, speed, direction, script]);
+    
+    // First, clean up existing animations
+    cleanupAnimation();
+    
+    // If not playing, do nothing more
+    if (!isPlaying) {
+      console.log('Animation not started - isPlaying is false');
+      return;
+    }
+    
+    // DETERMINE SCROLL TARGET AND CONTAINER
+    
+    // For the main container
+    let scrollTarget, scrollContainer;
+    let scrollDuration;
+    let isIframeContent = false;
+    
+    if (script.id && script.id.toLowerCase().endsWith('.html')) {
+      // HTML content in iframe
+      const iframe = container.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        try {
+          // Check if we can access iframe content
+          if (iframe.contentDocument && iframe.contentDocument.body) {
+            isIframeContent = true;
+            
+            // Add an end marker to the iframe if not exists
+            const addEndMarker = () => {
+              try {
+                // Try to add an end marker element to the iframe
+                if (!iframe.contentDocument.getElementById('endoftext')) {
+                  const endMarker = iframe.contentDocument.createElement('div');
+                  endMarker.id = 'endoftext';
+                  endMarker.style.height = '1px';
+                  endMarker.style.width = '100%';
+                  
+                  // Add to the end of the body
+                  iframe.contentDocument.body.appendChild(endMarker);
+                  console.log('Added end marker to iframe');
+                }
+              } catch (e) {
+                console.error('Error adding end marker to iframe:', e);
+              }
+            };
+            
+            // Calculate duration based on content length
+            const contentLength = iframe.contentDocument.body.scrollHeight;
+            
+            // Base reading speed in pixels per second
+            // We assume 200-250 words per minute which is about 20-25 characters per second
+            // If we assume 1 pixel roughly equals 0.2 characters
+            const baseReadingPixelsPerSecond = 100; // 20 chars per second / 0.2 chars per pixel
+            
+            // User speed modifier
+            const adjustedPixelsPerSecond = baseReadingPixelsPerSecond * speed;
+            
+            // Calculate duration in milliseconds
+            scrollDuration = Math.round((contentLength / adjustedPixelsPerSecond) * 1000);
+            
+            // Set minimum duration
+            const minDuration = 1000; // 1 second minimum
+            scrollDuration = Math.max(minDuration, scrollDuration);
+            
+            console.log('Iframe scroll parameters:', {
+              contentLength,
+              adjustedPixelsPerSecond,
+              scrollDuration,
+              speedFactor: speed
+            });
+            
+            // Try to use jQuery inside the iframe
+            try {
+              addEndMarker();
+              
+              // Check if jQuery is available in the iframe
+              if (iframe.contentWindow.$ || iframe.contentWindow.jQuery) {
+                console.log('Using iframe jQuery for animation');
+                // Get jQuery from iframe
+                const $iframe = iframe.contentWindow.$ || iframe.contentWindow.jQuery;
+                
+                // If scrolling backward
+                if (direction === 'backward') {
+                  // Scroll to top
+                  $iframe('html, body').animate({
+                    scrollTop: 0
+                  }, scrollDuration, 'linear');
+                } else {
+                  // Scroll to end marker
+                  $iframe('html, body').animate({
+                    scrollTop: $iframe('#endoftext').offset().top
+                  }, scrollDuration, 'linear');
+                }
+                
+                // Nothing more to do here
+                return;
+              } else {
+                // Fallback to our own animation for cross-origin iframes
+                console.log('jQuery not available in iframe, using custom animation');
+                
+                // We'll use our own animation approach for iframes
+                // Start with current position
+                const startTime = performance.now();
+                const startPos = iframe.contentWindow.scrollY || 0;
+                const targetPos = direction === 'forward' ? 
+                  iframe.contentDocument.body.scrollHeight - iframe.contentWindow.innerHeight : 0;
+                
+                console.log('Custom iframe animation:', {
+                  startPos,
+                  targetPos,
+                  scrollDuration
+                });
+                
+                // Create animation function
+                const animateIframe = (timestamp) => {
+                  if (!isPlaying) {
+                    console.log('Animation stopped - no longer playing');
+                    return;
+                  }
+                  
+                  const elapsed = timestamp - startTime;
+                  const progress = Math.min(1, elapsed / scrollDuration);
+                  
+                  // Linear position calculation
+                  const currentPos = startPos + (targetPos - startPos) * progress;
+                  
+                  // Set scroll position
+                  iframe.contentWindow.scrollTo(0, currentPos);
+                  
+                  // Debug logging periodically
+                  if (Math.round(progress * 100) % 10 === 0) {
+                    console.log(`Iframe scroll progress: ${Math.round(progress * 100)}%`);
+                  }
+                  
+                  // Continue if not done
+                  if (progress < 1 && isPlaying) {
+                    animationRef.current = requestAnimationFrame(animateIframe);
+                  } else {
+                    console.log('Custom iframe animation complete');
+                    animationRef.current = null;
+                  }
+                };
+                
+                // Start animation
+                animationRef.current = requestAnimationFrame(animateIframe);
+                
+                // Return cleanup function
+                return;
+              }
+            } catch (e) {
+              console.error('Error setting up iframe jQuery animation:', e);
+              // Continue with outer container animation
+            }
+          }
+        } catch (e) {
+          console.warn('Cannot access iframe content directly:', e);
+        }
+      }
+    }
+    
+    // If we get here, we need to animate the main container
+    if (!isIframeContent) {
+      console.log('Using jQuery to animate main container');
+      
+      // Calculate duration based on content length
+      const contentLength = container.scrollHeight;
+      
+      // Base reading speed
+      const baseReadingPixelsPerSecond = 100;
+      const adjustedPixelsPerSecond = baseReadingPixelsPerSecond * speed;
+      
+      // Calculate duration
+      scrollDuration = Math.round((contentLength / adjustedPixelsPerSecond) * 1000);
+      
+      // Set minimum duration
+      const minDuration = 1000;
+      scrollDuration = Math.max(minDuration, scrollDuration);
+      
+      console.log('Container scroll parameters:', {
+        contentLength,
+        adjustedPixelsPerSecond,
+        scrollDuration,
+        speedFactor: speed
+      });
+      
+      // Animate the container with jQuery
+      if (direction === 'backward') {
+        $(container).animate({
+          scrollTop: 0
+        }, scrollDuration, 'linear');
+      } else {
+        // Add an end marker if needed
+        if (!container.querySelector('#endoftext')) {
+          const endMarker = document.createElement('div');
+          endMarker.id = 'endoftext';
+          endMarker.style.height = '1px';
+          endMarker.style.width = '100%';
+          container.appendChild(endMarker);
+        }
+        
+        // Scroll to end of content
+        $(container).animate({
+          scrollTop: container.scrollHeight
+        }, scrollDuration, 'linear');
+      }
+    }
+    
+    // Clean up on unmount or dependency change
+    return cleanupAnimation;
+  }, [isPlaying, speed, direction, script, fontSize]);
   
-  // Simple jump to position function
+  // jQuery-based jump to position function
   const jumpToPosition = (position) => {
-    if (!containerRef.current || !script || !scriptContent) return;
+    if (!containerRef.current || !script) return;
     
     const container = containerRef.current;
     
+    // Stop any ongoing animations
+    try {
+      // Use jQuery to stop all animations
+      $(container).stop(true, true);
+      
+      // For iframe content
+      const iframe = container.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        try {
+          if (iframe.contentWindow.$ || iframe.contentWindow.jQuery) {
+            const $iframe = iframe.contentWindow.$ || iframe.contentWindow.jQuery;
+            $iframe('html, body').stop(true, true);
+          }
+        } catch (e) {
+          console.warn('Could not stop iframe animations:', e);
+        }
+      }
+    } catch (e) {
+      console.error('Error stopping animations:', e);
+    }
+    
     // Calculate position as percentage
+    const scriptContent = script.body || script.content || '';
     const maxLength = Math.max(1, scriptContent.length);
     const percentage = Math.max(0, Math.min(position, maxLength)) / maxLength;
     
+    console.log(`Jumping to position: ${position}, percentage: ${percentage.toFixed(4)}`);
+    
     // Apply the scroll
-    if (script.title && script.title.toLowerCase().endsWith('.html')) {
+    if (script.id && script.id.toLowerCase().endsWith('.html')) {
       // For HTML content, find the iframe and scroll it
       const iframe = container.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
@@ -169,15 +337,38 @@ const ScriptPlayer = ({
           try {
             // Try to access contentDocument to check if loaded
             if (iframe.contentDocument && iframe.contentDocument.body) {
-              const maxScroll = iframe.contentDocument.body.scrollHeight - iframe.clientHeight;
+              const viewportHeight = iframe.contentWindow.innerHeight || iframe.clientHeight;
+              const scrollHeight = iframe.contentDocument.body.scrollHeight;
+              const maxScroll = Math.max(0, scrollHeight - viewportHeight);
               const targetScroll = percentage * maxScroll;
               
-              // Scroll the iframe content
+              console.log('Jumping iframe to:', {
+                targetScroll,
+                maxScroll,
+                scrollHeight,
+                viewportHeight
+              });
+              
+              // Try to use jQuery inside iframe if available
+              try {
+                if (iframe.contentWindow.$ || iframe.contentWindow.jQuery) {
+                  const $iframe = iframe.contentWindow.$ || iframe.contentWindow.jQuery;
+                  $iframe('html, body').animate({
+                    scrollTop: targetScroll
+                  }, 500, 'swing');
+                  return;
+                }
+              } catch (e) {
+                console.warn('Could not use iframe jQuery for jumping:', e);
+              }
+              
+              // Fallback if jQuery not available in iframe
               iframe.contentWindow.scrollTo({
                 top: targetScroll,
                 behavior: 'smooth'
               });
             } else {
+              console.log('Iframe not fully loaded, retrying...');
               // Try again in a moment
               setTimeout(checkIframeLoaded, 100);
             }
@@ -193,21 +384,17 @@ const ScriptPlayer = ({
       const maxScroll = container.scrollHeight - container.clientHeight;
       const targetScroll = percentage * maxScroll;
       
-      // Use smooth scrolling for a better experience
-      container.style.scrollBehavior = 'smooth';
-      container.scrollTop = targetScroll;
-      
-      // Reset scroll behavior
-      setTimeout(() => {
-        container.style.scrollBehavior = 'auto';
-      }, 500);
+      // Use jQuery for smooth animation
+      $(container).animate({
+        scrollTop: targetScroll
+      }, 500, 'swing');
     }
   };
   
   // Expose jump method to parent
   React.useImperativeHandle(ref, () => ({
     jumpToPosition
-  }), [script]);
+  }), [script, jumpToPosition]);
   
   // Render the script viewer
   if (!script) {

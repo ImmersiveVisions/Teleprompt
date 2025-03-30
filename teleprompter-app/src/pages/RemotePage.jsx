@@ -65,10 +65,8 @@ const RemotePage = () => {
       if (data.currentScript === null) {
         // Script was cleared
         setSelectedScriptId(null);
-        // Removed setChapters call
       } else if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
         setSelectedScriptId(data.currentScript);
-        // Removed chapters loading
       }
     }
   };
@@ -79,7 +77,6 @@ const RemotePage = () => {
     
     // Clear local states
     setSelectedScriptId(null);
-    // Removed setChapters call
     
     // Pause if playing
     if (isPlaying) {
@@ -119,7 +116,6 @@ const RemotePage = () => {
       
       if (script) {
         // Script exists, proceed with selection
-        // Removed chapters loading
         
         // Send control message to update all clients
         sendControlMessage('LOAD_SCRIPT', numericId);
@@ -228,10 +224,10 @@ const RemotePage = () => {
           </div>
           
           <div className="control-group">
-            <label>Speed: {speed.toFixed(1)}x</label>
+            <label>Speed: {speed.toFixed(2)}x</label>
             <div className="speed-control">
               <button 
-                onClick={() => changeSpeed(Math.max(0.5, speed - 0.1))}
+                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
                 className="speed-btn"
                 disabled={!selectedScriptId}
               >
@@ -239,15 +235,15 @@ const RemotePage = () => {
               </button>
               <input
                 type="range"
-                min="0.5"
-                max="3"
-                step="0.1"
+                min="0.25"
+                max="2.5"
+                step="0.25"
                 value={speed}
                 onChange={(e) => changeSpeed(parseFloat(e.target.value))}
                 disabled={!selectedScriptId}
               />
               <button 
-                onClick={() => changeSpeed(Math.min(3, speed + 0.1))}
+                onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
                 className="speed-btn"
                 disabled={!selectedScriptId}
               >

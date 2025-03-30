@@ -240,8 +240,7 @@ const validateScriptsDatabase = async () => {
       console.warn(`Removing ${invalidScriptIds.length} invalid scripts from database`);
       for (const id of invalidScriptIds) {
         await db.scripts.delete(id);
-        // Also delete associated chapters
-        await db.chapters.where({ scriptId: id }).delete();
+        // Removed chapter deletion
       }
       return true; // Database was modified
     }

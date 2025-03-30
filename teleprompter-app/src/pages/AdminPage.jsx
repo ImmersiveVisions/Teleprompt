@@ -224,7 +224,6 @@ const AdminPage = () => {
     // Clear local states
     setSelectedScriptId(null);
     setSelectedScript(null);
-    setChapters([]);
     
     // Pause if playing
     if (isPlaying) {
@@ -262,8 +261,6 @@ const AdminPage = () => {
         setSelectedScriptId(scriptId.id);
         setSelectedScript(scriptId);
         
-        // Removed chapters loading
-        
         // Notify other clients about the script change
         console.log('AdminPage: Sending LOAD_SCRIPT control message with scriptId:', scriptId.id);
         sendControlMessage('LOAD_SCRIPT', scriptId.id);
@@ -277,8 +274,6 @@ const AdminPage = () => {
         console.log('Script loaded successfully:', script.title);
         setSelectedScriptId(script.id);
         setSelectedScript(script);
-        
-        // Removed chapters loading
         
         // Notify other clients
         sendControlMessage('LOAD_SCRIPT', script.id);
@@ -340,9 +335,7 @@ const AdminPage = () => {
           setSelectedScriptId(newScriptId);
           setSelectedScript(newScript);
           
-          // Load chapters for the new script
-          const chapters = await fileSystemRepository.getChaptersForScript(newScriptId);
-          setChapters(chapters);
+          // Removed chapters loading
           
           // Notify other clients about the new script
           sendControlMessage('LOAD_SCRIPT', newScriptId);
@@ -380,7 +373,6 @@ const AdminPage = () => {
         } else {
           setSelectedScriptId(null);
           setSelectedScript(null);
-          // Removed setChapters
         }
       } catch (error) {
         console.error('Error deleting script:', error);
@@ -416,8 +408,6 @@ const AdminPage = () => {
             console.log('Script found, setting as selected:', script.title);
             setSelectedScriptId(script.id);
             setSelectedScript(script);
-            
-            // Removed chapters loading
           } else {
             console.error('AdminPage: Could not find script with ID:', data.currentScript);
           }
@@ -434,8 +424,6 @@ const AdminPage = () => {
           if (script) {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
-            
-            // Removed chapters loading
           }
         } catch (error) {
           console.error('AdminPage: Error loading new script from state update:', error);
@@ -495,7 +483,7 @@ const AdminPage = () => {
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
   
-  // Removed jumpToChapter function
+  // Chapter functionality has been removed
   
   // Bluetooth connection handlers
   const handleConnectBluetooth = async () => {
@@ -607,15 +595,18 @@ const AdminPage = () => {
                 </div>
                 
                 <div className="control-group">
-                  <label>Speed: {speed.toFixed(1)}x</label>
+                  <label>Speed: {speed.toFixed(2)}x</label>
                   <input
                     type="range"
-                    min="0.5"
-                    max="3"
-                    step="0.1"
+                    min="0.25"
+                    max="2.5"
+                    step="0.25"
                     value={speed}
                     onChange={(e) => changeSpeed(parseFloat(e.target.value))}
                   />
+                  <div className="speed-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
+                    0.25 = very slow, 1.0 = moderate, 2.5 = fast
+                  </div>
                 </div>
                 
                 <div className="control-group">

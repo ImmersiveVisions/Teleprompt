@@ -12,19 +12,41 @@ const App = () => {
   const [wsStatus, setWsStatus] = useState('disconnected');
   const [btStatus, setBtStatus] = useState('disconnected');
   
-  // Initialize WebSocket connection for real-time control
+  // Initialize services
   useEffect(() => {
     try {
-      // Initialize WebSocket connection
-      initWebSocket((status) => {
-        console.log('WebSocket status updated:', status);
-        setWsStatus(status);
-      });
+      // Initialize file system repository and services
+      const initServices = async () => {
+        try {
+          // Import file system repository
+          const fileSystemRepo = await import('./database/fileSystemRepository');
+          console.log('File system repository initialized');
+          
+          // Ensure we have a valid scripts directory
+          const scriptDir = fileSystemRepo.default.getScriptsDirectory();
+          console.log(`Using scripts directory: ${scriptDir}`);
+          
+        } catch (error) {
+          console.error('Error initializing file system repository:', error);
+        }
+      };
       
-      // Initialize Bluetooth service
-      initBluetoothService((status) => {
-        console.log('Bluetooth status updated:', status);
-        setBtStatus(status);
+      // First init the file system repository
+      initServices().then(() => {
+        // Then initialize WebSocket and Bluetooth
+        console.log('Initializing app services...');
+      
+        // Initialize WebSocket connection
+        initWebSocket((status) => {
+          console.log('WebSocket status updated:', status);
+          setWsStatus(status);
+        });
+        
+        // Initialize Bluetooth service
+        initBluetoothService((status) => {
+          console.log('Bluetooth status updated:', status);
+          setBtStatus(status);
+        });
       });
     } catch (error) {
       console.error('Error initializing services:', error);

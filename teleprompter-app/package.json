@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build": "react-scripts build",
-    "dev": "concurrently \"nodemon server.js\" \"react-scripts start\"",
+    "dev": "concurrently \"nodemon server.js\" \"DANGEROUSLY_DISABLE_HOST_CHECK=true HOST=0.0.0.0 react-scripts start\"",
     "test": "react-scripts test",
     "web:start": "node server.js",
     "electron:build": "npm run build && electron-builder build",
@@ -14,14 +14,18 @@
     "electron:build:linux": "npm run build && electron-builder build --linux AppImage"
   },
   "dependencies": {
-    "concurrently": "^8.2.1",
+    "concurrently": "^6.5.1",
     "dexie": "^3.2.4",
     "express": "^4.18.2",
+    "html-react-parser": "^5.2.2",
+    "jquery": "^3.7.1",
     "nodemon": "^3.0.1",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-html-parser": "^2.0.2",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.15.0",
     "react-scripts": "5.0.1",
     "ws": "^8.13.0"
@@ -45,7 +49,9 @@
       "target": "portable"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Utility"
     }
   },

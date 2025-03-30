@@ -9,7 +9,7 @@ let connections = [];
 let sharedState = {
   currentScript: null,
   currentPosition: 0,
-  speed: 1,
+  speed: 1.0, // Keep at 1.0 as default for moderate speed
   isPlaying: false,
   direction: 'forward',
   fontSize: 24
