@@ -1,18 +1,6 @@
 // src/services/websocket.js
-let WebSocketServer;
-try {
-  // ES modules environment
-  WebSocketServer = require('ws').Server;
-} catch (e) {
-  try {
-    // CommonJS environment
-    const ws = require('ws');
-    WebSocketServer = ws.Server;
-  } catch (e) {
-    // Browser environment - will use import
-    WebSocketServer = null;
-  }
-}
+const WebSocket = require('ws');
+const WebSocketServer = WebSocket.Server;
 
 let wsServer = null;
 let connections = [];
@@ -30,7 +18,7 @@ let sharedState = {
 };
 
 // Initialize WebSocket server
-export const initWebSocketServer = (server) => {
+const initWebSocketServer = (server) => {
   wsServer = new WebSocketServer({ server });
   
   wsServer.on('connection', (ws) => {
@@ -141,7 +129,7 @@ const broadcastState = () => {
 let clientWs = null;
 let messageHandlers = [];
 
-export const initWebSocket = (statusCb) => {
+const initWebSocket = (statusCb) => {
   statusCallback = statusCb;
   
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -186,7 +174,7 @@ export const initWebSocket = (statusCb) => {
   };
 };
 
-export const sendControlMessage = (action, value = null) => {
+const sendControlMessage = (action, value = null) => {
   if (clientWs && clientWs.readyState === 1) {
     clientWs.send(JSON.stringify({
       type: 'CONTROL',
@@ -198,14 +186,14 @@ export const sendControlMessage = (action, value = null) => {
   }
 };
 
-export const registerMessageHandler = (handler) => {
+const registerMessageHandler = (handler) => {
   messageHandlers.push(handler);
   return () => {
     messageHandlers = messageHandlers.filter(h => h !== handler);
   };
 };
 
-export const getWebSocketStatus = () => {
+const getWebSocketStatus = () => {
   if (!clientWs) return 'disconnected';
   
   switch (clientWs.readyState) {
@@ -217,13 +205,11 @@ export const getWebSocketStatus = () => {
   }
 };
 
-// CommonJS compatibility
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    initWebSocketServer,
-    initWebSocket,
-    sendControlMessage,
-    registerMessageHandler,
-    getWebSocketStatus
-  };
-}
+// Export for Node.js server
+module.exports = {
+  initWebSocketServer,
+  initWebSocket,
+  sendControlMessage,
+  registerMessageHandler,
+  getWebSocketStatus
+};
