@@ -115,11 +115,19 @@ function handleMessage(message, sender) {
     
     case 'GET_STATE':
       // Send current state to the requesting client
-      console.log('Sending state to client:', sharedState);
-      sender.send(JSON.stringify({
-        type: 'STATE_UPDATE',
-        data: sharedState
-      }));
+      console.log('Server received GET_STATE request, sending current state to client:', sharedState);
+      try {
+        if (sender && sender.readyState === WebSocket.OPEN) {
+          sender.send(JSON.stringify({
+            type: 'STATE_UPDATE',
+            data: sharedState
+          }));
+        } else {
+          console.log('Cannot send state - client connection is not open');
+        }
+      } catch (error) {
+        console.error('Error sending state to client:', error);
+      }
       break;
     
     default:

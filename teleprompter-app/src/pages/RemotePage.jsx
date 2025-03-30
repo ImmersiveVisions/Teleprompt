@@ -1,79 +1,22 @@
 // src/pages/RemotePage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { sendControlMessage, registerMessageHandler } from '../services/websocket';
-import db from '../database/db';
+import fileSystemRepository from '../database/fileSystemRepository';
 import '../styles.css';
 
 const RemotePage = () => {
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
-  // Removed chapters state
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
-  // Removed currentChapter state
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   
-  // Load all scripts and register for state updates
-  useEffect(() => {
-    const loadScripts = async () => {
-      try {
-        // First validate the database to clean up any invalid scripts
-        await db.validateScriptsDatabase();
-        
-        const allScripts = await db.getAllScripts();
-        setScripts(allScripts);
-        
-        // If the currently selected script no longer exists, clear the selection
-        if (selectedScriptId) {
-          const scriptExists = allScripts.some(script => script.id === selectedScriptId);
-          if (!scriptExists) {
-            console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
-            clearScriptSelection();
-          }
-        }
-      } catch (error) {
-        console.error('Error loading scripts:', error);
-      }
-    };
-    
-    loadScripts();
-    
-    const unregisterHandler = registerMessageHandler(handleStateUpdate);
-    
-    return () => {
-      unregisterHandler();
-    };
-  }, [selectedScriptId]);
-  
-  // Handle state updates from WebSocket
-  const handleStateUpdate = async (message) => {
-    if (message.type === 'STATE_UPDATE') {
-      const { data } = message;
-      setConnectionStatus('connected');
-      
-      // Update local state based on received state
-      setIsPlaying(data.isPlaying);
-      setSpeed(data.speed);
-      setDirection(data.direction);
-      setFontSize(data.fontSize);
-      // Removed currentChapter update
-      
-      // If current script changed, load the script details
-      if (data.currentScript === null) {
-        // Script was cleared
-        setSelectedScriptId(null);
-      } else if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
-        setSelectedScriptId(data.currentScript);
-      }
-    }
-  };
-  
   // Clear script selection
-  const clearScriptSelection = () => {
-    console.log('Clearing script selection');
+  const clearScriptSelection = useCallback(() => {
+    console.log('RemotePage: Clearing script selection');
     
     // Clear local states
     setSelectedScriptId(null);
@@ -86,8 +29,134 @@ const RemotePage = () => {
     
     // Notify other clients about clearing the script
     sendControlMessage('LOAD_SCRIPT', null);
-  };
-
+  }, [isPlaying]); // Add isPlaying as a dependency
+  
+  // Handle state updates from WebSocket
+  const handleStateUpdate = useCallback(async (message) => {
+    if (message.type === 'STATE_UPDATE') {
+      const { data } = message;
+      setConnectionStatus('connected');
+      
+      console.log('RemotePage: Received state update:', data);
+      
+      // Update local state based on received state
+      setIsPlaying(data.isPlaying);
+      setSpeed(data.speed);
+      setDirection(data.direction);
+      setFontSize(data.fontSize);
+      
+      // If connection was just established, request full state
+      if (connectionStatus === 'connecting') {
+        console.log('RemotePage: Connection established, ensuring state is in sync');
+        if (typeof window !== 'undefined' && window.websocketService) {
+          // Short delay to ensure connection is stable
+          setTimeout(() => {
+            window.websocketService.sendControlMessage('GET_STATE');
+          }, 200);
+        }
+      }
+      
+      // If current script changed, load the script details
+      if (data.currentScript === null) {
+        // Script was cleared
+        console.log('RemotePage: Clearing script selection due to null currentScript');
+        setSelectedScriptId(null);
+      } else if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
+        console.log(`RemotePage: Updating script selection to ${data.currentScript}`);
+        
+        try {
+          // Load script details to verify it exists
+          const script = await fileSystemRepository.getScriptById(data.currentScript);
+          
+          if (script) {
+            console.log(`RemotePage: Script ${data.currentScript} found, setting as selected:`, script.title);
+            setSelectedScriptId(data.currentScript);
+          } else {
+            console.warn(`RemotePage: Server requested script ${data.currentScript} but it was not found locally`);
+            // Still update the ID, but reload scripts list to try to find it
+            setSelectedScriptId(data.currentScript);
+            
+            // Refresh scripts list
+            try {
+              const allScripts = await fileSystemRepository.getAllScripts();
+              setScripts(allScripts);
+            } catch (error) {
+              console.error('Error refreshing scripts list:', error);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading script details:', error);
+          // Still set the script ID to maintain synchronization
+          setSelectedScriptId(data.currentScript);
+        }
+      }
+    }
+  }, [connectionStatus, selectedScriptId]);
+  
+  // Setup WebSocket connection and register message handler
+  useEffect(() => {
+    console.log('RemotePage: Setting up WebSocket message handler');
+    
+    // Register the handler for WebSocket messages
+    const unregisterHandler = registerMessageHandler(handleStateUpdate);
+    
+    // Explicitly request current state from server to ensure we're in sync
+    if (typeof window !== 'undefined' && 
+        window.websocketService && 
+        window.websocketService.getWebSocketStatus() === 'connected') {
+      console.log('RemotePage: Connection already open, requesting state update');
+      window.websocketService.sendControlMessage('GET_STATE');
+    }
+    
+    return () => {
+      console.log('RemotePage: Cleaning up WebSocket message handler');
+      unregisterHandler();
+    };
+  }, [handleStateUpdate]); // Depend on handleStateUpdate
+  
+  // Monitor connection status changes for reconnection events
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      console.log('RemotePage: WebSocket connection established or restored');
+      
+      // Request current state after reconnection
+      if (typeof window !== 'undefined' && window.websocketService) {
+        setTimeout(() => {
+          console.log('RemotePage: Requesting state after connection status change');
+          window.websocketService.sendControlMessage('GET_STATE');
+        }, 300);
+      }
+    }
+  }, [connectionStatus]); // Only run when connection status changes
+  
+  // Load all scripts and check selected script validity
+  useEffect(() => {
+    const loadScripts = async () => {
+      try {
+        // Use file system repository
+        const allScripts = await fileSystemRepository.getAllScripts();
+        console.log(`RemotePage: Loaded ${allScripts.length} scripts`);
+        setScripts(allScripts);
+        
+        // If the currently selected script no longer exists, clear the selection
+        if (selectedScriptId) {
+          const scriptExists = allScripts.some(script => 
+            script.id === selectedScriptId || 
+            (typeof script.id === 'string' && typeof selectedScriptId === 'number' && script.id === String(selectedScriptId))
+          );
+          if (!scriptExists) {
+            console.warn(`Selected script ID ${selectedScriptId} no longer exists in repository`);
+            clearScriptSelection();
+          }
+        }
+      } catch (error) {
+        console.error('Error loading scripts:', error);
+      }
+    };
+    
+    loadScripts();
+  }, [selectedScriptId, clearScriptSelection]);
+  
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
     console.log('Script selection requested with ID:', scriptId, 'type:', typeof scriptId);
@@ -98,36 +167,37 @@ const RemotePage = () => {
       return;
     }
     
-    // Convert string ID to number if needed (from dropdown selections)
-    const numericId = typeof scriptId === 'string' ? parseInt(scriptId, 10) : scriptId;
-    
-    // Verify we have a valid ID
-    if (!numericId || isNaN(numericId)) {
-      console.error('Invalid script ID:', scriptId);
-      return;
-    }
-    
     try {
-      // Show loading state by setting ID before loading the script
-      setSelectedScriptId(numericId);
+      // Store the original ID for error reporting
+      const originalId = scriptId;
       
-      // First, verify the script exists
-      const script = await db.getScriptById(numericId);
+      // Verify we have a valid ID
+      if (scriptId === null || scriptId === undefined) {
+        console.error('Invalid script ID:', originalId);
+        return;
+      }
+      
+      // Show loading state by setting ID before loading the script
+      setSelectedScriptId(scriptId);
+      
+      // Get the script from file system repository
+      const script = await fileSystemRepository.getScriptById(scriptId);
       
       if (script) {
+        console.log('Script found:', script.title);
         // Script exists, proceed with selection
         
         // Send control message to update all clients
-        sendControlMessage('LOAD_SCRIPT', numericId);
+        sendControlMessage('LOAD_SCRIPT', scriptId);
       } else {
         // Script not found - handle this case
-        console.error('Script not found with ID:', numericId);
+        console.error('Script not found with ID:', originalId);
         clearScriptSelection();
-        alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
+        alert(`Script with ID ${originalId} was not found. It may have been deleted.`);
         
         // Refresh scripts list to remove invalid scripts
         try {
-          const allScripts = await db.getAllScripts();
+          const allScripts = await fileSystemRepository.getAllScripts();
           setScripts(allScripts);
         } catch (loadError) {
           console.error('Error reloading scripts list:', loadError);
@@ -162,8 +232,6 @@ const RemotePage = () => {
     setFontSize(newSize);
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
-  
-  // Removed jumpToChapter function
   
   return (
     <div className="remote-page">
@@ -281,8 +349,6 @@ const RemotePage = () => {
             </div>
           </div>
         </div>
-        
-        {/* Removed chapter navigation */}
       </div>
       
       <div className="remote-footer">

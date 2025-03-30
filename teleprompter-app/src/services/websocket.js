@@ -59,14 +59,17 @@ const initWebSocket = (statusCb) => {
       console.log('WebSocket connected');
       if (statusCallback) statusCallback('connected');
       
-      // Request current state
-      try {
-        clientWs.send(JSON.stringify({
-          type: 'GET_STATE'
-        }));
-      } catch (err) {
-        console.error('Error sending initial state request:', err);
-      }
+      // Request current state - add a small delay to ensure connection is fully ready
+      setTimeout(() => {
+        try {
+          console.log('Sending GET_STATE request to server');
+          clientWs.send(JSON.stringify({
+            type: 'GET_STATE'
+          }));
+        } catch (err) {
+          console.error('Error sending initial state request:', err);
+        }
+      }, 100);
     };
     
     clientWs.onmessage = (event) => {
@@ -112,6 +115,16 @@ const initWebSocket = (statusCb) => {
  */
 const sendControlMessage = (action, value = null) => {
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+    // Special handling for GET_STATE which is a different message type
+    if (action === 'GET_STATE') {
+      console.log('Sending GET_STATE request to server');
+      clientWs.send(JSON.stringify({
+        type: 'GET_STATE'
+      }));
+      return;
+    }
+    
+    // Normal control message
     console.log('Sending control message:', action, value);
     clientWs.send(JSON.stringify({
       type: 'CONTROL',
