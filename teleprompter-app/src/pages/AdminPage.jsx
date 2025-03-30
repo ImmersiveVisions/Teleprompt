@@ -1,7 +1,7 @@
 // src/pages/AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import scriptRepository from '../database/scriptRepository';
+import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
@@ -17,16 +17,19 @@ const AdminPage = () => {
   const [selectedScript, setSelectedScript] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [chapters, setChapters] = useState([]);
+  // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
+  const [currentDirectory, setCurrentDirectory] = useState(() => {
+    return fileSystemRepository.getScriptsDirectory() || './scripts';
+  });
   
   // Teleprompter control states
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
-  const [currentChapter, setCurrentChapter] = useState(0);
+  // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
   
   // Load scripts on component mount
@@ -41,12 +44,38 @@ const AdminPage = () => {
     };
   }, []);
   
-  // Load all scripts from the database
+  // Function to handle directory selection
+  const handleSelectDirectory = async () => {
+    try {
+      if (!window.electron) {
+        console.error('Electron API not available - cannot select directory');
+        alert('Directory selection is only available in the desktop app.');
+        return;
+      }
+      
+      const selectedPath = await window.electron.selectDirectory();
+      if (selectedPath) {
+        console.log(`Selected new scripts directory: ${selectedPath}`);
+        
+        // Update the repository with the new directory
+        fileSystemRepository.setScriptsDirectory(selectedPath);
+        setCurrentDirectory(selectedPath);
+        
+        // Reload scripts from the new directory
+        await loadScripts();
+      }
+    } catch (error) {
+      console.error('Error selecting directory:', error);
+      alert('Failed to select directory: ' + error.message);
+    }
+  };
+  
+  // Load all scripts from the scripts directory
   const loadScripts = async () => {
     try {
       // Load the scripts using the repository
-      const allScripts = await scriptRepository.getAllScripts();
-      console.log(`AdminPage: loaded ${allScripts.length} scripts from repository`);
+      const allScripts = await fileSystemRepository.getAllScripts();
+      console.log(`AdminPage: loaded ${allScripts.length} scripts from directory ${currentDirectory}`);
       setScripts(allScripts);
       
       // If the currently selected script no longer exists, clear the selection
@@ -55,13 +84,13 @@ const AdminPage = () => {
         if (allScripts.length > 0) {
           const scriptExists = allScripts.some(script => String(script.id) === String(selectedScriptId));
           if (!scriptExists) {
-            console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
+            console.warn(`Selected script ID ${selectedScriptId} no longer exists in directory`);
             clearScriptSelection();
             return;
           }
         } else {
-          // No scripts in database, clear selection
-          console.warn('No scripts in database, clearing selection');
+          // No scripts in directory, clear selection
+          console.warn('No scripts found in directory, clearing selection');
           clearScriptSelection();
           return;
         }
@@ -78,10 +107,11 @@ const AdminPage = () => {
           console.error('AdminPage: first script is invalid, not auto-selecting');
         }
       } else if (allScripts.length === 0) {
-        console.warn('AdminPage: no scripts found in database');
+        console.warn('AdminPage: no scripts found in directory');
       }
     } catch (error) {
       console.error('Error loading scripts:', error);
+      alert('Failed to load scripts: ' + error.message);
     }
   };
   
@@ -232,10 +262,7 @@ const AdminPage = () => {
         setSelectedScriptId(scriptId.id);
         setSelectedScript(scriptId);
         
-        // Load chapters for this script
-        const scriptChapters = await scriptRepository.getChaptersForScript(scriptId.id);
-        console.log(`AdminPage: Loaded ${scriptChapters.length} chapters for script`);
-        setChapters(scriptChapters);
+        // Removed chapters loading
         
         // Notify other clients about the script change
         console.log('AdminPage: Sending LOAD_SCRIPT control message with scriptId:', scriptId.id);
@@ -244,17 +271,14 @@ const AdminPage = () => {
       }
       
       // Get the script using the repository
-      const script = await scriptRepository.getScriptById(scriptId);
+      const script = await fileSystemRepository.getScriptById(scriptId);
       
       if (script) {
         console.log('Script loaded successfully:', script.title);
         setSelectedScriptId(script.id);
         setSelectedScript(script);
         
-        // Load chapters
-        const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
-        console.log(`Loaded ${scriptChapters.length} chapters for script`);
-        setChapters(scriptChapters);
+        // Removed chapters loading
         
         // Notify other clients
         sendControlMessage('LOAD_SCRIPT', script.id);
@@ -288,19 +312,19 @@ const AdminPage = () => {
       if (selectedScriptId && selectedScript) {
         // Update existing script
         console.log('Updating existing script with ID:', selectedScriptId);
-        await scriptRepository.updateScript(selectedScriptId, {
+        await fileSystemRepository.updateScript(selectedScriptId, {
           title: scriptData.title,
           body: scriptData.body
         });
         
         // Reload the updated script to ensure we have the latest version
-        const updatedScript = await scriptRepository.getScriptById(selectedScriptId);
+        const updatedScript = await fileSystemRepository.getScriptById(selectedScriptId);
         console.log('Script updated:', updatedScript);
         setSelectedScript(updatedScript);
       } else {
         // Add new script
         console.log('Adding new script:', scriptData.title);
-        const newScriptId = await scriptRepository.addScript({
+        const newScriptId = await fileSystemRepository.addScript({
           title: scriptData.title,
           body: scriptData.body
         });
@@ -308,7 +332,7 @@ const AdminPage = () => {
         console.log('New script added with ID:', newScriptId);
         
         // Explicitly load the new script to make sure we have the complete object
-        const newScript = await scriptRepository.getScriptById(newScriptId);
+        const newScript = await fileSystemRepository.getScriptById(newScriptId);
         console.log('Retrieved new script:', newScript);
         
         if (newScript) {
@@ -317,7 +341,7 @@ const AdminPage = () => {
           setSelectedScript(newScript);
           
           // Load chapters for the new script
-          const chapters = await scriptRepository.getChaptersForScript(newScriptId);
+          const chapters = await fileSystemRepository.getChaptersForScript(newScriptId);
           setChapters(chapters);
           
           // Notify other clients about the new script
@@ -334,6 +358,7 @@ const AdminPage = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving script:', error);
+      alert('Failed to save script: ' + error.message);
     }
   };
   
@@ -343,10 +368,10 @@ const AdminPage = () => {
     
     if (window.confirm(`Are you sure you want to delete the script "${selectedScript?.title}"?`)) {
       try {
-        await scriptRepository.deleteScript(selectedScriptId);
+        await fileSystemRepository.deleteScript(selectedScriptId);
         
         // Reload scripts
-        const allScripts = await scriptRepository.getAllScripts();
+        const allScripts = await fileSystemRepository.getAllScripts();
         setScripts(allScripts);
         
         // Select the first script or clear the selection
@@ -355,10 +380,11 @@ const AdminPage = () => {
         } else {
           setSelectedScriptId(null);
           setSelectedScript(null);
-          setChapters([]);
+          // Removed setChapters
         }
       } catch (error) {
         console.error('Error deleting script:', error);
+        alert('Failed to delete script: ' + error.message);
       }
     }
   };
@@ -374,7 +400,7 @@ const AdminPage = () => {
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
-      setCurrentChapter(data.currentChapter);
+      // Removed currentChapter update
       
       // Handle script selection changes from WebSocket
       if (data.currentScript === null && selectedScriptId !== null) {
@@ -385,15 +411,13 @@ const AdminPage = () => {
         console.log('AdminPage: Loading initial script from state update:', data.currentScript);
         try {
           // Get the script using the repository
-          const script = await scriptRepository.getScriptById(data.currentScript);
+          const script = await fileSystemRepository.getScriptById(data.currentScript);
           if (script) {
             console.log('Script found, setting as selected:', script.title);
             setSelectedScriptId(script.id);
             setSelectedScript(script);
             
-            // Load chapters
-            const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
-            setChapters(scriptChapters);
+            // Removed chapters loading
           } else {
             console.error('AdminPage: Could not find script with ID:', data.currentScript);
           }
@@ -406,14 +430,12 @@ const AdminPage = () => {
         // Script changed to a different one
         console.log('AdminPage: Changing script selection due to WebSocket state update');
         try {
-          const script = await scriptRepository.getScriptById(data.currentScript);
+          const script = await fileSystemRepository.getScriptById(data.currentScript);
           if (script) {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
             
-            // Load chapters
-            const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
-            setChapters(scriptChapters);
+            // Removed chapters loading
           }
         } catch (error) {
           console.error('AdminPage: Error loading new script from state update:', error);
@@ -473,12 +495,7 @@ const AdminPage = () => {
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
   
-  const jumpToChapter = (chapterIndex) => {
-    if (chapters[chapterIndex]) {
-      setCurrentChapter(chapterIndex);
-      sendControlMessage('JUMP_TO_CHAPTER', chapterIndex);
-    }
-  };
+  // Removed jumpToChapter function
   
   // Bluetooth connection handlers
   const handleConnectBluetooth = async () => {
@@ -524,7 +541,7 @@ const AdminPage = () => {
         <div className="scripts-panel">
           <div className="scripts-header">
             <h2>Scripts</h2>
-            <button onClick={handleAddScript} className="add-script-btn">Add New Script</button>
+            {/* Removed Add New Script button as we're only reading scripts from directory */}
           </div>
           
           <div className="scripts-list">
@@ -575,10 +592,7 @@ const AdminPage = () => {
             <>
               <div className="script-header">
                 <h2>{selectedScript.title}</h2>
-                <div className="script-actions">
-                  <button onClick={handleEditScript} className="edit-btn">Edit Script</button>
-                  <button onClick={handleDeleteScript} className="delete-btn">Delete Script</button>
-                </div>
+                {/* Removed edit and delete buttons as we're only reading scripts from directory */}
               </div>
               
               <div className="teleprompter-controls">
@@ -699,11 +713,24 @@ const AdminPage = () => {
                 <option value="" disabled>Select a script...</option>
                 <option value="none">No script (clear selection)</option>
                 {scripts.map(script => (
-                  <option key={script.id} value={Number(script.id)}>
+                  <option key={script.id} value={script.id}>
                     {script.title} (ID: {script.id})
                   </option>
                 ))}
               </select>
+            </div>
+            
+            <div className="directory-selector">
+              <h4>Scripts Directory</h4>
+              <div className="current-directory">
+                Current: <span className="directory-path">{currentDirectory}</span>
+              </div>
+              <button 
+                onClick={handleSelectDirectory} 
+                className="select-directory-btn"
+              >
+                Change Scripts Directory
+              </button>
             </div>
           </div>
           
@@ -751,7 +778,7 @@ const AdminPage = () => {
                 <strong>QR Codes:</strong> Scan these with mobile devices for quick access to Viewer and Remote modes.
               </li>
               <li>
-                <strong>Chapters:</strong> Add 'FILM CLIP' text to mark chapter points in your script.
+                {/* Removed chapter help text */}
               </li>
               <li>
                 <strong>Bluetooth Remote:</strong> Connect a compatible Bluetooth presentation remote to control the teleprompter.

@@ -22,31 +22,7 @@ const getScriptsDirectory = () => {
   return scriptsDirectory;
 };
 
-// Helper function to parse chapters from script content
-function parseChapters(body, scriptId) {
-  const lines = body.split('\n');
-  const chapters = [];
-  let currentPosition = 0;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-    
-    // Check if line contains 'FILM CLIP' marker
-    if (trimmedLine.includes('FILM CLIP')) {
-      chapters.push({
-        scriptId,
-        title: trimmedLine,
-        startPosition: currentPosition,
-        endPosition: currentPosition + line.length
-      });
-    }
-    
-    currentPosition += line.length + 1; // +1 for the newline character
-  }
-  
-  return chapters;
-}
+// Removed parseChapters function
 
 // Function to list all script files from the directory
 // This will use Electron's fs API in the main process
@@ -402,40 +378,7 @@ const deleteScript = (id) => {
   });
 };
 
-// Get chapters for a script by parsing its content
-const getChaptersForScript = async (scriptId) => {
-  try {
-    // Handle script object being passed in
-    if (typeof scriptId === 'object' && scriptId !== null && scriptId.id) {
-      if (scriptId.body) {
-        // If we already have the script object with body, parse chapters directly
-        return parseChapters(scriptId.body, scriptId.id);
-      }
-      scriptId = scriptId.id;
-    }
-    
-    // Make sure we have a valid ID
-    if (scriptId === undefined || scriptId === null) {
-      console.error('Invalid script ID provided to getChaptersForScript:', scriptId);
-      return [];
-    }
-    
-    // Load the script to parse its content
-    const script = await getScriptById(scriptId);
-    if (!script || !script.body) {
-      console.error(`Cannot get chapters - script ${scriptId} not found or has no content`);
-      return [];
-    }
-    
-    // Parse chapters from the script content
-    const chapters = parseChapters(script.body, scriptId);
-    console.log(`Found ${chapters.length} chapters for script ID ${scriptId}`);
-    return chapters;
-  } catch (error) {
-    console.error('Error in getChaptersForScript:', error);
-    return [];
-  }
-};
+// Removed getChaptersForScript function
 
 // Normalize a script to ensure consistent format
 const normalizeScript = (script) => {
@@ -486,6 +429,6 @@ export default {
   addScript,
   updateScript,
   deleteScript,
-  getChaptersForScript,
+  // Removed getChaptersForScript
   normalizeScript
 };

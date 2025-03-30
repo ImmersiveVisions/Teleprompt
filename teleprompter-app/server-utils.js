@@ -1,6 +1,9 @@
 // server-utils.js - CommonJS version of WebSocket server for Electron
 const WebSocket = require('ws');
 
+// Debug logs for WebSocket server
+console.log('Loading server-utils.js');
+
 // Store connections and state
 let connections = [];
 let sharedState = {
@@ -9,8 +12,7 @@ let sharedState = {
   speed: 1,
   isPlaying: false,
   direction: 'forward',
-  fontSize: 24,
-  currentChapter: 0
+  fontSize: 24
 };
 
 // Initialize WebSocket server for Electron main process
@@ -24,11 +26,15 @@ function initWebSocketServer(server) {
     console.log('New client connected to path /ws - WebSocket server is working!');
     connections.push(ws);
     
-    // Send the current state to the new client
-    ws.send(JSON.stringify({
-      type: 'STATE_UPDATE',
-      data: sharedState
-    }));
+    // Give a small delay before sending the initial state
+    // This helps ensure the client is ready to receive the state
+    setTimeout(() => {
+      console.log('Sending initial state to new client:', sharedState);
+      ws.send(JSON.stringify({
+        type: 'STATE_UPDATE',
+        data: sharedState
+      }));
+    }, 500);
     
     ws.on('message', (message) => {
       try {
@@ -50,7 +56,7 @@ function initWebSocketServer(server) {
 
 // Handle incoming messages
 function handleMessage(message, sender) {
-  console.log('Received message:', message);
+  console.log('Server received message:', message.type, message.action || '');
   
   switch (message.type) {
     case 'CONTROL':
@@ -74,13 +80,29 @@ function handleMessage(message, sender) {
         case 'JUMP_TO_POSITION':
           sharedState.currentPosition = message.value;
           break;
-        case 'JUMP_TO_CHAPTER':
-          sharedState.currentChapter = message.value;
-          break;
         case 'LOAD_SCRIPT':
-          sharedState.currentScript = message.scriptId;
+          // Handle script loading
+          console.log('Server received LOAD_SCRIPT with ID:', message.value);
+          
+          // Special handling for null (clear script selection)
+          if (message.value === null) {
+            console.log('Clearing script selection (null received)');
+            sharedState.currentScript = null;
+            sharedState.currentPosition = 0;
+            break;
+          }
+          
+          // Don't do anything if the script ID hasn't changed (to avoid loops)
+          // But allow null to become non-null and vice versa
+          if (sharedState.currentScript !== null && message.value !== null && 
+              String(sharedState.currentScript) === String(message.value)) {
+            console.log('Script ID unchanged, not updating state');
+            return; // Skip broadcasting
+          }
+          
+          // HTML files are loaded from public directory
+          sharedState.currentScript = message.value; // Use value instead of scriptId
           sharedState.currentPosition = 0;
-          sharedState.currentChapter = 0;
           break;
         default:
           console.warn('Unknown action:', message.action);
@@ -93,6 +115,7 @@ function handleMessage(message, sender) {
     
     case 'GET_STATE':
       // Send current state to the requesting client
+      console.log('Sending state to client:', sharedState);
       sender.send(JSON.stringify({
         type: 'STATE_UPDATE',
         data: sharedState
@@ -106,9 +129,22 @@ function handleMessage(message, sender) {
 
 // Broadcast state to all connected clients
 function broadcastState() {
+  // Create a safe copy of state to broadcast
+  // This ensures we don't have any issues with undefined values
+  const safeState = {
+    currentScript: sharedState.currentScript,  // This could be null, which is fine
+    currentPosition: sharedState.currentPosition || 0,
+    speed: sharedState.speed || 1,
+    isPlaying: !!sharedState.isPlaying,
+    direction: sharedState.direction || 'forward',
+    fontSize: sharedState.fontSize || 24
+  };
+  
+  console.log('Broadcasting state update:', safeState);
+  
   const stateMessage = JSON.stringify({
     type: 'STATE_UPDATE',
-    data: sharedState
+    data: safeState
   });
   
   connections.forEach(client => {
