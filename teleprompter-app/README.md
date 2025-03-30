@@ -54,7 +54,8 @@ teleprompter-app/
 │   ├── App.jsx              # Main application component
 │   ├── index.jsx            # React entry point
 │   └── styles.css           # Global application styles
-├── server.js                # Express server for hosting the application
+├── main.js                  # Electron main process file
+├── server.js                # Express server for web hosting mode
 ├── package.json             # Project dependencies and scripts
 └── README.md                # This documentation file
 ```
@@ -72,23 +73,38 @@ teleprompter-app/
    npm install
    ```
 
+### Web Application Mode
+
 3. **Build the Application**: 
    ```
    npm run build
    ```
 
-4. **Start the Server**:
+4. **Start the Web Server**:
    ```
-   npm start
+   npm run web:start
    ```
 
 5. **Access the Application**:
-   - The application will automatically open in your default browser
+   - Open your browser and navigate to http://localhost:3000
    - Terminal will display QR codes and URLs for connecting other devices
+
+### Electron Desktop Application
+
+3. **Run the Electron Application**:
+   ```
+   npm start
+   ```
+   
+4. **Build Portable Windows Application**:
+   ```
+   npm run electron:build
+   ```
+   This will create a portable Windows executable in the `dist` folder.
 
 ## Development Mode
 
-To run the application in development mode with hot reloading:
+To run the web application in development mode with hot reloading:
 
 ```
 npm run dev
@@ -144,9 +160,21 @@ This will start both the development server and the backend server concurrently.
 
 ## Technical Details
 
+### Desktop Application
+
+The application can be packaged as a standalone desktop application using Electron, which provides:
+- Native desktop integration
+- Cross-platform compatibility 
+- Access to system APIs
+- Ability to run without an internet browser
+- Simplified distribution as a portable executable
+
 ### WebSocket Communication
 
-The application uses WebSockets to enable real-time communication between all connected devices. The server acts as a central hub, broadcasting state changes to all clients.
+The application uses WebSockets to enable real-time communication between all connected devices. The server acts as a central hub, broadcasting state changes to all clients. This architecture allows:
+- Real-time synchronization across multiple devices
+- Remote control from any device on the local network
+- Persistent connections with automatic reconnection
 
 ### Database
 
@@ -156,7 +184,10 @@ Scripts are stored in IndexedDB using Dexie.js, providing persistent storage eve
 
 ### Bluetooth Integration
 
-The application supports the Web Bluetooth API to connect with Bluetooth presentation remotes. Both custom teleprompter remotes and standard presentation clickers are supported.
+The application supports the Web Bluetooth API to connect with Bluetooth presentation remotes. Both custom teleprompter remotes and standard presentation clickers are supported. The Bluetooth service provides:
+- Automatic detection of compatible devices
+- Support for standard HID keyboard profiles
+- Mapping of remote button presses to teleprompter actions
 
 ## Troubleshooting
 

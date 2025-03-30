@@ -2,13 +2,14 @@
   "name": "teleprompter-app",
   "version": "1.0.0",
   "description": "A web-based teleprompter application for Windows",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "electron .",
     "build": "react-scripts build",
     "dev": "concurrently \"nodemon server.js\" \"react-scripts start\"",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "web:start": "node server.js",
+    "electron:build": "npm run build && electron-builder build --win portable"
   },
   "dependencies": {
     "concurrently": "^8.2.1",
@@ -24,7 +25,22 @@
     "ws": "^8.13.0"
   },
   "devDependencies": {
-    "@babel/plugin-proposal-private-property-in-object": "^7.21.11"
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.teleprompter.app",
+    "productName": "Teleprompter",
+    "files": [
+      "build/**/*",
+      "node_modules/**/*",
+      "main.js",
+      "src/services/websocket.js"
+    ],
+    "win": {
+      "target": "portable"
+    }
   },
   "browserslist": {
     "production": [
