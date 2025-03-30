@@ -217,41 +217,91 @@ const AdminPage = () => {
   const handleScriptSelect = async (scriptId) => {
     console.log('DEBUG handleScriptSelect called with scriptId:', scriptId, 'type:', typeof scriptId);
     
-    // Convert string ID to number if needed (from dropdown selections)
-    const numericId = typeof scriptId === 'string' ? parseInt(scriptId, 10) : scriptId;
-    
-    // Verify we have a valid ID
-    if (!numericId || isNaN(numericId)) {
-      console.error('Invalid script ID:', scriptId);
+    // Handle "none" option or invalid script ID
+    if (scriptId === 'none' || scriptId === null || scriptId === undefined) {
+      clearScriptSelection();
       return;
     }
     
     try {
-      // Show loading state by setting ID but not the script yet
-      setSelectedScriptId(numericId);
-      
-      const script = await db.getScriptById(numericId);
-      console.log('DEBUG Script loaded from DB:', script ? script.title : 'null');
-      
-      if (script) {
-        // Update state with the selected script
-        setSelectedScript(script);
-        console.log('DEBUG setSelectedScript called with:', script.title);
+      // First, check if we're selecting from the dropdown (string ID) or 
+      // from the list (which might pass the script object directly)
+      if (typeof scriptId === 'object' && scriptId !== null) {
+        // We were passed a full script object
+        console.log('Using script object directly:', scriptId.title);
+        setSelectedScriptId(scriptId.id);
+        setSelectedScript(scriptId);
         
         // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(numericId);
+        const scriptChapters = await db.getChaptersForScript(scriptId.id);
         console.log(`DEBUG Loaded ${scriptChapters.length} chapters for script`);
         setChapters(scriptChapters);
         
         // Notify other clients about the script change
-        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', numericId);
+        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', scriptId.id);
+        sendControlMessage('LOAD_SCRIPT', scriptId.id);
+        return;
+      }
+      
+      // Convert string ID to number if needed
+      let numericId;
+      if (typeof scriptId === 'string') {
+        // Skip conversion for 'none' option
+        if (scriptId === 'none') {
+          clearScriptSelection();
+          return;
+        }
+        numericId = parseInt(scriptId, 10);
+      } else {
+        numericId = scriptId;
+      }
+      
+      // Double verify we have a valid ID
+      if (isNaN(numericId)) {
+        console.error('Invalid script ID (not a number):', scriptId);
+        return;
+      }
+      
+      // First refresh the script list to make sure we have the latest data
+      const allScripts = await db.getAllScripts();
+      
+      // Find the script in our local list by ID
+      const scriptToSelect = allScripts.find(s => s.id === numericId);
+      
+      if (scriptToSelect) {
+        // Use the script from our local list - should be valid
+        console.log('Script found in local list:', scriptToSelect.title);
+        setSelectedScriptId(numericId);
+        setSelectedScript(scriptToSelect);
+        
+        // Load chapters
+        const scriptChapters = await db.getChaptersForScript(numericId);
+        console.log(`Loaded ${scriptChapters.length} chapters for script`);
+        setChapters(scriptChapters);
+        
+        // Notify other clients
         sendControlMessage('LOAD_SCRIPT', numericId);
       } else {
-        console.error('DEBUG Script not found with ID:', numericId);
-        // Script not found - handle this case by clearing the selection
-        clearScriptSelection();
-        // Show an error message to the user
-        alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
+        // As a fallback, try to load directly from DB
+        console.log('Script not found in local list, trying DB directly...');
+        const script = await db.getScriptById(numericId);
+        
+        if (script) {
+          console.log('Script loaded from DB:', script.title);
+          setSelectedScriptId(numericId);
+          setSelectedScript(script);
+          
+          // Load chapters
+          const scriptChapters = await db.getChaptersForScript(numericId);
+          setChapters(scriptChapters);
+          
+          // Notify other clients
+          sendControlMessage('LOAD_SCRIPT', numericId);
+        } else {
+          console.error('Script not found with ID:', numericId);
+          clearScriptSelection();
+          alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
+        }
       }
     } catch (error) {
       console.error('Error selecting script:', error);
@@ -465,7 +515,7 @@ const AdminPage = () => {
               <div 
                 key={script.id}
                 className={`script-item ${selectedScriptId === script.id ? 'selected' : ''}`}
-                onClick={() => selectedScriptId === script.id ? clearScriptSelection() : handleScriptSelect(script.id)}
+                onClick={() => selectedScriptId === script.id ? clearScriptSelection() : handleScriptSelect(script)}
               >
                 <div className="script-item-content">
                   <div>
@@ -611,13 +661,13 @@ const AdminPage = () => {
               <select 
                 className="admin-script-dropdown"
                 value={selectedScriptId || ''}
-                onChange={(e) => e.target.value === 'none' ? clearScriptSelection() : handleScriptSelect(e.target.value)}
+                onChange={(e) => handleScriptSelect(e.target.value)}
               >
                 <option value="" disabled>Select a script...</option>
                 <option value="none">No script (clear selection)</option>
                 {scripts.map(script => (
                   <option key={script.id} value={script.id}>
-                    {script.title}
+                    {script.title} (ID: {script.id})
                   </option>
                 ))}
               </select>

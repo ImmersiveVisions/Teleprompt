@@ -170,10 +170,16 @@ const ScriptPlayer = ({
     return <div className="no-script-message">No script selected</div>;
   }
   
+  // Verify script has required properties
+  if (!script.id) {
+    console.warn('ScriptPlayer: Script is missing ID property');
+    return <div className="no-script-message">Script is missing ID property</div>;
+  }
+  
   // Double-check that we have content to display
   if (!scriptContent) {
     console.warn('ScriptPlayer: Script has no content:', script.id);
-    return <div className="no-script-message">Script has no content</div>;
+    return <div className="no-script-message">Script has no content. Add some text in Edit mode.</div>;
   }
   
   return (
