@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AdminPage from './pages/AdminPage';
 import RemotePage from './pages/RemotePage';
 import ViewerPage from './pages/ViewerPage';
-import { initWebSocket, getWebSocketStatus } from './services/websocket';
+import { initWebSocket } from './services/websocket';
 import { initBluetoothService } from './services/bluetoothService';
 import './styles.css';
 
@@ -15,6 +15,7 @@ const App = () => {
   // Initialize WebSocket connection for real-time control
   useEffect(() => {
     try {
+      // Initialize WebSocket connection
       initWebSocket((status) => {
         console.log('WebSocket status updated:', status);
         setWsStatus(status);

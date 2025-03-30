@@ -1,142 +1,18 @@
-// src/services/websocket.js
-const WebSocket = require('ws');
-const WebSocketServer = WebSocket.Server;
+// src/services/websocket.js - browser-safe WebSocket client
 
-let wsServer = null;
-let connections = [];
-let statusCallback = null;
-
-// Messages to be shared across all clients
-let sharedState = {
-  currentScript: null,
-  currentPosition: 0,
-  speed: 1,
-  isPlaying: false,
-  direction: 'forward',
-  fontSize: 24,
-  currentChapter: 0
-};
-
-// Initialize WebSocket server
-const initWebSocketServer = (server) => {
-  wsServer = new WebSocketServer({ 
-    server,
-    path: '/ws'  // Define the WebSocket path to match client connection
-  });
-  
-  wsServer.on('connection', (ws) => {
-    console.log('New client connected');
-    connections.push(ws);
-    
-    if (statusCallback) statusCallback('connected');
-    
-    // Send the current state to the new client
-    ws.send(JSON.stringify({
-      type: 'STATE_UPDATE',
-      data: sharedState
-    }));
-    
-    ws.on('message', (message) => {
-      try {
-        const parsedMessage = JSON.parse(message.toString());  // Use toString() to handle binary messages
-        handleMessage(parsedMessage, ws);
-      } catch (error) {
-        console.error('Error parsing message:', error);
-      }
-    });
-    
-    ws.on('close', () => {
-      console.log('Client disconnected');
-      connections = connections.filter(conn => conn !== ws);
-      
-      if (connections.length === 0 && statusCallback) {
-        statusCallback('disconnected');
-      }
-    });
-  });
-  
-  return wsServer;
-};
-
-// Handle incoming messages
-const handleMessage = (message, sender) => {
-  console.log('Received message:', message);
-  
-  switch (message.type) {
-    case 'CONTROL':
-      // Update shared state based on control message
-      switch (message.action) {
-        case 'PLAY':
-          sharedState.isPlaying = true;
-          break;
-        case 'PAUSE':
-          sharedState.isPlaying = false;
-          break;
-        case 'SET_SPEED':
-          sharedState.speed = message.value;
-          break;
-        case 'SET_DIRECTION':
-          sharedState.direction = message.value;
-          break;
-        case 'SET_FONT_SIZE':
-          sharedState.fontSize = message.value;
-          break;
-        case 'JUMP_TO_POSITION':
-          sharedState.currentPosition = message.value;
-          break;
-        case 'JUMP_TO_CHAPTER':
-          sharedState.currentChapter = message.value;
-          break;
-        case 'LOAD_SCRIPT':
-          sharedState.currentScript = message.scriptId;
-          sharedState.currentPosition = 0;
-          sharedState.currentChapter = 0;
-          break;
-        default:
-          console.warn('Unknown action:', message.action);
-          return;
-      }
-      
-      // Broadcast the update to all clients
-      broadcastState();
-      break;
-    
-    case 'GET_STATE':
-      // Send current state to the requesting client
-      sender.send(JSON.stringify({
-        type: 'STATE_UPDATE',
-        data: sharedState
-      }));
-      break;
-    
-    default:
-      console.warn('Unknown message type:', message.type);
-  }
-};
-
-// Broadcast state to all connected clients
-const broadcastState = () => {
-  const stateMessage = JSON.stringify({
-    type: 'STATE_UPDATE',
-    data: sharedState
-  });
-  
-  connections.forEach(client => {
-    if (client.readyState === 1) { // OPEN
-      client.send(stateMessage);
-    }
-  });
-};
-
-// Client-side WebSocket functions
+// Client-side WebSocket variables
 let clientWs = null;
 let messageHandlers = [];
+let statusCallback = null;
 
+/**
+ * Initialize WebSocket connection
+ * @param {Function} statusCb - Callback for connection status updates
+ */
 const initWebSocket = (statusCb) => {
   try {
     statusCallback = statusCb;
     
-    // Guard against running in non-browser environment
     if (typeof window === 'undefined') {
       console.warn('WebSocket cannot be initialized in non-browser environment');
       return;
@@ -148,16 +24,18 @@ const initWebSocket = (statusCb) => {
     console.log('Initializing WebSocket connection to:', wsUrl);
     
     try {
-      clientWs = new WebSocket(wsUrl);
+      // Use native browser WebSocket
+      console.log('Creating WebSocket with URL:', wsUrl);
+      clientWs = new window.WebSocket(wsUrl);
     } catch (err) {
       console.error('Error creating WebSocket:', err);
-      statusCallback('error');
+      if (statusCallback) statusCallback('error');
       return;
     }
     
     clientWs.onopen = () => {
       console.log('WebSocket connected');
-      statusCallback('connected');
+      if (statusCallback) statusCallback('connected');
       
       // Request current state
       try {
@@ -182,7 +60,7 @@ const initWebSocket = (statusCb) => {
     
     clientWs.onclose = () => {
       console.log('WebSocket disconnected');
-      statusCallback('disconnected');
+      if (statusCallback) statusCallback('disconnected');
       
       // Attempt to reconnect after a delay
       setTimeout(() => {
@@ -192,7 +70,7 @@ const initWebSocket = (statusCb) => {
     
     clientWs.onerror = (error) => {
       console.error('WebSocket error:', error);
-      statusCallback('error');
+      if (statusCallback) statusCallback('error');
     };
   } catch (error) {
     console.error('Error in initWebSocket:', error);
@@ -200,8 +78,13 @@ const initWebSocket = (statusCb) => {
   }
 };
 
+/**
+ * Send a control message over WebSocket
+ * @param {string} action - Control action to perform
+ * @param {*} value - Optional value for the action
+ */
 const sendControlMessage = (action, value = null) => {
-  if (clientWs && clientWs.readyState === 1) {
+  if (clientWs && clientWs.readyState === WebSocket.OPEN) {
     clientWs.send(JSON.stringify({
       type: 'CONTROL',
       action,
@@ -212,6 +95,11 @@ const sendControlMessage = (action, value = null) => {
   }
 };
 
+/**
+ * Register a handler for WebSocket messages
+ * @param {Function} handler - Handler function for messages
+ * @returns {Function} Function to unregister the handler
+ */
 const registerMessageHandler = (handler) => {
   messageHandlers.push(handler);
   return () => {
@@ -219,21 +107,41 @@ const registerMessageHandler = (handler) => {
   };
 };
 
+/**
+ * Get current WebSocket connection status
+ * @returns {string} Connection status
+ */
 const getWebSocketStatus = () => {
   if (!clientWs) return 'disconnected';
   
   switch (clientWs.readyState) {
-    case 0: return 'connecting';
-    case 1: return 'connected';
-    case 2: return 'closing';
-    case 3: return 'disconnected';
+    case WebSocket.CONNECTING: return 'connecting';
+    case WebSocket.OPEN: return 'connected';
+    case WebSocket.CLOSING: return 'closing';
+    case WebSocket.CLOSED: return 'disconnected';
     default: return 'unknown';
   }
 };
 
-// Export for Node.js server
-module.exports = {
-  initWebSocketServer,
+// Server-side stub exports (for compatibility)
+const initWebSocketServer = (server) => {
+  console.warn('initWebSocketServer called in browser environment');
+  return null;
+};
+
+// Module exports for browser environment
+// For browser - export to window if available
+if (typeof window !== 'undefined') {
+  window.websocketService = {
+    initWebSocket,
+    sendControlMessage,
+    registerMessageHandler,
+    getWebSocketStatus
+  };
+}
+
+// Browser-friendly exports
+export {
   initWebSocket,
   sendControlMessage,
   registerMessageHandler,

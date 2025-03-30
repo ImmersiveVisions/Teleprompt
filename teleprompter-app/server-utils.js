@@ -21,7 +21,7 @@ function initWebSocketServer(server) {
   });
   
   wsServer.on('connection', (ws) => {
-    console.log('New client connected to path /ws');
+    console.log('New client connected to path /ws - WebSocket server is working!');
     connections.push(ws);
     
     // Send the current state to the new client

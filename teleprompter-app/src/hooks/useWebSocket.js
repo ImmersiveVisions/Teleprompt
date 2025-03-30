@@ -1,11 +1,5 @@
 // src/hooks/useWebSocket.js
 import { useState, useEffect } from 'react';
-import { 
-  initWebSocket, 
-  registerMessageHandler, 
-  sendControlMessage, 
-  getWebSocketStatus 
-} from '../services/websocket';
 
 /**
  * Hook for working with WebSocket connections
@@ -25,31 +19,44 @@ const useWebSocket = () => {
   
   // Initialize WebSocket connection
   useEffect(() => {
-    initWebSocket((connectionStatus) => {
-      setStatus(connectionStatus);
-    });
-    
-    // Register handler for state updates
-    const unregisterHandler = registerMessageHandler((message) => {
-      if (message.type === 'STATE_UPDATE') {
-        setState(message.data);
-      }
-    });
-    
-    return () => {
-      unregisterHandler();
-    };
+    // Use the global websocket service
+    if (window.websocketService) {
+      // Initialize if not already initialized
+      window.websocketService.initWebSocket((connectionStatus) => {
+        setStatus(connectionStatus);
+      });
+      
+      // Register handler for state updates
+      const unregisterHandler = window.websocketService.registerMessageHandler((message) => {
+        if (message.type === 'STATE_UPDATE') {
+          setState(message.data);
+        }
+      });
+      
+      return () => {
+        if (unregisterHandler) {
+          unregisterHandler();
+        }
+      };
+    } else {
+      console.error('WebSocket service not available');
+      setStatus('error');
+    }
   }, []);
   
   // Control methods
   const play = () => {
     setState({ ...state, isPlaying: true });
-    sendControlMessage('PLAY');
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('PLAY');
+    }
   };
   
   const pause = () => {
     setState({ ...state, isPlaying: false });
-    sendControlMessage('PAUSE');
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('PAUSE');
+    }
   };
   
   const togglePlay = () => {
@@ -62,12 +69,16 @@ const useWebSocket = () => {
   
   const setSpeed = (speed) => {
     setState({ ...state, speed });
-    sendControlMessage('SET_SPEED', speed);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('SET_SPEED', speed);
+    }
   };
   
   const setDirection = (direction) => {
     setState({ ...state, direction });
-    sendControlMessage('SET_DIRECTION', direction);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('SET_DIRECTION', direction);
+    }
   };
   
   const toggleDirection = () => {
@@ -77,22 +88,30 @@ const useWebSocket = () => {
   
   const setFontSize = (fontSize) => {
     setState({ ...state, fontSize });
-    sendControlMessage('SET_FONT_SIZE', fontSize);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('SET_FONT_SIZE', fontSize);
+    }
   };
   
   const jumpToPosition = (position) => {
     setState({ ...state, currentPosition: position });
-    sendControlMessage('JUMP_TO_POSITION', position);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('JUMP_TO_POSITION', position);
+    }
   };
   
   const jumpToChapter = (chapterIndex) => {
     setState({ ...state, currentChapter: chapterIndex });
-    sendControlMessage('JUMP_TO_CHAPTER', chapterIndex);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('JUMP_TO_CHAPTER', chapterIndex);
+    }
   };
   
   const loadScript = (scriptId) => {
     setState({ ...state, currentScript: scriptId, currentPosition: 0, currentChapter: 0 });
-    sendControlMessage('LOAD_SCRIPT', scriptId);
+    if (window.websocketService) {
+      window.websocketService.sendControlMessage('LOAD_SCRIPT', scriptId);
+    }
   };
   
   return {

@@ -2,9 +2,13 @@
 const express = require('express');
 const path = require('path');
 const http = require('http');
-const websocketService = require('./src/services/websocket');
+const serverUtils = require('./server-utils');
 const os = require('os');
 const qrcode = require('qrcode-terminal');
+
+// Log node version and module info for debugging
+console.log('Node version:', process.version);
+console.log('Server utils:', typeof serverUtils, 'initWebSocketServer:', typeof serverUtils.initWebSocketServer);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,7 +31,7 @@ const server = http.createServer(app);
 
 // Initialize WebSocket server
 console.log('Initializing WebSocket server...');
-const wss = websocketService.initWebSocketServer(server);
+const wss = serverUtils.initWebSocketServer(server);
 console.log('WebSocket server initialized');
 
 // Start the server
