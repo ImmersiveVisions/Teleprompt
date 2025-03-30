@@ -8,6 +8,7 @@ import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import ScriptEntryModal from '../components/ScriptEntryModal';
+import SearchModal from '../components/SearchModal';
 import '../styles.css';
 
 const AdminPage = () => {
@@ -15,6 +16,7 @@ const AdminPage = () => {
   const [selectedScriptId, setSelectedScriptId] = useState(null);
   const [selectedScript, setSelectedScript] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
@@ -92,6 +94,18 @@ const AdminPage = () => {
     });
     
     setSearchResults(results);
+    
+    // Open the search modal if we have results
+    if (results.length > 0) {
+      setIsSearchModalOpen(true);
+    }
+  };
+  
+  // Handle executing a search
+  const executeSearch = () => {
+    if (searchTerm.trim()) {
+      handleScriptSearch(searchTerm);
+    }
   };
   
   // Reference to the script player component
@@ -136,6 +150,8 @@ const AdminPage = () => {
     // If we have a direct reference to the player, use it
     if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
       scriptPlayerRef.current.jumpToPosition(position);
+      // TODO: Fix scrolling accuracy issue - there appears to be an offset
+      // that causes the text to not be properly centered in the viewport
     }
     
     // Optional: Add visual feedback
@@ -147,6 +163,9 @@ const AdminPage = () => {
         previewHeader.textContent = originalText;
       }, 1000);
     }
+    
+    // Close the search modal after jumping
+    setIsSearchModalOpen(false);
   };
   
   // Handle script selection
@@ -464,27 +483,27 @@ const AdminPage = () => {
                     className="search-input"
                     placeholder="Search in script..."
                     value={searchTerm}
-                    onChange={(e) => handleScriptSearch(e.target.value)}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && executeSearch()}
                   />
-                </div>
-                <div className="search-results">
-                  {searchResults.length > 0 ? (
-                    searchResults.map((result, index) => (
-                      <div 
-                        key={index}
-                        className={`search-result ${result.active ? 'active' : ''}`}
-                        onClick={() => jumpToSearchResult(result.index)}
-                      >
-                        <span className="result-line">
-                          {result.line.substring(0, 50)}{result.line.length > 50 ? '...' : ''}
-                        </span>
-                      </div>
-                    ))
-                  ) : searchTerm ? (
-                    <div className="no-results">No results found</div>
-                  ) : null}
+                  <span className="search-icon">🔍</span>
+                  <button className="search-button" onClick={executeSearch}>
+                    Search
+                    {searchResults.length > 0 && (
+                      <span className="search-count">{searchResults.length}</span>
+                    )}
+                  </button>
                 </div>
               </div>
+              
+              {/* Search Results Modal */}
+              <SearchModal 
+                isOpen={isSearchModalOpen}
+                onClose={() => setIsSearchModalOpen(false)}
+                searchResults={searchResults}
+                onResultSelect={jumpToSearchResult}
+                searchTerm={searchTerm}
+              />
               
               <div className="preview-container">
                 <div className="preview-header">

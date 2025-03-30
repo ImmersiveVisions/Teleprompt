@@ -251,23 +251,46 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
     <div 
       ref={viewerRef}
       className={`script-viewer ${fullScreen ? 'fullscreen' : ''}`}
-      style={{ zIndex: 5 }} // Lower z-index so the header dropdown remains visible
+      style={{ 
+        zIndex: 5, // Lower z-index so the header dropdown remains visible
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}
     >
       {script ? (
         <>
-          <div className="script-title">
+          <div className="script-title" style={{ width: '100%' }}>
             {!fullScreen ? `Preview: ${script.title}` : script.title}
           </div>
-          <div 
-            ref={scriptContentRef}
-            className="script-content"
-            style={{ 
-              fontSize: `${fontSize}px`,
-              backgroundColor: '#000',
-              color: '#fff'
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flex: 1,
+              padding: '0 2rem'
             }}
           >
-            {renderScriptContent()}
+            <div 
+              ref={scriptContentRef}
+              className="script-content"
+              style={{ 
+                width: '100%',
+                maxWidth: '100%',
+                aspectRatio: '16/9',
+                fontSize: `${fontSize}px`,
+                backgroundColor: '#000',
+                color: '#fff',
+                border: '1px solid #333',
+                boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)'
+              }}
+            >
+              {renderScriptContent()}
+            </div>
           </div>
         </>
       ) : (

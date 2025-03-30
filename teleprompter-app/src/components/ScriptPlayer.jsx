@@ -124,6 +124,12 @@ const ScriptPlayer = ({
     const maxScroll = container.scrollHeight - container.clientHeight;
     const targetScroll = percentage * maxScroll;
     
+    // TODO: Improve scrolling accuracy when jumping to search results
+    // Current issues:
+    // 1. The scroll position calculation needs adjustment to center the found text in the viewport
+    // 2. For long scripts, the linear percentage calculation may not be accurate enough
+    // 3. Consider highlighting the found text temporarily for better visibility
+    
     // Use smooth scrolling for a better experience
     container.style.scrollBehavior = 'smooth';
     container.scrollTop = targetScroll;
@@ -153,7 +159,9 @@ const ScriptPlayer = ({
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        height: '100%'
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center'
       }}
     >
       {fullScreen && (
@@ -163,7 +171,8 @@ const ScriptPlayer = ({
             textAlign: 'center',
             borderBottom: '1px solid #333',
             fontWeight: 'bold',
-            fontSize: '1.5rem'
+            fontSize: '1.5rem',
+            width: '100%'
           }}
         >
           {script.title}
@@ -171,19 +180,35 @@ const ScriptPlayer = ({
       )}
       
       <div
-        ref={containerRef}
         style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
           flex: 1,
-          overflowY: 'auto',
-          padding: '2rem',
-          fontSize: `${fontSize}px`,
-          lineHeight: 1.8,
-          fontFamily: 'Courier New, monospace',
-          whiteSpace: 'pre-wrap',
-          paddingBottom: '150vh' // Extra padding for smooth scrolling
+          padding: '0 2rem'
         }}
       >
-        {scriptContent}
+        <div
+          ref={containerRef}
+          style={{
+            width: '100%',
+            maxWidth: '100%',
+            aspectRatio: '16/9',
+            overflowY: 'auto',
+            padding: '2rem',
+            fontSize: `${fontSize}px`,
+            lineHeight: 1.8,
+            fontFamily: 'Courier New, monospace',
+            whiteSpace: 'pre-wrap',
+            paddingBottom: '150vh', // Extra padding for smooth scrolling
+            backgroundColor: 'black',
+            border: '1px solid #333',
+            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)'
+          }}
+        >
+          {scriptContent}
+        </div>
       </div>
     </div>
   );
