@@ -247,9 +247,21 @@ const AdminPage = () => {
                 className={`script-item ${selectedScriptId === script.id ? 'selected' : ''}`}
                 onClick={() => handleScriptSelect(script.id)}
               >
-                <div className="script-item-title">{script.title}</div>
-                <div className="script-item-date">
-                  Last modified: {new Date(script.lastModified).toLocaleDateString()}
+                <div className="script-item-content">
+                  <div>
+                    <div className="script-item-title">{script.title}</div>
+                    <div className="script-item-date">
+                      Last modified: {new Date(script.lastModified).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="script-item-status">
+                    {selectedScriptId === script.id && (
+                      <span className="status-badge active">Active</span>
+                    )}
+                    {isPlaying && selectedScriptId === script.id && (
+                      <span className="status-badge playing">Playing</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

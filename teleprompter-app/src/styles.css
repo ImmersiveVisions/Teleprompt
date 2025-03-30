@@ -322,6 +322,12 @@ input, select, textarea {
   background-color: #f0f7ff;
 }
 
+.script-item-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .script-item-title {
   font-weight: 600;
   margin-bottom: 0.25rem;
@@ -333,6 +339,43 @@ input, select, textarea {
 .script-item-date {
   font-size: 0.75rem;
   color: #6c757d;
+}
+
+.script-item-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.active {
+  background-color: #28a745;
+  color: white;
+  margin-right: 0.25rem;
+}
+
+.status-badge.playing {
+  background-color: #dc3545;
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .script-header {
