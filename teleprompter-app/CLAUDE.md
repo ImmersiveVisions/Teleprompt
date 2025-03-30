@@ -10,6 +10,7 @@
 
 ## Milestones
 - Commit 1cdd6f3: Working ScriptPlayer component with scrolling animation (2025-03-30)
+- Commit c942d5f: HTML rendering improvements for script files (2025-03-30)
 
 ## Code Style
 
@@ -43,3 +44,21 @@
 - Place opening braces on same line
 - Single quotes for strings
 - Semicolons required
+
+## HTML Rendering
+- HTML files are rendered in iframes using srcDoc attribute
+- Use script.isHtml flag to identify HTML content
+- Always ensure proper DOCTYPE is included
+- Use sandbox="allow-same-origin" for security
+- Apply styles by injecting directly into iframe head and body
+- Add extensive logging for iframe-related operations
+- Use loading="eager" to prioritize iframe loading
+
+## Script Handling
+- Support multiple file types: .txt, .html, .htm, .rtf
+- Normalize script object with both body and content fields
+- HTML content detection via script.isHtml flag or filename extension
+- Use ViewerPage's mutation observer to handle dynamic iframe creation
+- Handle scroll operations differently for text vs HTML content
+- Use ContentDocument API for accessing iframe contents
+- For script editing, update both body and content fields
