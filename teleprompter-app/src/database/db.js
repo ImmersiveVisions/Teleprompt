@@ -24,15 +24,47 @@ db.version(2).upgrade(tx => {
 // Add some methods to the database
 const scriptMethods = {
   async getAllScripts() {
-    const scripts = await db.scripts.toArray();
-    console.log(`getAllScripts: Found ${scripts.length} scripts`);
-    scripts.forEach((script, i) => {
-      console.log(`Script ${i}: ID=${script.id} (${typeof script.id}), Title=${script.title}, Has Content=${!!(script.body || script.content)}`);
-    });
-    return scripts;
+    try {
+      const scripts = await db.scripts.toArray();
+      console.log(`getAllScripts: Found ${scripts.length} scripts`);
+      
+      // Debug output for all scripts
+      scripts.forEach((script, i) => {
+        console.log(`Script ${i}: ID=${script.id} (${typeof script.id}), Title=${script.title}, Has Content=${!!(script.body || script.content)}`);
+      });
+      
+      // Normalize all scripts to ensure consistency
+      scripts.forEach(script => {
+        if (!script.body && script.content) {
+          script.body = script.content;
+        } else if (!script.content && script.body) {
+          script.content = script.body;
+        }
+      });
+      
+      return scripts;
+    } catch (error) {
+      console.error('Error in getAllScripts:', error);
+      return [];
+    }
   },
   
   async getScriptById(id) {
+    console.log('=== getScriptById CALLED WITH:', id, 'type:', typeof id);
+
+    // For direct debugging - log the entire database contents
+    const allDbScripts = await db.scripts.toArray();
+    console.log(`ALL SCRIPTS IN DATABASE (${allDbScripts.length} total):`);
+    allDbScripts.forEach(s => {
+      console.log(`- Script ID: ${s.id} (${typeof s.id}), Title: ${s.title || 'NO TITLE'}, Body: ${s.body ? 'YES' : 'NO'}, Content: ${s.content ? 'YES' : 'NO'}`);
+    });
+
+    // CRITICAL FIX: If the database is empty or scripts table doesn't exist, handle gracefully
+    if (allDbScripts.length === 0) {
+      console.error('No scripts found in database. Database might be empty or not properly initialized.');
+      return null;
+    }
+
     // Handle already-loaded script objects being passed in
     if (typeof id === 'object' && id !== null && id.id) {
       console.log('getScriptById received a script object instead of an ID:', id.title);
@@ -40,51 +72,88 @@ const scriptMethods = {
     }
     
     // Make sure we have a valid ID
-    if (id === undefined || id === null || isNaN(parseInt(String(id), 10))) {
+    if (id === undefined || id === null) {
       console.error('Invalid script ID provided to getScriptById:', id, 'typeof:', typeof id);
       return null;
     }
-    
-    // Convert to integer if it's a string
-    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+
+    // Check for the 'none' special case
+    if (id === 'none') {
+      console.log("Special 'none' ID detected - returning null to clear selection");
+      return null;
+    }
     
     try {
-      console.log(`Getting script with ID: ${numericId} (original type: ${typeof id})`);
+      // Standardize ID format - try both numeric and string versions
+      const numericId = Number(id);
+      const stringId = String(id);
       
-      // Strategy 1: Direct get by ID
-      let script = await db.scripts.get(numericId);
+      console.log(`Looking for script with ID: ${id}, trying as numeric: ${numericId}, and as string: "${stringId}"`);
       
-      // Strategy 2: If not found, try as a string ID
-      if (!script && typeof numericId === 'number') {
-        console.log('Trying string ID lookup as fallback');
-        script = await db.scripts.get(String(numericId));
+      // First, check if any script has this exact ID
+      console.log('PRIMARY LOOKUP STRATEGY:');
+      
+      // Try all scripts using direct database access
+      let script = null;
+      
+      // Try numeric ID first (most common case)
+      console.log(`Method 1: Direct lookup with numeric ID ${numericId}`);
+      script = await db.scripts.get(numericId);
+      
+      // If numeric ID fails, try string ID
+      if (!script) {
+        console.log(`Method 2: Direct lookup with string ID "${stringId}"`);
+        script = await db.scripts.get(stringId);
       }
       
-      // Strategy 3: If still not found, try to find by ID in a full collection
+      // If still no match, try searching all scripts manually
       if (!script) {
-        console.log('Trying collection search as fallback');
-        const allScripts = await db.scripts.toArray();
-        script = allScripts.find(s => 
-          s.id === numericId || 
-          s.id === String(numericId) || 
-          String(s.id) === String(numericId)
-        );
-      }
-      
-      if (!script) {
-        console.warn(`Script with ID ${numericId} not found in database after all attempts`);
-      } else {
-        console.log(`Found script: ID ${script.id} (${typeof script.id}), title: ${script.title}`);
+        console.log('FALLBACK STRATEGY: Linear search through all scripts');
         
-        // Normalize the script object
-        if (!script.body && script.content) {
-          script.body = script.content;
-        } else if (!script.content && script.body) {
-          script.content = script.body;
+        // Get all scripts again to ensure we have the latest data
+        const scripts = await db.scripts.toArray();
+        
+        // First try exact match
+        script = scripts.find(s => s.id === numericId || s.id === stringId);
+        
+        // If that fails, try string comparison
+        if (!script) {
+          script = scripts.find(s => {
+            const match = String(s.id) === stringId;
+            console.log(`Comparing script ID ${s.id} (${typeof s.id}) with ${id} (${typeof id}): ${match}`);
+            return match;
+          });
         }
       }
       
-      return script;
+      // If we found a script, normalize it
+      if (script) {
+        console.log(`SUCCESS: Found script with ID ${script.id}, title: "${script.title || 'NO TITLE'}"`);
+        
+        // CRITICAL: Ensure the script has required fields
+        if (!script.title) {
+          console.warn(`Script with ID ${script.id} has no title! This may cause issues.`);
+          script.title = `Untitled Script ${script.id}`;
+        }
+        
+        // Normalize content fields if needed
+        if (!script.body && script.content) {
+          console.log(`Normalizing script ${script.id}: Setting body from content field`);
+          script.body = script.content;
+        } else if (!script.content && script.body) {
+          console.log(`Normalizing script ${script.id}: Setting content from body field`);
+          script.content = script.body;
+        } else if (!script.body && !script.content) {
+          console.warn(`Script ${script.id} has neither body nor content! Setting empty content.`);
+          script.body = "";
+          script.content = "";
+        }
+        
+        return script;
+      } else {
+        console.error(`FAILED: Script with ID ${id} not found in database after trying all methods`);
+        return null;
+      }
     } catch (error) {
       console.error('Error in getScriptById:', error);
       return null;
@@ -105,11 +174,20 @@ const scriptMethods = {
       delete scriptToAdd.content;
     }
     
+    console.log('Adding new script:', scriptToAdd.title);
+    
+    // Add the script to get an auto-generated ID
     const id = await db.scripts.add(scriptToAdd);
+    console.log('Script added with auto-generated ID:', id, 'type:', typeof id);
+    
+    // Retrieve the full script with the assigned ID
+    const addedScript = await db.scripts.get(id);
+    console.log('Full script after adding:', addedScript);
     
     // Parse chapters and add them
     if (scriptToAdd.body) {
       const chapters = parseChapters(scriptToAdd.body, id);
+      console.log(`Adding ${chapters.length} chapters for script ID ${id}`);
       for (const chapter of chapters) {
         await db.chapters.add(chapter);
       }
@@ -170,18 +248,12 @@ const scriptMethods = {
     }
     
     try {
-      // Convert to integer if it's a string, for compatibility
-      const numericId = typeof scriptId === 'string' ? parseInt(scriptId, 10) : scriptId;
+      // Try numeric ID first, then string ID if that fails
+      let chapters = await db.chapters.where('scriptId').equals(Number(scriptId)).toArray();
       
-      console.log(`Getting chapters for script ID: ${numericId} (original type: ${typeof scriptId})`);
-      
-      // Try both numeric and string versions of the ID
-      let chapters = await db.chapters.where({ scriptId: numericId }).toArray();
-      
-      // If no chapters found with numeric ID, try with string ID
-      if (chapters.length === 0 && typeof numericId === 'number') {
-        console.log('No chapters found with numeric ID, trying string ID...');
-        chapters = await db.chapters.where({ scriptId: String(numericId) }).toArray();
+      // If no results with numeric ID, try with string ID
+      if (chapters.length === 0) {
+        chapters = await db.chapters.where('scriptId').equals(String(scriptId)).toArray();
       }
       
       console.log(`Found ${chapters.length} chapters for script ID ${scriptId}`);

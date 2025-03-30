@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ScriptPlayer from '../components/ScriptPlayer';
 import { registerMessageHandler } from '../services/websocket';
-import db from '../database/db';
+import scriptRepository from '../database/scriptRepository';
 import '../styles.css';
 
 const ViewerPage = () => {
@@ -73,15 +73,24 @@ const ViewerPage = () => {
         scriptPlayerRef.current.jumpToPosition(data.jumpToPosition);
       }
       
-      // Check if a script is loaded
-      if (data.currentScript) {
-        console.log('Script loaded:', data.currentScript);
+      // Check if a script selection state has changed
+      console.log('Processing script selection state. Current script ID:', data.currentScript);
+      
+      if (data.currentScript === null) {
+        // Clear script selection
+        console.log('Viewer received instruction to clear script');
+        setScriptLoaded(false);
+        setCurrentScript(null);
+      } else if (data.currentScript) {
+        console.log('Script to load:', data.currentScript);
         setScriptLoaded(true);
         
         // Load the current script data
         try {
-          const script = await db.getScriptById(data.currentScript);
+          // Get the script using the repository
+          const script = await scriptRepository.getScriptById(data.currentScript);
           if (script) {
+            console.log('Viewer loaded script successfully:', script.title);
             setCurrentScript(script);
           } else {
             // Script was not found in the database
@@ -91,9 +100,11 @@ const ViewerPage = () => {
           }
         } catch (error) {
           console.error('Error loading script:', error);
+          setScriptLoaded(false);
+          setCurrentScript(null);
         }
       } else {
-        console.log('No script in state update');
+        console.log('No script in state update (undefined)');
         setScriptLoaded(false);
         setCurrentScript(null);
       }

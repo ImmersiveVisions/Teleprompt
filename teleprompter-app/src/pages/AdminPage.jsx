@@ -1,7 +1,7 @@
 // src/pages/AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import db from '../database/db';
+import scriptRepository from '../database/scriptRepository';
 import { sendControlMessage, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
@@ -44,22 +44,16 @@ const AdminPage = () => {
   // Load all scripts from the database
   const loadScripts = async () => {
     try {
-      // First validate the database to clean up any invalid scripts
-      const wasModified = await db.validateScriptsDatabase();
-      if (wasModified) {
-        console.log('Database was cleaned up - invalid scripts were removed');
-      }
-      
-      // Now load the scripts
-      const allScripts = await db.getAllScripts();
-      console.log(`DEBUG loaded ${allScripts.length} scripts from database`);
+      // Load the scripts using the repository
+      const allScripts = await scriptRepository.getAllScripts();
+      console.log(`AdminPage: loaded ${allScripts.length} scripts from repository`);
       setScripts(allScripts);
       
       // If the currently selected script no longer exists, clear the selection
       if (selectedScriptId) {
         // Only check if we have scripts
         if (allScripts.length > 0) {
-          const scriptExists = allScripts.some(script => script.id === selectedScriptId);
+          const scriptExists = allScripts.some(script => String(script.id) === String(selectedScriptId));
           if (!scriptExists) {
             console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
             clearScriptSelection();
@@ -75,16 +69,16 @@ const AdminPage = () => {
       
       // Select the first script by default if none is selected
       if (allScripts.length > 0 && !selectedScriptId) {
-        console.log('DEBUG auto-selecting first script:', allScripts[0].title);
+        console.log('AdminPage: auto-selecting first script:', allScripts[0].title);
         
         // Validate script before selecting
         if (allScripts[0].id && (allScripts[0].body || allScripts[0].content)) {
           handleScriptSelect(allScripts[0].id);
         } else {
-          console.error('DEBUG first script is invalid, not auto-selecting');
+          console.error('AdminPage: first script is invalid, not auto-selecting');
         }
       } else if (allScripts.length === 0) {
-        console.warn('DEBUG no scripts found in database');
+        console.warn('AdminPage: no scripts found in database');
       }
     } catch (error) {
       console.error('Error loading scripts:', error);
@@ -215,7 +209,7 @@ const AdminPage = () => {
 
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
-    console.log('DEBUG handleScriptSelect called with scriptId:', scriptId, 'type:', typeof scriptId);
+    console.log('AdminPage: handleScriptSelect called with scriptId:', scriptId, 'type:', typeof scriptId);
     
     // Handle "none" option or invalid script ID
     if (scriptId === 'none' || scriptId === null || scriptId === undefined) {
@@ -223,8 +217,14 @@ const AdminPage = () => {
       return;
     }
     
+    // Avoid duplicate selection that might cause loops
+    if (selectedScriptId !== null && String(selectedScriptId) === String(scriptId)) {
+      console.log('Script already selected, ignoring duplicate selection');
+      return;
+    }
+    
     try {
-      // First, check if we're selecting from the dropdown (string ID) or 
+      // Check if we're selecting from the dropdown (string ID) or 
       // from the list (which might pass the script object directly)
       if (typeof scriptId === 'object' && scriptId !== null) {
         // We were passed a full script object
@@ -233,75 +233,35 @@ const AdminPage = () => {
         setSelectedScript(scriptId);
         
         // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(scriptId.id);
-        console.log(`DEBUG Loaded ${scriptChapters.length} chapters for script`);
+        const scriptChapters = await scriptRepository.getChaptersForScript(scriptId.id);
+        console.log(`AdminPage: Loaded ${scriptChapters.length} chapters for script`);
         setChapters(scriptChapters);
         
         // Notify other clients about the script change
-        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', scriptId.id);
+        console.log('AdminPage: Sending LOAD_SCRIPT control message with scriptId:', scriptId.id);
         sendControlMessage('LOAD_SCRIPT', scriptId.id);
         return;
       }
       
-      // Convert string ID to number if needed
-      let numericId;
-      if (typeof scriptId === 'string') {
-        // Skip conversion for 'none' option
-        if (scriptId === 'none') {
-          clearScriptSelection();
-          return;
-        }
-        numericId = parseInt(scriptId, 10);
-      } else {
-        numericId = scriptId;
-      }
+      // Get the script using the repository
+      const script = await scriptRepository.getScriptById(scriptId);
       
-      // Double verify we have a valid ID
-      if (isNaN(numericId)) {
-        console.error('Invalid script ID (not a number):', scriptId);
-        return;
-      }
-      
-      // First refresh the script list to make sure we have the latest data
-      const allScripts = await db.getAllScripts();
-      
-      // Find the script in our local list by ID
-      const scriptToSelect = allScripts.find(s => s.id === numericId);
-      
-      if (scriptToSelect) {
-        // Use the script from our local list - should be valid
-        console.log('Script found in local list:', scriptToSelect.title);
-        setSelectedScriptId(numericId);
-        setSelectedScript(scriptToSelect);
+      if (script) {
+        console.log('Script loaded successfully:', script.title);
+        setSelectedScriptId(script.id);
+        setSelectedScript(script);
         
         // Load chapters
-        const scriptChapters = await db.getChaptersForScript(numericId);
+        const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
         console.log(`Loaded ${scriptChapters.length} chapters for script`);
         setChapters(scriptChapters);
         
         // Notify other clients
-        sendControlMessage('LOAD_SCRIPT', numericId);
+        sendControlMessage('LOAD_SCRIPT', script.id);
       } else {
-        // As a fallback, try to load directly from DB
-        console.log('Script not found in local list, trying DB directly...');
-        const script = await db.getScriptById(numericId);
-        
-        if (script) {
-          console.log('Script loaded from DB:', script.title);
-          setSelectedScriptId(numericId);
-          setSelectedScript(script);
-          
-          // Load chapters
-          const scriptChapters = await db.getChaptersForScript(numericId);
-          setChapters(scriptChapters);
-          
-          // Notify other clients
-          sendControlMessage('LOAD_SCRIPT', numericId);
-        } else {
-          console.error('Script not found with ID:', numericId);
-          clearScriptSelection();
-          alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
-        }
+        console.error('Script not found with ID:', scriptId);
+        clearScriptSelection();
+        alert(`Script with ID ${scriptId} was not found. It may have been deleted.`);
       }
     } catch (error) {
       console.error('Error selecting script:', error);
@@ -327,19 +287,44 @@ const AdminPage = () => {
     try {
       if (selectedScriptId && selectedScript) {
         // Update existing script
-        await db.updateScript(selectedScriptId, {
-          title: scriptData.title,
-          body: scriptData.body
-        });
-      } else {
-        // Add new script
-        const newScriptId = await db.addScript({
+        console.log('Updating existing script with ID:', selectedScriptId);
+        await scriptRepository.updateScript(selectedScriptId, {
           title: scriptData.title,
           body: scriptData.body
         });
         
-        // Select the new script
-        setSelectedScriptId(newScriptId);
+        // Reload the updated script to ensure we have the latest version
+        const updatedScript = await scriptRepository.getScriptById(selectedScriptId);
+        console.log('Script updated:', updatedScript);
+        setSelectedScript(updatedScript);
+      } else {
+        // Add new script
+        console.log('Adding new script:', scriptData.title);
+        const newScriptId = await scriptRepository.addScript({
+          title: scriptData.title,
+          body: scriptData.body
+        });
+        
+        console.log('New script added with ID:', newScriptId);
+        
+        // Explicitly load the new script to make sure we have the complete object
+        const newScript = await scriptRepository.getScriptById(newScriptId);
+        console.log('Retrieved new script:', newScript);
+        
+        if (newScript) {
+          // Select the new script
+          setSelectedScriptId(newScriptId);
+          setSelectedScript(newScript);
+          
+          // Load chapters for the new script
+          const chapters = await scriptRepository.getChaptersForScript(newScriptId);
+          setChapters(chapters);
+          
+          // Notify other clients about the new script
+          sendControlMessage('LOAD_SCRIPT', newScriptId);
+        } else {
+          console.error('Failed to retrieve newly created script with ID:', newScriptId);
+        }
       }
       
       // Reload scripts to update the list
@@ -347,9 +332,6 @@ const AdminPage = () => {
       
       // Close the modal
       setIsModalOpen(false);
-      
-      // Notify other clients about the script change
-      sendControlMessage('LOAD_SCRIPT', selectedScriptId);
     } catch (error) {
       console.error('Error saving script:', error);
     }
@@ -361,10 +343,10 @@ const AdminPage = () => {
     
     if (window.confirm(`Are you sure you want to delete the script "${selectedScript?.title}"?`)) {
       try {
-        await db.deleteScript(selectedScriptId);
+        await scriptRepository.deleteScript(selectedScriptId);
         
         // Reload scripts
-        const allScripts = await db.getAllScripts();
+        const allScripts = await scriptRepository.getAllScripts();
         setScripts(allScripts);
         
         // Select the first script or clear the selection
@@ -382,7 +364,7 @@ const AdminPage = () => {
   };
   
   // Handle state updates from WebSocket
-  const handleStateUpdate = (message) => {
+  const handleStateUpdate = async (message) => {
     if (message.type === 'STATE_UPDATE') {
       const { data } = message;
       console.log('AdminPage: Received state update:', data);
@@ -394,13 +376,48 @@ const AdminPage = () => {
       setFontSize(data.fontSize);
       setCurrentChapter(data.currentChapter);
       
-      // If current script changed or was cleared
+      // Handle script selection changes from WebSocket
       if (data.currentScript === null && selectedScriptId !== null) {
         console.log('AdminPage: Clearing script selection due to WebSocket state update');
         clearScriptSelection();
-      } else if (data.currentScript && data.currentScript !== selectedScriptId) {
+      } else if (data.currentScript && selectedScriptId === null) {
+        // We have no script but should select one - load it directly
+        console.log('AdminPage: Loading initial script from state update:', data.currentScript);
+        try {
+          // Get the script using the repository
+          const script = await scriptRepository.getScriptById(data.currentScript);
+          if (script) {
+            console.log('Script found, setting as selected:', script.title);
+            setSelectedScriptId(script.id);
+            setSelectedScript(script);
+            
+            // Load chapters
+            const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
+            setChapters(scriptChapters);
+          } else {
+            console.error('AdminPage: Could not find script with ID:', data.currentScript);
+          }
+        } catch (error) {
+          console.error('AdminPage: Error handling state update script selection:', error);
+        }
+      } else if (data.currentScript && 
+                 selectedScriptId !== null && 
+                 String(data.currentScript) !== String(selectedScriptId)) {
+        // Script changed to a different one
         console.log('AdminPage: Changing script selection due to WebSocket state update');
-        handleScriptSelect(data.currentScript);
+        try {
+          const script = await scriptRepository.getScriptById(data.currentScript);
+          if (script) {
+            setSelectedScriptId(script.id);
+            setSelectedScript(script);
+            
+            // Load chapters
+            const scriptChapters = await scriptRepository.getChaptersForScript(script.id);
+            setChapters(scriptChapters);
+          }
+        } catch (error) {
+          console.error('AdminPage: Error loading new script from state update:', error);
+        }
       }
     }
   };
@@ -515,7 +532,16 @@ const AdminPage = () => {
               <div 
                 key={script.id}
                 className={`script-item ${selectedScriptId === script.id ? 'selected' : ''}`}
-                onClick={() => selectedScriptId === script.id ? clearScriptSelection() : handleScriptSelect(script)}
+                onClick={() => {
+                  console.log('Script list item clicked:', script.id);
+                  if (selectedScriptId === script.id) {
+                    console.log('Clearing selection - same script clicked');
+                    clearScriptSelection();
+                  } else {
+                    console.log('Selecting new script from list');
+                    handleScriptSelect(script);
+                  }
+                }}
               >
                 <div className="script-item-content">
                   <div>
@@ -661,12 +687,19 @@ const AdminPage = () => {
               <select 
                 className="admin-script-dropdown"
                 value={selectedScriptId || ''}
-                onChange={(e) => handleScriptSelect(e.target.value)}
+                onChange={(e) => {
+                  console.log('Dropdown selection changed to:', e.target.value, 'type:', typeof e.target.value);
+                  // Convert to number if it looks like a number
+                  const val = e.target.value;
+                  const numVal = !isNaN(Number(val)) && val !== 'none' ? Number(val) : val;
+                  console.log('Converted value for script selection:', numVal, 'type:', typeof numVal);
+                  handleScriptSelect(numVal);
+                }}
               >
                 <option value="" disabled>Select a script...</option>
                 <option value="none">No script (clear selection)</option>
                 {scripts.map(script => (
-                  <option key={script.id} value={script.id}>
+                  <option key={script.id} value={Number(script.id)}>
                     {script.title} (ID: {script.id})
                   </option>
                 ))}
