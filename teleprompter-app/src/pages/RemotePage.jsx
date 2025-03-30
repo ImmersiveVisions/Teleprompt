@@ -50,7 +50,11 @@ const RemotePage = () => {
       setCurrentChapter(data.currentChapter);
       
       // If current script changed, load the script details
-      if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
+      if (data.currentScript === null) {
+        // Script was cleared
+        setSelectedScriptId(null);
+        setChapters([]);
+      } else if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
         setSelectedScriptId(data.currentScript);
         
         // Load chapters for this script
@@ -64,8 +68,32 @@ const RemotePage = () => {
     }
   };
   
+  // Clear script selection
+  const clearScriptSelection = () => {
+    console.log('Clearing script selection');
+    
+    // Clear local states
+    setSelectedScriptId(null);
+    setChapters([]);
+    
+    // Pause if playing
+    if (isPlaying) {
+      setIsPlaying(false);
+      sendControlMessage('PAUSE');
+    }
+    
+    // Notify other clients about clearing the script
+    sendControlMessage('LOAD_SCRIPT', null);
+  };
+
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
+    // Check if this is the "none" option
+    if (scriptId === 'none') {
+      clearScriptSelection();
+      return;
+    }
+    
     try {
       setSelectedScriptId(scriptId);
       
@@ -133,6 +161,7 @@ const RemotePage = () => {
             disabled={scripts.length === 0}
           >
             <option value="" disabled>Select a script...</option>
+            <option value="none">No script (clear selection)</option>
             {scripts.map(script => (
               <option key={script.id} value={script.id}>
                 {script.title}

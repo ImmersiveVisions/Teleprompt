@@ -168,6 +168,26 @@ const AdminPage = () => {
     setIsSearchModalOpen(false);
   };
   
+  // Clear script selection
+  const clearScriptSelection = () => {
+    console.log('DEBUG Clearing script selection');
+    
+    // Clear local states
+    setSelectedScriptId(null);
+    setSelectedScript(null);
+    setChapters([]);
+    
+    // Pause if playing
+    if (isPlaying) {
+      setIsPlaying(false);
+      sendControlMessage('PAUSE');
+    }
+    
+    // Notify other clients about clearing the script
+    console.log('DEBUG Sending LOAD_SCRIPT control message with null scriptId');
+    sendControlMessage('LOAD_SCRIPT', null);
+  };
+
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
     console.log('DEBUG handleScriptSelect called with scriptId:', scriptId);
@@ -399,7 +419,7 @@ const AdminPage = () => {
               <div 
                 key={script.id}
                 className={`script-item ${selectedScriptId === script.id ? 'selected' : ''}`}
-                onClick={() => handleScriptSelect(script.id)}
+                onClick={() => selectedScriptId === script.id ? clearScriptSelection() : handleScriptSelect(script.id)}
               >
                 <div className="script-item-content">
                   <div>
@@ -539,9 +559,10 @@ const AdminPage = () => {
               <select 
                 className="admin-script-dropdown"
                 value={selectedScriptId || ''}
-                onChange={(e) => handleScriptSelect(e.target.value)}
+                onChange={(e) => e.target.value === 'none' ? clearScriptSelection() : handleScriptSelect(e.target.value)}
               >
                 <option value="" disabled>Select a script...</option>
+                <option value="none">No script (clear selection)</option>
                 {scripts.map(script => (
                   <option key={script.id} value={script.id}>
                     {script.title}
