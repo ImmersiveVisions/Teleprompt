@@ -1,6 +1,6 @@
 // src/database/scriptRepository.js
 import db from './db';
-import { parseChapters } from '../services/scriptParser';
+// Removed parseChapters import
 
 /**
  * Provides methods for working with scripts in the database
@@ -122,7 +122,7 @@ const scriptRepository = {
   },
   
   /**
-   * Delete a script and its chapters
+   * Delete a script
    * @param {number|string} id - The script ID
    * @returns {Promise<void>}
    */
@@ -140,29 +140,7 @@ const scriptRepository = {
     }
   },
   
-  /**
-   * Get chapters for a script
-   * @param {number|string} scriptId - The script ID
-   * @returns {Promise<Array>} Array of chapter objects
-   */
-  async getChaptersForScript(scriptId) {
-    try {
-      console.log(`Repository: getChaptersForScript called for ID ${scriptId}`);
-      
-      // Handle the case where scriptId is a script object
-      if (typeof scriptId === 'object' && scriptId !== null && scriptId.id) {
-        scriptId = scriptId.id;
-      }
-      
-      // Normalize the ID to ensure consistency
-      const normalizedId = !isNaN(Number(scriptId)) ? Number(scriptId) : scriptId;
-      
-      return await db.getChaptersForScript(normalizedId);
-    } catch (error) {
-      console.error(`Repository error in getChaptersForScript(${scriptId}):`, error);
-      return [];
-    }
-  },
+  // Removed getChaptersForScript function
   
   /**
    * Normalize a script object to ensure it has all required fields
