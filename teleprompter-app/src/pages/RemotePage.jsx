@@ -84,6 +84,7 @@ const RemotePage = () => {
   const togglePlay = () => {
     const newState = !isPlaying;
     setIsPlaying(newState);
+    console.log('Sending control message:', newState ? 'PLAY' : 'PAUSE');
     sendControlMessage(newState ? 'PLAY' : 'PAUSE');
   };
   

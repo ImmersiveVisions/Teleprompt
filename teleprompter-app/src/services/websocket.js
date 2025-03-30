@@ -19,7 +19,10 @@ let sharedState = {
 
 // Initialize WebSocket server
 const initWebSocketServer = (server) => {
-  wsServer = new WebSocketServer({ server });
+  wsServer = new WebSocketServer({ 
+    server,
+    path: '/ws'  // Define the WebSocket path to match client connection
+  });
   
   wsServer.on('connection', (ws) => {
     console.log('New client connected');
@@ -35,7 +38,7 @@ const initWebSocketServer = (server) => {
     
     ws.on('message', (message) => {
       try {
-        const parsedMessage = JSON.parse(message);
+        const parsedMessage = JSON.parse(message.toString());  // Use toString() to handle binary messages
         handleMessage(parsedMessage, ws);
       } catch (error) {
         console.error('Error parsing message:', error);

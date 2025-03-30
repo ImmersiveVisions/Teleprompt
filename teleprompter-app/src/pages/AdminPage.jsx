@@ -345,8 +345,10 @@ const AdminPage = () => {
               </div>
               
               <div className="preview-container">
-                <h3>Preview</h3>
-                <ScriptViewer />
+                <div className="preview-header">
+                  <h3>Preview</h3>
+                </div>
+                <ScriptViewer currentScript={selectedScript} fullScreen={false} />
               </div>
             </>
           ) : (
@@ -357,6 +359,24 @@ const AdminPage = () => {
         </div>
         
         <div className="admin-sidebar">
+          <div className="script-selector-panel">
+            <h3>Script Selection</h3>
+            <div className="script-dropdown-container">
+              <select 
+                className="admin-script-dropdown"
+                value={selectedScriptId || ''}
+                onChange={(e) => handleScriptSelect(e.target.value)}
+              >
+                <option value="" disabled>Select a script...</option>
+                {scripts.map(script => (
+                  <option key={script.id} value={script.id}>
+                    {script.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
           <div className="connection-panel">
             <h3>Connections</h3>
             

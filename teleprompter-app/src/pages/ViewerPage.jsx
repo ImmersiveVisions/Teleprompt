@@ -2,11 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import ScriptViewer from '../components/ScriptViewer';
 import { registerMessageHandler } from '../services/websocket';
+import db from '../database/db';
 import '../styles.css';
 
 const ViewerPage = () => {
   const [connected, setConnected] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [currentScript, setCurrentScript] = useState(null);
   
   useEffect(() => {
     // Register for state updates
@@ -42,13 +44,29 @@ const ViewerPage = () => {
   }, []);
   
   // Handle state updates from WebSocket
-  const handleStateUpdate = (message) => {
+  const handleStateUpdate = async (message) => {
     if (message.type === 'STATE_UPDATE') {
       setConnected(true);
+      console.log('Received state update:', message.data);
       
       // Check if a script is loaded
       if (message.data && message.data.currentScript) {
+        console.log('Script loaded:', message.data.currentScript);
         setScriptLoaded(true);
+        
+        // Load the current script data
+        try {
+          const script = await db.getScriptById(message.data.currentScript);
+          if (script) {
+            setCurrentScript(script);
+          }
+        } catch (error) {
+          console.error('Error loading script:', error);
+        }
+      } else {
+        console.log('No script in state update');
+        setScriptLoaded(false);
+        setCurrentScript(null);
       }
     }
   };
@@ -71,7 +89,7 @@ const ViewerPage = () => {
         </div>
       )}
       
-      <ScriptViewer fullScreen={true} />
+      <ScriptViewer fullScreen={true} currentScript={currentScript} />
     </div>
   );
 };

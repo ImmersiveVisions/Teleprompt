@@ -4,7 +4,7 @@ import db from '../database/db';
 import { registerMessageHandler } from '../services/websocket';
 import '../styles.css';
 
-const ScriptViewer = ({ fullScreen = false }) => {
+const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
   const [script, setScript] = useState(null);
   const [chapters, setChapters] = useState([]);
   const [currentPosition, setCurrentPosition] = useState(0);
@@ -17,6 +17,31 @@ const ScriptViewer = ({ fullScreen = false }) => {
   const viewerRef = useRef(null);
   const scriptContentRef = useRef(null);
   const animationRef = useRef(null);
+  
+  // Update script when currentScript prop changes
+  useEffect(() => {
+    if (currentScript && (!script || script.id !== currentScript.id)) {
+      setScript(currentScript);
+      
+      // Load chapters for this script
+      const loadChapters = async () => {
+        try {
+          const scriptChapters = await db.getChaptersForScript(currentScript.id);
+          setChapters(scriptChapters);
+        } catch (error) {
+          console.error('Error loading chapters:', error);
+        }
+      };
+      
+      loadChapters();
+      
+      // Reset scroll position and position when script changes
+      setCurrentPosition(0);
+      if (scriptContentRef.current) {
+        scriptContentRef.current.scrollTop = 0;
+      }
+    }
+  }, [currentScript, script]);
   
   // Load script from state update
   useEffect(() => {
@@ -37,37 +62,46 @@ const ScriptViewer = ({ fullScreen = false }) => {
       const { data } = message;
       
       // Update local state based on the received state
-      setIsPlaying(data.isPlaying);
-      setDirection(data.direction);
-      setSpeed(data.speed);
-      setFontSize(data.fontSize);
+      if (data.isPlaying !== undefined) setIsPlaying(data.isPlaying);
+      if (data.direction !== undefined) setDirection(data.direction);
+      if (data.speed !== undefined) setSpeed(data.speed);
+      if (data.fontSize !== undefined) setFontSize(data.fontSize);
       
-      // If current script changed, load the new script
-      if (data.currentScript && (!script || script.id !== data.currentScript)) {
-        const loadedScript = await db.getScriptById(data.currentScript);
-        if (loadedScript) {
-          setScript(loadedScript);
-          
-          // Load chapters for this script
-          const scriptChapters = await db.getChaptersForScript(data.currentScript);
-          setChapters(scriptChapters);
+      // If current script changed, load the new script (only if not controlled by prop)
+      if (!currentScript && data.currentScript && (!script || script.id !== data.currentScript)) {
+        try {
+          const loadedScript = await db.getScriptById(data.currentScript);
+          if (loadedScript) {
+            setScript(loadedScript);
+            
+            // Load chapters for this script
+            const scriptChapters = await db.getChaptersForScript(data.currentScript);
+            setChapters(scriptChapters);
+            
+            console.log('Loaded script via WebSocket:', loadedScript.title);
+          }
+        } catch (error) {
+          console.error('Error loading script from WebSocket update:', error);
         }
       }
       
       // If current chapter changed, scroll to that chapter
-      if (data.currentChapter !== currentChapter) {
+      if (data.currentChapter !== undefined && data.currentChapter !== currentChapter) {
         setCurrentChapter(data.currentChapter);
         
         // Find chapter position
         if (chapters.length > 0 && chapters[data.currentChapter]) {
-          setCurrentPosition(chapters[data.currentChapter].startPosition);
-          scrollToPosition(chapters[data.currentChapter].startPosition);
+          const newPosition = chapters[data.currentChapter].startPosition;
+          setCurrentPosition(newPosition);
+          scrollToPosition(newPosition);
+          console.log('Scrolling to chapter:', data.currentChapter, 'position:', newPosition);
         }
       } 
       // Otherwise update position
-      else if (data.currentPosition !== currentPosition) {
+      else if (data.currentPosition !== undefined && Math.abs(data.currentPosition - currentPosition) > 5) {
         setCurrentPosition(data.currentPosition);
         scrollToPosition(data.currentPosition);
+        console.log('Scrolling to position from state update:', data.currentPosition);
       }
     }
   };
@@ -77,12 +111,16 @@ const ScriptViewer = ({ fullScreen = false }) => {
     if (!scriptContentRef.current || !script) return;
     
     // Calculate the percentage of the script to scroll to
-    const totalLength = script.content.length;
+    // Use script.body or fall back to script.content for backwards compatibility
+    const totalLength = (script.body || script.content || '').length;
     const scrollPercentage = position / totalLength;
     
     // Get the total scroll height and set the scroll position
     const scrollHeight = scriptContentRef.current.scrollHeight - scriptContentRef.current.clientHeight;
-    scriptContentRef.current.scrollTop = scrollHeight * scrollPercentage;
+    if (scrollHeight > 0) { // Make sure we don't have a zero or negative height
+      scriptContentRef.current.scrollTop = scrollHeight * scrollPercentage;
+      console.log('Scrolling to position:', position, 'percentage:', scrollPercentage, 'scrollTop:', scriptContentRef.current.scrollTop);
+    }
   };
   
   // Animation loop for smooth scrolling
@@ -93,39 +131,60 @@ const ScriptViewer = ({ fullScreen = false }) => {
       if (!lastTimestamp) lastTimestamp = timestamp;
       const elapsed = timestamp - lastTimestamp;
       
-      if (scriptContentRef.current && isPlaying) {
-        // Calculate how much to scroll based on speed and elapsed time
-        const pixelsPerSecond = speed * 50; // Adjust this multiplier to control base speed
-        const scrollAmount = (pixelsPerSecond * elapsed) / 1000;
-        
-        // Scroll in the appropriate direction
-        if (direction === 'forward') {
-          scriptContentRef.current.scrollTop += scrollAmount;
-        } else {
-          scriptContentRef.current.scrollTop -= scrollAmount;
-        }
-        
-        // Calculate current position based on scroll
-        if (script) {
-          const scrollPercentage = scriptContentRef.current.scrollTop / 
-            (scriptContentRef.current.scrollHeight - scriptContentRef.current.clientHeight);
-          const newPosition = Math.floor(script.content.length * scrollPercentage);
+      if (scriptContentRef.current && isPlaying && script) {
+        try {
+          // Calculate how much to scroll based on speed and elapsed time
+          const baseSpeedMultiplier = 50; // Same speed for all views
+          const pixelsPerSecond = speed * baseSpeedMultiplier;
+          const scrollAmount = (pixelsPerSecond * elapsed) / 1000;
           
-          // Update current position if it has changed significantly
-          if (Math.abs(newPosition - currentPosition) > 10) {
-            setCurrentPosition(newPosition);
-            
-            // Check if we've reached a new chapter
-            const newChapter = chapters.findIndex((chapter, index) => {
-              const nextChapter = chapters[index + 1];
-              return newPosition >= chapter.startPosition && 
-                    (!nextChapter || newPosition < nextChapter.startPosition);
-            });
-            
-            if (newChapter !== -1 && newChapter !== currentChapter) {
-              setCurrentChapter(newChapter);
+          // Get the max scroll position to prevent scrolling too far
+          const maxScroll = scriptContentRef.current.scrollHeight - scriptContentRef.current.clientHeight;
+          
+          // Current scroll position
+          let currentScroll = scriptContentRef.current.scrollTop;
+          
+          // Scroll in the appropriate direction
+          if (direction === 'forward') {
+            // Prevent scrolling beyond the end
+            if (currentScroll < maxScroll) {
+              scriptContentRef.current.scrollTop += scrollAmount;
+            }
+          } else {
+            // Prevent scrolling beyond the beginning
+            if (currentScroll > 0) {
+              scriptContentRef.current.scrollTop -= scrollAmount;
             }
           }
+          
+          // Calculate current position based on scroll
+          currentScroll = scriptContentRef.current.scrollTop; // Update after scrolling
+          
+          if (maxScroll > 0) { // Make sure we don't divide by zero
+            const scrollPercentage = currentScroll / maxScroll;
+            
+            // Use script.body or fall back to script.content for backwards compatibility
+            const contentLength = (script.body || script.content || '').length;
+            const newPosition = Math.floor(contentLength * scrollPercentage);
+            
+            // Always update position to ensure WebSocket sync
+            if (newPosition !== currentPosition) {
+              setCurrentPosition(newPosition);
+              
+              // Check if we've reached a new chapter
+              const newChapter = chapters.findIndex((chapter, index) => {
+                const nextChapter = chapters[index + 1];
+                return newPosition >= chapter.startPosition && 
+                      (!nextChapter || newPosition < nextChapter.startPosition);
+              });
+              
+              if (newChapter !== -1 && newChapter !== currentChapter) {
+                setCurrentChapter(newChapter);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error in animation loop:', error);
         }
       }
       
@@ -134,17 +193,21 @@ const ScriptViewer = ({ fullScreen = false }) => {
     };
     
     if (isPlaying) {
+      console.log('Starting animation loop, isPlaying:', isPlaying, 'fullScreen:', fullScreen, 'script:', script?.title);
       animationRef.current = requestAnimationFrame(animate);
     } else if (animationRef.current) {
+      console.log('Stopping animation loop, isPlaying:', isPlaying);
       cancelAnimationFrame(animationRef.current);
     }
     
+    // Clean up animation frame on unmount or when dependencies change
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
     };
-  }, [isPlaying, speed, direction, script, currentPosition, chapters, currentChapter]);
+  }, [isPlaying, speed, direction, script, currentPosition, chapters, currentChapter, fullScreen]);
   
   // Parse script body to highlight film clips
   const renderScriptContent = () => {
@@ -174,25 +237,42 @@ const ScriptViewer = ({ fullScreen = false }) => {
     });
   };
   
+  // For debugging, log when component renders
+  useEffect(() => {
+    console.log('ScriptViewer rendered with fullScreen:', fullScreen, 'script:', script ? script.title : 'none');
+    
+    // Reset scroll position when script changes
+    if (scriptContentRef.current) {
+      scriptContentRef.current.scrollTop = 0;
+    }
+  }, [script, fullScreen]);
+  
   return (
     <div 
       ref={viewerRef}
       className={`script-viewer ${fullScreen ? 'fullscreen' : ''}`}
+      style={{ zIndex: 5 }} // Lower z-index so the header dropdown remains visible
     >
       {script ? (
         <>
-          <div className="script-title">{script.title}</div>
+          <div className="script-title">
+            {!fullScreen ? `Preview: ${script.title}` : script.title}
+          </div>
           <div 
             ref={scriptContentRef}
             className="script-content"
-            style={{ fontSize: `${fontSize}px` }}
+            style={{ 
+              fontSize: `${fontSize}px`,
+              backgroundColor: '#000',
+              color: '#fff'
+            }}
           >
             {renderScriptContent()}
           </div>
         </>
       ) : (
         <div className="no-script-message">
-          No script loaded. Please select a script from the admin panel.
+          No script loaded. Please select a script from the dropdown.
         </div>
       )}
     </div>

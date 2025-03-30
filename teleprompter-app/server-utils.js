@@ -15,10 +15,13 @@ let sharedState = {
 
 // Initialize WebSocket server for Electron main process
 function initWebSocketServer(server) {
-  const wsServer = new WebSocket.Server({ server });
+  const wsServer = new WebSocket.Server({ 
+    server,
+    path: '/ws'  // Define the WebSocket path to match client connection
+  });
   
   wsServer.on('connection', (ws) => {
-    console.log('New client connected');
+    console.log('New client connected to path /ws');
     connections.push(ws);
     
     // Send the current state to the new client
