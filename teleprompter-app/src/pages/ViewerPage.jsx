@@ -1,6 +1,6 @@
 // src/pages/ViewerPage.jsx
-import React, { useEffect, useState } from 'react';
-import ScriptViewer from '../components/ScriptViewer';
+import React, { useEffect, useState, useRef } from 'react';
+import ScriptPlayer from '../components/ScriptPlayer';
 import { registerMessageHandler } from '../services/websocket';
 import db from '../database/db';
 import '../styles.css';
@@ -9,6 +9,16 @@ const ViewerPage = () => {
   const [connected, setConnected] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [currentScript, setCurrentScript] = useState(null);
+  
+  // Teleprompter control states
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [direction, setDirection] = useState('forward');
+  const [fontSize, setFontSize] = useState(32);
+  const [currentPosition, setCurrentPosition] = useState(0);
+  
+  // Reference to the script player component
+  const scriptPlayerRef = useRef(null);
   
   useEffect(() => {
     // Register for state updates
@@ -49,14 +59,28 @@ const ViewerPage = () => {
       setConnected(true);
       console.log('Received state update:', message.data);
       
+      const data = message.data || {};
+      
+      // Update control states
+      if (data.isPlaying !== undefined) setIsPlaying(data.isPlaying);
+      if (data.speed !== undefined) setSpeed(data.speed);
+      if (data.direction !== undefined) setDirection(data.direction);
+      if (data.fontSize !== undefined) setFontSize(data.fontSize);
+      
+      // Jump to position if requested
+      if (data.jumpToPosition !== undefined && scriptPlayerRef.current) {
+        console.log('Jumping to position:', data.jumpToPosition);
+        scriptPlayerRef.current.jumpToPosition(data.jumpToPosition);
+      }
+      
       // Check if a script is loaded
-      if (message.data && message.data.currentScript) {
-        console.log('Script loaded:', message.data.currentScript);
+      if (data.currentScript) {
+        console.log('Script loaded:', data.currentScript);
         setScriptLoaded(true);
         
         // Load the current script data
         try {
-          const script = await db.getScriptById(message.data.currentScript);
+          const script = await db.getScriptById(data.currentScript);
           if (script) {
             setCurrentScript(script);
           }
@@ -89,7 +113,15 @@ const ViewerPage = () => {
         </div>
       )}
       
-      <ScriptViewer fullScreen={true} currentScript={currentScript} />
+      <ScriptPlayer 
+        ref={scriptPlayerRef}
+        script={currentScript}
+        isPlaying={isPlaying}
+        speed={speed}
+        direction={direction}
+        fontSize={fontSize}
+        fullScreen={true}
+      />
     </div>
   );
 };

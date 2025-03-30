@@ -5,6 +5,7 @@ import db from '../database/db';
 import { sendControlMessage, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
+import ScriptPlayer from '../components/ScriptPlayer';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import '../styles.css';
@@ -24,6 +25,7 @@ const AdminPage = () => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
   const [currentChapter, setCurrentChapter] = useState(0);
+  // Removed currentPosition state since we're disabling position updates
   
   // Load scripts on component mount
   useEffect(() => {
@@ -41,31 +43,136 @@ const AdminPage = () => {
   const loadScripts = async () => {
     try {
       const allScripts = await db.getAllScripts();
+      console.log(`DEBUG loaded ${allScripts.length} scripts from database`);
       setScripts(allScripts);
       
       // Select the first script by default if none is selected
       if (allScripts.length > 0 && !selectedScriptId) {
-        handleScriptSelect(allScripts[0].id);
+        console.log('DEBUG auto-selecting first script:', allScripts[0].title);
+        
+        // Validate script before selecting
+        if (allScripts[0].id && (allScripts[0].body || allScripts[0].content)) {
+          handleScriptSelect(allScripts[0].id);
+        } else {
+          console.error('DEBUG first script is invalid, not auto-selecting');
+        }
+      } else if (allScripts.length === 0) {
+        console.warn('DEBUG no scripts found in database');
       }
     } catch (error) {
       console.error('Error loading scripts:', error);
     }
   };
   
+  // State for search
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Handle script search
+  const handleScriptSearch = (searchTerm) => {
+    setSearchTerm(searchTerm);
+    
+    if (!selectedScript || !searchTerm) {
+      setSearchResults([]);
+      return;
+    }
+    
+    // Get script content
+    const scriptContent = selectedScript.body || selectedScript.content || '';
+    if (!scriptContent) return;
+    
+    // Simple search implementation
+    const lines = scriptContent.split('\n');
+    const results = [];
+    
+    lines.forEach((line, index) => {
+      if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+        results.push({ line, index });
+      }
+    });
+    
+    setSearchResults(results);
+  };
+  
+  // Reference to the script player component
+  const scriptPlayerRef = React.useRef(null);
+  
+  // Jump to search result - simplified direct approach
+  const jumpToSearchResult = (lineIndex) => {
+    if (!selectedScript) {
+      console.error('Cannot jump to search result - no script selected');
+      alert('Please select a script first');
+      return;
+    }
+    
+    const scriptContent = selectedScript.body || selectedScript.content || '';
+    if (!scriptContent) {
+      console.error('Cannot jump to search result - script has no content');
+      return;
+    }
+    
+    // Calculate position in script
+    const lines = scriptContent.split('\n');
+    let position = 0;
+    
+    // Calculate the exact character position where the line starts
+    for (let i = 0; i < lineIndex; i++) {
+      position += lines[i].length + 1; // +1 for newline character
+    }
+    
+    console.log(`Jumping to line ${lineIndex} at position ${position}`);
+    
+    // Pause playback when jumping
+    if (isPlaying) {
+      setIsPlaying(false);
+    }
+    
+    // Highlight the clicked search result in the UI
+    setSearchResults(prev => prev.map((item, idx) => ({
+      ...item,
+      active: item.index === lineIndex
+    })));
+    
+    // If we have a direct reference to the player, use it
+    if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
+      scriptPlayerRef.current.jumpToPosition(position);
+    }
+    
+    // Optional: Add visual feedback
+    const previewHeader = document.querySelector('.preview-header h3');
+    if (previewHeader) {
+      const originalText = previewHeader.textContent;
+      previewHeader.textContent = 'Jumping to position...';
+      setTimeout(() => {
+        previewHeader.textContent = originalText;
+      }, 1000);
+    }
+  };
+  
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
+    console.log('DEBUG handleScriptSelect called with scriptId:', scriptId);
+    
     try {
       const script = await db.getScriptById(scriptId);
+      console.log('DEBUG Script loaded from DB:', script ? script.title : 'null');
+      
       if (script) {
+        // Update state with the selected script
         setSelectedScriptId(scriptId);
         setSelectedScript(script);
+        console.log('DEBUG setSelectedScript called with:', script.title);
         
         // Load chapters for this script
         const scriptChapters = await db.getChaptersForScript(scriptId);
+        console.log(`DEBUG Loaded ${scriptChapters.length} chapters for script`);
         setChapters(scriptChapters);
         
         // Notify other clients about the script change
+        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', scriptId);
         sendControlMessage('LOAD_SCRIPT', scriptId);
+      } else {
+        console.error('DEBUG Script not found with ID:', scriptId);
       }
     } catch (error) {
       console.error('Error selecting script:', error);
@@ -165,9 +272,37 @@ const AdminPage = () => {
   
   // Teleprompter control functions
   const togglePlay = () => {
+    // Only toggle play if we have a script selected
+    if (!selectedScript) {
+      console.error('Cannot play - no script selected');
+      alert('Please select a script first');
+      return;
+    }
+    
     const newState = !isPlaying;
+    console.log('PLAY STATE CHANGE - setting isPlaying to:', newState, 'from:', isPlaying);
+    
+    // Update local state first
     setIsPlaying(newState);
+    
+    // Log state after setting for debugging
+    setTimeout(() => {
+      console.log('Play state check after 100ms:', {
+        isPlayingStateNow: isPlaying,
+        shouldBe: newState
+      });
+    }, 100);
+    
+    // Then send message to all clients
+    console.log('Sending control message:', newState ? 'PLAY' : 'PAUSE');
     sendControlMessage(newState ? 'PLAY' : 'PAUSE');
+    
+    // Log current state for debugging
+    console.log('Play state after toggle:', {
+      isPlaying: newState,
+      scriptId: selectedScriptId,
+      scriptTitle: selectedScript.title
+    });
   };
   
   const changeSpeed = (newSpeed) => {
@@ -321,34 +456,54 @@ const AdminPage = () => {
                 </div>
               </div>
               
-              <div className="chapter-navigation">
-                <h3>Chapters</h3>
-                <div className="chapters-list">
-                  {chapters.map((chapter, index) => (
-                    <button
-                      key={chapter.id}
-                      className={`chapter-btn ${currentChapter === index ? 'active' : ''}`}
-                      onClick={() => jumpToChapter(index)}
-                    >
-                      {chapter.title.includes('FILM CLIP') 
-                        ? `FILM CLIP ${index + 1}` 
-                        : chapter.title}
-                    </button>
-                  ))}
-                  
-                  {chapters.length === 0 && (
-                    <div className="no-chapters-message">
-                      No chapters found. Add 'FILM CLIP' markers to create chapters.
-                    </div>
-                  )}
+              <div className="search-navigation">
+                <h3>Search Script</h3>
+                <div className="search-container">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search in script..."
+                    value={searchTerm}
+                    onChange={(e) => handleScriptSearch(e.target.value)}
+                  />
+                </div>
+                <div className="search-results">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((result, index) => (
+                      <div 
+                        key={index}
+                        className={`search-result ${result.active ? 'active' : ''}`}
+                        onClick={() => jumpToSearchResult(result.index)}
+                      >
+                        <span className="result-line">
+                          {result.line.substring(0, 50)}{result.line.length > 50 ? '...' : ''}
+                        </span>
+                      </div>
+                    ))
+                  ) : searchTerm ? (
+                    <div className="no-results">No results found</div>
+                  ) : null}
                 </div>
               </div>
               
               <div className="preview-container">
                 <div className="preview-header">
-                  <h3>Preview</h3>
+                  <h3>Preview: {selectedScript?.title}</h3>
                 </div>
-                <ScriptViewer currentScript={selectedScript} fullScreen={false} />
+                {selectedScript ? (
+                  <ScriptPlayer 
+                    ref={scriptPlayerRef}
+                    key={`preview-${selectedScript.id}`} 
+                    script={selectedScript}
+                    isPlaying={isPlaying}
+                    speed={speed}
+                    direction={direction}
+                    fontSize={fontSize}
+                    fullScreen={false}
+                  />
+                ) : (
+                  <div className="no-script-preview">No script selected</div>
+                )}
               </div>
             </>
           ) : (
