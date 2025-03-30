@@ -29,52 +29,9 @@ const ScriptPlayer = ({
   const containerRef = useRef(null);
   const animationRef = useRef(null);
   
-  // Handle both script.body and script.content
-  let scriptContent = '';
+  // We only deal with HTML files now
   if (script) {
-    // Normalize the content sources
-    if (script.body) {
-      scriptContent = script.body;
-    } else if (script.content) {
-      scriptContent = script.content;
-    } else {
-      console.error('Script has neither body nor content:', script.id);
-    }
-    
-    // For HTML content, make sure we're not encoding it by accident
-    // This ensures the HTML is properly interpreted and not treated as text
-    if (script.isHtml || (script.title && script.title.toLowerCase().endsWith('.html'))) {
-      console.log('Preparing HTML content for iframe rendering');
-      
-      // Ensure we have a proper doctype for HTML
-      if (scriptContent && !scriptContent.trim().toLowerCase().startsWith('<!doctype html>')) {
-        scriptContent = '<!DOCTYPE html>\n' + scriptContent;
-      }
-      
-      // Ensure basic styling if not already in the HTML
-      if (scriptContent && !scriptContent.includes('<style')) {
-        scriptContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <style>
-              body, html {
-                background-color: black !important;
-                color: white !important;
-                font-family: 'Courier New', monospace;
-                margin: 0;
-                padding: 0;
-              }
-            </style>
-          </head>
-          <body>
-            ${scriptContent}
-          </body>
-          </html>
-        `;
-      }
-    }
+    console.log('HTML file will be loaded directly via iframe:', script.id);
   }
   
 
@@ -264,18 +221,7 @@ const ScriptPlayer = ({
     return <div className="no-script-message">Script is missing ID property</div>;
   }
   
-  // Double-check that we have content to display
-  if (!scriptContent || scriptContent.trim() === '') {
-    console.warn('ScriptPlayer: Script has no content:', script.id);
-    // Additional debug info
-    console.log('Script content debug:', {
-      hasBody: !!script.body,
-      bodyIsEmpty: script.body === '',
-      hasContent: !!script.content,
-      contentIsEmpty: script.content === ''
-    });
-    return <div className="no-script-message">Script has no content. Add some text in Edit mode.</div>;
-  }
+  // No content check needed - HTML files are loaded via iframe
   
   return (
     <div 
@@ -322,38 +268,27 @@ const ScriptPlayer = ({
             width: '100%',
             maxWidth: '100%',
             aspectRatio: '16/9',
-            overflowY: 'auto',
-            padding: '2rem',
-            fontSize: `${fontSize}px`,
-            lineHeight: 1.8,
-            fontFamily: 'Courier New, monospace',
-            whiteSpace: 'pre-wrap',
-            paddingBottom: '150vh', // Extra padding for smooth scrolling
+            overflow: 'hidden',
             backgroundColor: 'black',
             border: '1px solid #333',
-            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)',
-            textAlign: 'center'
+            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)'
           }}
           className="script-content-container"
         >
-          {script.isHtml || (script.title && script.title.toLowerCase().endsWith('.html')) ? (
-            <iframe 
-              srcDoc={scriptContent}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                backgroundColor: 'black'
-              }}
-              sandbox="allow-same-origin"
-              title={`${script.title} content`}
-              loading="eager"
-              id="html-script-frame"
-              onLoad={() => console.log('HTML iframe loaded in ScriptPlayer')}
-            />
-          ) : (
-            scriptContent
-          )}
+          <iframe 
+            src={`/${script.id}`}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              backgroundColor: 'black'
+            }}
+            sandbox="allow-scripts allow-same-origin"
+            title={`${script.title} content`}
+            loading="eager"
+            id="html-script-frame"
+            onLoad={() => console.log('HTML iframe loaded in ScriptPlayer')}
+          />
         </div>
       </div>
     </div>
