@@ -1,0 +1,34 @@
+teleprompter-app/
+├── public/
+│   ├── index.html
+│   ├── favicon.ico
+│   └── qrcode.min.js
+├── src/
+│   ├── components/
+│   │   ├── AdminPanel.jsx
+│   │   ├── RemoteControl.jsx
+│   │   ├── ScriptViewer.jsx
+│   │   ├── ChapterNavigation.jsx
+│   │   ├── QRCodeGenerator.jsx
+│   │   └── StatusPanel.jsx
+│   ├── database/
+│   │   ├── db.js
+│   │   └── scriptRepository.js
+│   ├── hooks/
+│   │   ├── useScripts.js
+│   │   ├── useWebSocket.js
+│   │   └── useBluetoothRemote.js
+│   ├── pages/
+│   │   ├── AdminPage.jsx
+│   │   ├── RemotePage.jsx
+│   │   └── ViewerPage.jsx
+│   ├── services/
+│   │   ├── websocket.js
+│   │   ├── scriptParser.js
+│   │   └── bluetoothService.js
+│   ├── App.jsx
+│   ├── index.jsx
+│   └── styles.css
+├── package.json
+├── README.md
+└── server.js
