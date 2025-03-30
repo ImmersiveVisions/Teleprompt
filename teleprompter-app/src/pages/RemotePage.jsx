@@ -100,31 +100,43 @@ const RemotePage = () => {
 
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
+    console.log('Script selection requested with ID:', scriptId, 'type:', typeof scriptId);
+    
     // Check if this is the "none" option
     if (scriptId === 'none') {
       clearScriptSelection();
       return;
     }
     
+    // Convert string ID to number if needed (from dropdown selections)
+    const numericId = typeof scriptId === 'string' ? parseInt(scriptId, 10) : scriptId;
+    
+    // Verify we have a valid ID
+    if (!numericId || isNaN(numericId)) {
+      console.error('Invalid script ID:', scriptId);
+      return;
+    }
+    
     try {
+      // Show loading state by setting ID before loading the script
+      setSelectedScriptId(numericId);
+      
       // First, verify the script exists
-      const script = await db.getScriptById(scriptId);
+      const script = await db.getScriptById(numericId);
       
       if (script) {
         // Script exists, proceed with selection
-        setSelectedScriptId(scriptId);
-        
         // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(scriptId);
+        const scriptChapters = await db.getChaptersForScript(numericId);
         setChapters(scriptChapters);
         
         // Send control message to update all clients
-        sendControlMessage('LOAD_SCRIPT', scriptId);
+        sendControlMessage('LOAD_SCRIPT', numericId);
       } else {
         // Script not found - handle this case
-        console.error('Script not found with ID:', scriptId);
+        console.error('Script not found with ID:', numericId);
         clearScriptSelection();
-        alert(`Script with ID ${scriptId} was not found. It may have been deleted.`);
+        alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
         
         // Refresh scripts list to remove invalid scripts
         try {

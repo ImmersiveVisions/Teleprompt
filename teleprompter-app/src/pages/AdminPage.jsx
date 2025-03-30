@@ -57,9 +57,17 @@ const AdminPage = () => {
       
       // If the currently selected script no longer exists, clear the selection
       if (selectedScriptId) {
-        const scriptExists = allScripts.some(script => script.id === selectedScriptId);
-        if (!scriptExists) {
-          console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
+        // Only check if we have scripts
+        if (allScripts.length > 0) {
+          const scriptExists = allScripts.some(script => script.id === selectedScriptId);
+          if (!scriptExists) {
+            console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
+            clearScriptSelection();
+            return;
+          }
+        } else {
+          // No scripts in database, clear selection
+          console.warn('No scripts in database, clearing selection');
           clearScriptSelection();
           return;
         }
@@ -207,35 +215,47 @@ const AdminPage = () => {
 
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
-    console.log('DEBUG handleScriptSelect called with scriptId:', scriptId);
+    console.log('DEBUG handleScriptSelect called with scriptId:', scriptId, 'type:', typeof scriptId);
+    
+    // Convert string ID to number if needed (from dropdown selections)
+    const numericId = typeof scriptId === 'string' ? parseInt(scriptId, 10) : scriptId;
+    
+    // Verify we have a valid ID
+    if (!numericId || isNaN(numericId)) {
+      console.error('Invalid script ID:', scriptId);
+      return;
+    }
     
     try {
-      const script = await db.getScriptById(scriptId);
+      // Show loading state by setting ID but not the script yet
+      setSelectedScriptId(numericId);
+      
+      const script = await db.getScriptById(numericId);
       console.log('DEBUG Script loaded from DB:', script ? script.title : 'null');
       
       if (script) {
         // Update state with the selected script
-        setSelectedScriptId(scriptId);
         setSelectedScript(script);
         console.log('DEBUG setSelectedScript called with:', script.title);
         
         // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(scriptId);
+        const scriptChapters = await db.getChaptersForScript(numericId);
         console.log(`DEBUG Loaded ${scriptChapters.length} chapters for script`);
         setChapters(scriptChapters);
         
         // Notify other clients about the script change
-        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', scriptId);
-        sendControlMessage('LOAD_SCRIPT', scriptId);
+        console.log('DEBUG Sending LOAD_SCRIPT control message with scriptId:', numericId);
+        sendControlMessage('LOAD_SCRIPT', numericId);
       } else {
-        console.error('DEBUG Script not found with ID:', scriptId);
+        console.error('DEBUG Script not found with ID:', numericId);
         // Script not found - handle this case by clearing the selection
         clearScriptSelection();
         // Show an error message to the user
-        alert(`Script with ID ${scriptId} was not found. It may have been deleted.`);
+        alert(`Script with ID ${numericId} was not found. It may have been deleted.`);
       }
     } catch (error) {
       console.error('Error selecting script:', error);
+      clearScriptSelection();
     }
   };
   

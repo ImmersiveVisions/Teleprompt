@@ -18,7 +18,12 @@ const ScriptPlayer = ({
   // Simple scrolling animation - only cares about scrolling, nothing else
   useEffect(() => {
     // Don't do anything if no script or container
-    if (!script || !containerRef.current) return;
+    if (!script || !containerRef.current) {
+      console.log('ScriptPlayer: No script or container ref available yet');
+      return;
+    }
+    
+    console.log('ScriptPlayer: Setting up animation for script:', script.title);
     
     const container = containerRef.current;
     let lastTimestamp = 0;
@@ -147,7 +152,14 @@ const ScriptPlayer = ({
   
   // Render the script viewer
   if (!script) {
+    console.log('ScriptPlayer: No script provided to component');
     return <div className="no-script-message">No script selected</div>;
+  }
+  
+  // Double-check that we have content to display
+  if (!scriptContent) {
+    console.warn('ScriptPlayer: Script has no content:', script.id);
+    return <div className="no-script-message">Script has no content</div>;
   }
   
   return (

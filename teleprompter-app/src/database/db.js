@@ -28,7 +28,25 @@ const scriptMethods = {
   },
   
   async getScriptById(id) {
-    return await db.scripts.get(id);
+    // Make sure we have a valid ID
+    if (!id || isNaN(parseInt(id, 10))) {
+      console.error('Invalid script ID provided to getScriptById:', id);
+      return null;
+    }
+    
+    // Convert to integer if it's a string
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    
+    try {
+      const script = await db.scripts.get(numericId);
+      if (!script) {
+        console.warn(`Script with ID ${numericId} not found in database`);
+      }
+      return script;
+    } catch (error) {
+      console.error('Error in getScriptById:', error);
+      return null;
+    }
   },
   
   async addScript(script) {
