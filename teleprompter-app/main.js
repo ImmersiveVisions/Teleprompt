@@ -2,7 +2,7 @@
 const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
-const { initWebSocketServer } = require('./src/services/websocket');
+const { initWebSocketServer } = require('./server-utils');
 const http = require('http');
 const express = require('express');
 const os = require('os');
