@@ -127,6 +127,43 @@ function parseChapters(body, scriptId) {
   return chapters;
 }
 
+// Add a method to validate all scripts in the database and remove invalid ones
+const validateScriptsDatabase = async () => {
+  try {
+    const allScripts = await db.scripts.toArray();
+    console.log(`Validating ${allScripts.length} scripts in database`);
+    
+    let invalidScriptIds = [];
+    
+    // Check for scripts with missing required fields
+    for (const script of allScripts) {
+      if (!script.title || (!script.body && !script.content)) {
+        console.warn(`Found invalid script with ID ${script.id} - missing required fields`);
+        invalidScriptIds.push(script.id);
+      }
+    }
+    
+    // Delete invalid scripts if any were found
+    if (invalidScriptIds.length > 0) {
+      console.warn(`Removing ${invalidScriptIds.length} invalid scripts from database`);
+      for (const id of invalidScriptIds) {
+        await db.scripts.delete(id);
+        // Also delete associated chapters
+        await db.chapters.where({ scriptId: id }).delete();
+      }
+      return true; // Database was modified
+    }
+    
+    return false; // No changes were needed
+  } catch (error) {
+    console.error('Error validating scripts database:', error);
+    return false;
+  }
+};
+
+// Add the validation method to our script methods
+scriptMethods.validateScriptsDatabase = validateScriptsDatabase;
+
 // Add methods to the db object
 Object.assign(db, scriptMethods);
 

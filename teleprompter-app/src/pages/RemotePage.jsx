@@ -20,8 +20,20 @@ const RemotePage = () => {
   useEffect(() => {
     const loadScripts = async () => {
       try {
+        // First validate the database to clean up any invalid scripts
+        await db.validateScriptsDatabase();
+        
         const allScripts = await db.getAllScripts();
         setScripts(allScripts);
+        
+        // If the currently selected script no longer exists, clear the selection
+        if (selectedScriptId) {
+          const scriptExists = allScripts.some(script => script.id === selectedScriptId);
+          if (!scriptExists) {
+            console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
+            clearScriptSelection();
+          }
+        }
       } catch (error) {
         console.error('Error loading scripts:', error);
       }
@@ -34,7 +46,7 @@ const RemotePage = () => {
     return () => {
       unregisterHandler();
     };
-  }, []);
+  }, [selectedScriptId]);
   
   // Handle state updates from WebSocket
   const handleStateUpdate = async (message) => {
@@ -95,16 +107,36 @@ const RemotePage = () => {
     }
     
     try {
-      setSelectedScriptId(scriptId);
+      // First, verify the script exists
+      const script = await db.getScriptById(scriptId);
       
-      // Load chapters for this script
-      const scriptChapters = await db.getChaptersForScript(scriptId);
-      setChapters(scriptChapters);
-      
-      // Send control message to update all clients
-      sendControlMessage('LOAD_SCRIPT', scriptId);
+      if (script) {
+        // Script exists, proceed with selection
+        setSelectedScriptId(scriptId);
+        
+        // Load chapters for this script
+        const scriptChapters = await db.getChaptersForScript(scriptId);
+        setChapters(scriptChapters);
+        
+        // Send control message to update all clients
+        sendControlMessage('LOAD_SCRIPT', scriptId);
+      } else {
+        // Script not found - handle this case
+        console.error('Script not found with ID:', scriptId);
+        clearScriptSelection();
+        alert(`Script with ID ${scriptId} was not found. It may have been deleted.`);
+        
+        // Refresh scripts list to remove invalid scripts
+        try {
+          const allScripts = await db.getAllScripts();
+          setScripts(allScripts);
+        } catch (loadError) {
+          console.error('Error reloading scripts list:', loadError);
+        }
+      }
     } catch (error) {
       console.error('Error selecting script:', error);
+      clearScriptSelection();
     }
   };
   

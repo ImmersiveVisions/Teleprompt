@@ -44,9 +44,26 @@ const AdminPage = () => {
   // Load all scripts from the database
   const loadScripts = async () => {
     try {
+      // First validate the database to clean up any invalid scripts
+      const wasModified = await db.validateScriptsDatabase();
+      if (wasModified) {
+        console.log('Database was cleaned up - invalid scripts were removed');
+      }
+      
+      // Now load the scripts
       const allScripts = await db.getAllScripts();
       console.log(`DEBUG loaded ${allScripts.length} scripts from database`);
       setScripts(allScripts);
+      
+      // If the currently selected script no longer exists, clear the selection
+      if (selectedScriptId) {
+        const scriptExists = allScripts.some(script => script.id === selectedScriptId);
+        if (!scriptExists) {
+          console.warn(`Selected script ID ${selectedScriptId} no longer exists in database`);
+          clearScriptSelection();
+          return;
+        }
+      }
       
       // Select the first script by default if none is selected
       if (allScripts.length > 0 && !selectedScriptId) {
@@ -212,6 +229,10 @@ const AdminPage = () => {
         sendControlMessage('LOAD_SCRIPT', scriptId);
       } else {
         console.error('DEBUG Script not found with ID:', scriptId);
+        // Script not found - handle this case by clearing the selection
+        clearScriptSelection();
+        // Show an error message to the user
+        alert(`Script with ID ${scriptId} was not found. It may have been deleted.`);
       }
     } catch (error) {
       console.error('Error selecting script:', error);

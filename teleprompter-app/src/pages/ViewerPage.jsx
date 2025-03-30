@@ -83,6 +83,11 @@ const ViewerPage = () => {
           const script = await db.getScriptById(data.currentScript);
           if (script) {
             setCurrentScript(script);
+          } else {
+            // Script was not found in the database
+            console.error(`Script with ID ${data.currentScript} not found in database`);
+            setScriptLoaded(false);
+            setCurrentScript(null);
           }
         } catch (error) {
           console.error('Error loading script:', error);
