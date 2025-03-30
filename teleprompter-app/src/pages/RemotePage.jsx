@@ -8,12 +8,12 @@ import '../styles.css';
 const RemotePage = () => {
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
-  const [chapters, setChapters] = useState([]);
+  // Removed chapters state
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
-  const [currentChapter, setCurrentChapter] = useState(0);
+  // Removed currentChapter state
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   
   // Load all scripts and register for state updates
@@ -59,23 +59,16 @@ const RemotePage = () => {
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
-      setCurrentChapter(data.currentChapter);
+      // Removed currentChapter update
       
       // If current script changed, load the script details
       if (data.currentScript === null) {
         // Script was cleared
         setSelectedScriptId(null);
-        setChapters([]);
+        // Removed setChapters call
       } else if (data.currentScript && (!selectedScriptId || data.currentScript !== selectedScriptId)) {
         setSelectedScriptId(data.currentScript);
-        
-        // Load chapters for this script
-        try {
-          const scriptChapters = await db.getChaptersForScript(data.currentScript);
-          setChapters(scriptChapters);
-        } catch (error) {
-          console.error('Error loading chapters:', error);
-        }
+        // Removed chapters loading
       }
     }
   };
@@ -86,7 +79,7 @@ const RemotePage = () => {
     
     // Clear local states
     setSelectedScriptId(null);
-    setChapters([]);
+    // Removed setChapters call
     
     // Pause if playing
     if (isPlaying) {
@@ -126,9 +119,7 @@ const RemotePage = () => {
       
       if (script) {
         // Script exists, proceed with selection
-        // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(numericId);
-        setChapters(scriptChapters);
+        // Removed chapters loading
         
         // Send control message to update all clients
         sendControlMessage('LOAD_SCRIPT', numericId);
@@ -176,12 +167,7 @@ const RemotePage = () => {
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
   
-  const jumpToChapter = (chapterIndex) => {
-    if (chapters[chapterIndex]) {
-      setCurrentChapter(chapterIndex);
-      sendControlMessage('JUMP_TO_CHAPTER', chapterIndex);
-    }
-  };
+  // Removed jumpToChapter function
   
   return (
     <div className="remote-page">
@@ -300,34 +286,7 @@ const RemotePage = () => {
           </div>
         </div>
         
-        <div className="chapter-navigation">
-          <h3>Chapters</h3>
-          <div className="chapters-list">
-            {chapters.map((chapter, index) => (
-              <button
-                key={chapter.id}
-                className={`chapter-btn ${currentChapter === index ? 'active' : ''}`}
-                onClick={() => jumpToChapter(index)}
-              >
-                {chapter.title.includes('FILM CLIP') 
-                  ? `FILM CLIP ${index + 1}` 
-                  : chapter.title}
-              </button>
-            ))}
-            
-            {chapters.length === 0 && selectedScriptId && (
-              <div className="no-chapters-message">
-                No chapters found in this script.
-              </div>
-            )}
-            
-            {!selectedScriptId && (
-              <div className="no-script-message">
-                Please select a script to view chapters.
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Removed chapter navigation */}
       </div>
       
       <div className="remote-footer">

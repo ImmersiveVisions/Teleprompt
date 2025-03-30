@@ -13,7 +13,7 @@ const useWebSocketBrowser = () => {
     direction: 'forward',
     fontSize: 24,
     currentPosition: 0,
-    currentChapter: 0,
+    // Removed currentChapter
     currentScript: null
   });
 
@@ -132,17 +132,13 @@ const useWebSocketBrowser = () => {
     sendMessage('CONTROL', 'JUMP_TO_POSITION', position);
   }, [sendMessage]);
   
-  const jumpToChapter = useCallback((chapterIndex) => {
-    setState(prev => ({ ...prev, currentChapter: chapterIndex }));
-    sendMessage('CONTROL', 'JUMP_TO_CHAPTER', chapterIndex);
-  }, [sendMessage]);
+  // Removed jumpToChapter function
   
   const loadScript = useCallback((scriptId) => {
     setState(prev => ({ 
       ...prev, 
       currentScript: scriptId, 
-      currentPosition: 0, 
-      currentChapter: 0 
+      currentPosition: 0
     }));
     sendMessage('CONTROL', 'LOAD_SCRIPT', scriptId);
   }, [sendMessage]);
@@ -158,7 +154,7 @@ const useWebSocketBrowser = () => {
     toggleDirection,
     setFontSize,
     jumpToPosition,
-    jumpToChapter,
+    // Removed jumpToChapter,
     loadScript
   };
 };

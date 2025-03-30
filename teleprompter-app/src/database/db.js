@@ -6,8 +6,8 @@ const db = new Dexie('TeleprompterDB');
 
 // Define the database schema
 db.version(2).stores({
-  scripts: '++id, title, body, dateCreated, lastModified',
-  chapters: '++id, scriptId, title, startPosition, endPosition'
+  scripts: '++id, title, body, dateCreated, lastModified'
+  // Removed chapters table
 });
 
 // Define upgrade function for migrating data from v1 to v2
@@ -184,14 +184,7 @@ const scriptMethods = {
     const addedScript = await db.scripts.get(id);
     console.log('Full script after adding:', addedScript);
     
-    // Parse chapters and add them
-    if (scriptToAdd.body) {
-      const chapters = parseChapters(scriptToAdd.body, id);
-      console.log(`Adding ${chapters.length} chapters for script ID ${id}`);
-      for (const chapter of chapters) {
-        await db.chapters.add(chapter);
-      }
-    }
+    // Removed chapter parsing and creation
     
     return id;
   },
@@ -211,85 +204,20 @@ const scriptMethods = {
     
     await db.scripts.update(id, updates);
     
-    // If body is updated, update chapters
-    if (updates.body) {
-      // Delete old chapters
-      await db.chapters.where({ scriptId: id }).delete();
-      
-      // Add new chapters
-      const chapters = parseChapters(updates.body, id);
-      for (const chapter of chapters) {
-        await db.chapters.add(chapter);
-      }
-    }
+    // Removed chapter updates
     
     return id;
   },
   
   async deleteScript(id) {
-    // Delete all chapters for this script
-    await db.chapters.where({ scriptId: id }).delete();
-    
     // Delete the script
     await db.scripts.delete(id);
   },
   
-  async getChaptersForScript(scriptId) {
-    // Handle script object being passed in
-    if (typeof scriptId === 'object' && scriptId !== null && scriptId.id) {
-      scriptId = scriptId.id;
-      console.log('getChaptersForScript: converted script object to ID:', scriptId);
-    }
-    
-    // Make sure we have a valid ID
-    if (scriptId === undefined || scriptId === null) {
-      console.error('Invalid script ID provided to getChaptersForScript:', scriptId);
-      return [];
-    }
-    
-    try {
-      // Try numeric ID first, then string ID if that fails
-      let chapters = await db.chapters.where('scriptId').equals(Number(scriptId)).toArray();
-      
-      // If no results with numeric ID, try with string ID
-      if (chapters.length === 0) {
-        chapters = await db.chapters.where('scriptId').equals(String(scriptId)).toArray();
-      }
-      
-      console.log(`Found ${chapters.length} chapters for script ID ${scriptId}`);
-      return chapters;
-    } catch (error) {
-      console.error('Error in getChaptersForScript:', error);
-      return [];
-    }
-  }
+  // Removed getChaptersForScript function
 };
 
-// Helper function to parse chapters from script body
-function parseChapters(body, scriptId) {
-  const lines = body.split('\n');
-  const chapters = [];
-  let currentPosition = 0;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-    
-    // Check if line contains 'FILM CLIP' marker
-    if (trimmedLine.includes('FILM CLIP')) {
-      chapters.push({
-        scriptId,
-        title: trimmedLine,
-        startPosition: currentPosition,
-        endPosition: currentPosition + line.length
-      });
-    }
-    
-    currentPosition += line.length + 1; // +1 for the newline character
-  }
-  
-  return chapters;
-}
+// Removed parseChapters function
 
 // Add a method to validate all scripts in the database and remove invalid ones
 const validateScriptsDatabase = async () => {

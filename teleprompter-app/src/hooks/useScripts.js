@@ -10,7 +10,7 @@ const useScripts = () => {
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
   const [selectedScript, setSelectedScript] = useState(null);
-  const [chapters, setChapters] = useState([]);
+  // Removed chapters state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -48,9 +48,7 @@ const useScripts = () => {
         setSelectedScriptId(scriptId);
         setSelectedScript(script);
         
-        // Load chapters for this script
-        const scriptChapters = await db.getChaptersForScript(scriptId);
-        setChapters(scriptChapters);
+        // Removed chapters loading
       }
       
       setLoading(false);
@@ -89,8 +87,7 @@ const useScripts = () => {
       // Update selected script if it's the one being edited
       if (selectedScriptId === id) {
         setSelectedScript(updatedScript);
-        const scriptChapters = await db.getChaptersForScript(id);
-        setChapters(scriptChapters);
+        // Removed chapters loading
       }
       
       return id;
@@ -113,7 +110,7 @@ const useScripts = () => {
       if (selectedScriptId === id) {
         setSelectedScriptId(null);
         setSelectedScript(null);
-        setChapters([]);
+        // Removed setChapters call
       }
     } catch (error) {
       console.error('Error deleting script:', error);
@@ -126,7 +123,7 @@ const useScripts = () => {
     scripts,
     selectedScriptId,
     selectedScript,
-    chapters,
+    // Removed chapters,
     loading,
     error,
     selectScript: handleSelectScript,

@@ -13,7 +13,7 @@ const useWebSocket = () => {
     direction: 'forward',
     fontSize: 24,
     currentPosition: 0,
-    currentChapter: 0,
+    // Removed currentChapter
     currentScript: null
   });
   
@@ -21,19 +21,32 @@ const useWebSocket = () => {
   useEffect(() => {
     // Use the global websocket service
     if (window.websocketService) {
-      // Initialize if not already initialized
-      window.websocketService.initWebSocket((connectionStatus) => {
-        setStatus(connectionStatus);
-      });
+      console.log('useWebSocket hook connecting to websocketService');
       
-      // Register handler for state updates
+      // Get current status
+      const currentStatus = window.websocketService.getWebSocketStatus();
+      setStatus(currentStatus);
+      
+      // Only initialize if not already connected
+      if (currentStatus !== 'connected') {
+        window.websocketService.initWebSocket((connectionStatus) => {
+          setStatus(connectionStatus);
+        });
+      }
+      
+      // Register handler for state updates - using component instance ID to track in logs
+      const hookId = Math.floor(Math.random() * 10000);
+      console.log(`useWebSocket[${hookId}] registering message handler`);
+      
       const unregisterHandler = window.websocketService.registerMessageHandler((message) => {
         if (message.type === 'STATE_UPDATE') {
+          console.log(`useWebSocket[${hookId}] received state update`);
           setState(message.data);
         }
       });
       
       return () => {
+        console.log(`useWebSocket[${hookId}] unmounting, unregistering handler`);
         if (unregisterHandler) {
           unregisterHandler();
         }
@@ -100,15 +113,10 @@ const useWebSocket = () => {
     }
   };
   
-  const jumpToChapter = (chapterIndex) => {
-    setState({ ...state, currentChapter: chapterIndex });
-    if (window.websocketService) {
-      window.websocketService.sendControlMessage('JUMP_TO_CHAPTER', chapterIndex);
-    }
-  };
+  // Removed jumpToChapter function
   
   const loadScript = (scriptId) => {
-    setState({ ...state, currentScript: scriptId, currentPosition: 0, currentChapter: 0 });
+    setState({ ...state, currentScript: scriptId, currentPosition: 0 });
     if (window.websocketService) {
       window.websocketService.sendControlMessage('LOAD_SCRIPT', scriptId);
     }
@@ -125,7 +133,7 @@ const useWebSocket = () => {
     toggleDirection,
     setFontSize,
     jumpToPosition,
-    jumpToChapter,
+    // Removed jumpToChapter
     loadScript
   };
 };
