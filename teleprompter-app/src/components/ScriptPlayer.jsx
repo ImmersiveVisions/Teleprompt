@@ -27,7 +27,19 @@ const ScriptPlayer = ({
   
   const containerRef = useRef(null);
   const animationRef = useRef(null);
-  const scriptContent = script ? (script.body || script.content || '') : '';
+  
+  // Handle both script.body and script.content
+  let scriptContent = '';
+  if (script) {
+    // Normalize the content sources
+    if (script.body) {
+      scriptContent = script.body;
+    } else if (script.content) {
+      scriptContent = script.content;
+      // For compatibility, set body from content if missing
+      script.body = script.content;
+    }
+  }
   
   // Simple scrolling animation - only cares about scrolling, nothing else
   useEffect(() => {
@@ -131,7 +143,7 @@ const ScriptPlayer = ({
   
   // Simple jump to position function
   const jumpToPosition = (position) => {
-    if (!containerRef.current || !script) return;
+    if (!containerRef.current || !script || !scriptContent) return;
     
     const container = containerRef.current;
     
@@ -177,8 +189,15 @@ const ScriptPlayer = ({
   }
   
   // Double-check that we have content to display
-  if (!scriptContent) {
+  if (!scriptContent || scriptContent.trim() === '') {
     console.warn('ScriptPlayer: Script has no content:', script.id);
+    // Additional debug info
+    console.log('Script content debug:', {
+      hasBody: !!script.body,
+      bodyIsEmpty: script.body === '',
+      hasContent: !!script.content,
+      contentIsEmpty: script.content === ''
+    });
     return <div className="no-script-message">Script has no content. Add some text in Edit mode.</div>;
   }
   
