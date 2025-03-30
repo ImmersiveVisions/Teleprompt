@@ -335,6 +335,7 @@ const AdminPage = () => {
   const handleStateUpdate = (message) => {
     if (message.type === 'STATE_UPDATE') {
       const { data } = message;
+      console.log('AdminPage: Received state update:', data);
       
       // Update local control states
       setIsPlaying(data.isPlaying);
@@ -343,8 +344,12 @@ const AdminPage = () => {
       setFontSize(data.fontSize);
       setCurrentChapter(data.currentChapter);
       
-      // If current script changed and it's not the one we have selected
-      if (data.currentScript && data.currentScript !== selectedScriptId) {
+      // If current script changed or was cleared
+      if (data.currentScript === null && selectedScriptId !== null) {
+        console.log('AdminPage: Clearing script selection due to WebSocket state update');
+        clearScriptSelection();
+      } else if (data.currentScript && data.currentScript !== selectedScriptId) {
+        console.log('AdminPage: Changing script selection due to WebSocket state update');
         handleScriptSelect(data.currentScript);
       }
     }
@@ -571,16 +576,22 @@ const AdminPage = () => {
                   <h3>Preview: {selectedScript?.title}</h3>
                 </div>
                 {selectedScript ? (
-                  <ScriptPlayer 
-                    ref={scriptPlayerRef}
-                    key={`preview-${selectedScript.id}`} 
-                    script={selectedScript}
-                    isPlaying={isPlaying}
-                    speed={speed}
-                    direction={direction}
-                    fontSize={fontSize}
-                    fullScreen={false}
-                  />
+                  <>
+                    {/* Debug info - remove in production */}
+                    <div style={{ color: 'white', fontSize: '10px', padding: '5px', backgroundColor: '#333', marginBottom: '5px' }}>
+                      Script ID: {selectedScript.id} (type: {typeof selectedScript.id})
+                    </div>
+                    <ScriptPlayer 
+                      ref={scriptPlayerRef}
+                      key={`preview-${selectedScript.id}`} 
+                      script={selectedScript}
+                      isPlaying={isPlaying}
+                      speed={speed}
+                      direction={direction}
+                      fontSize={fontSize}
+                      fullScreen={false}
+                    />
+                  </>
                 ) : (
                   <div className="no-script-preview">No script selected</div>
                 )}

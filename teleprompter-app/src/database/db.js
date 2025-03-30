@@ -24,13 +24,18 @@ db.version(2).upgrade(tx => {
 // Add some methods to the database
 const scriptMethods = {
   async getAllScripts() {
-    return await db.scripts.toArray();
+    const scripts = await db.scripts.toArray();
+    console.log(`getAllScripts: Found ${scripts.length} scripts`);
+    scripts.forEach((script, i) => {
+      console.log(`Script ${i}: ID=${script.id} (${typeof script.id}), Title=${script.title}, Has Content=${!!(script.body || script.content)}`);
+    });
+    return scripts;
   },
   
   async getScriptById(id) {
     // Make sure we have a valid ID
-    if (!id || isNaN(parseInt(id, 10))) {
-      console.error('Invalid script ID provided to getScriptById:', id);
+    if (id === undefined || id === null || isNaN(parseInt(id, 10))) {
+      console.error('Invalid script ID provided to getScriptById:', id, 'typeof:', typeof id);
       return null;
     }
     
@@ -38,10 +43,15 @@ const scriptMethods = {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
     
     try {
+      console.log(`Getting script with ID: ${numericId} (original type: ${typeof id})`);
       const script = await db.scripts.get(numericId);
+      
       if (!script) {
         console.warn(`Script with ID ${numericId} not found in database`);
+      } else {
+        console.log(`Found script: ID ${script.id} (${typeof script.id}), title: ${script.title}`);
       }
+      
       return script;
     } catch (error) {
       console.error('Error in getScriptById:', error);

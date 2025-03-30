@@ -11,6 +11,20 @@ const ScriptPlayer = ({
   fontSize = 24,
   fullScreen = false
 }, ref) => {
+  // Log receipt of script prop for debugging
+  console.log('ScriptPlayer received script:', 
+    script ? 
+      {
+        id: script.id,
+        title: script.title,
+        idType: typeof script.id,
+        hasBody: !!script.body,
+        hasContent: !!script.content,
+        bodyLength: script.body ? script.body.length : 0,
+        contentLength: script.content ? script.content.length : 0
+      } : 'null'
+  );
+  
   const containerRef = useRef(null);
   const animationRef = useRef(null);
   const scriptContent = script ? (script.body || script.content || '') : '';
