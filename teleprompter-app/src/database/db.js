@@ -5,9 +5,20 @@ import Dexie from 'dexie';
 const db = new Dexie('TeleprompterDB');
 
 // Define the database schema
-db.version(1).stores({
-  scripts: '++id, title, content, dateCreated, lastModified',
+db.version(2).stores({
+  scripts: '++id, title, body, dateCreated, lastModified',
   chapters: '++id, scriptId, title, startPosition, endPosition'
+});
+
+// Define upgrade function for migrating data from v1 to v2
+db.version(2).upgrade(tx => {
+  return tx.table('scripts').toCollection().modify(script => {
+    // If this is a v1 script with content but no body, migrate it
+    if (script.content && !script.body) {
+      script.body = script.content;
+      delete script.content;
+    }
+  });
 });
 
 // Add some methods to the database
@@ -28,11 +39,17 @@ const scriptMethods = {
       lastModified: now
     };
     
+    // Ensure we're using body instead of content
+    if (scriptToAdd.content && !scriptToAdd.body) {
+      scriptToAdd.body = scriptToAdd.content;
+      delete scriptToAdd.content;
+    }
+    
     const id = await db.scripts.add(scriptToAdd);
     
     // Parse chapters and add them
-    if (script.content) {
-      const chapters = parseChapters(script.content, id);
+    if (scriptToAdd.body) {
+      const chapters = parseChapters(scriptToAdd.body, id);
       for (const chapter of chapters) {
         await db.chapters.add(chapter);
       }
@@ -43,18 +60,26 @@ const scriptMethods = {
   
   async updateScript(id, scriptChanges) {
     const now = new Date();
-    await db.scripts.update(id, {
+    const updates = {
       ...scriptChanges,
       lastModified: now
-    });
+    };
     
-    // If content is updated, update chapters
-    if (scriptChanges.content) {
+    // Ensure we're using body instead of content
+    if (updates.content && !updates.body) {
+      updates.body = updates.content;
+      delete updates.content;
+    }
+    
+    await db.scripts.update(id, updates);
+    
+    // If body is updated, update chapters
+    if (updates.body) {
       // Delete old chapters
       await db.chapters.where({ scriptId: id }).delete();
       
       // Add new chapters
-      const chapters = parseChapters(scriptChanges.content, id);
+      const chapters = parseChapters(updates.body, id);
       for (const chapter of chapters) {
         await db.chapters.add(chapter);
       }
@@ -76,9 +101,9 @@ const scriptMethods = {
   }
 };
 
-// Helper function to parse chapters from script content
-function parseChapters(content, scriptId) {
-  const lines = content.split('\n');
+// Helper function to parse chapters from script body
+function parseChapters(body, scriptId) {
+  const lines = body.split('\n');
   const chapters = [];
   let currentPosition = 0;
   

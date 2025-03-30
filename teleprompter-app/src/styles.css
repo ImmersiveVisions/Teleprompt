@@ -1,5 +1,93 @@
 /* src/styles.css */
 
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.script-entry-modal {
+  background-color: white;
+  border-radius: 5px;
+  width: 80%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.close-btn {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+}
+
+.script-form {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #555;
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.script-body-textarea {
+  min-height: 300px;
+  font-family: 'Courier New', monospace;
+  resize: vertical;
+}
+
+.form-help {
+  background-color: #f8f9fa;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  border-left: 4px solid #007bff;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* Global styles */
 * {
   box-sizing: border-box;
@@ -168,21 +256,35 @@ input, select, textarea {
 }
 
 .admin-content {
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  gap: 1rem;
+  display: flex;
   flex: 1;
   overflow: hidden;
   padding: 1rem;
+  gap: 1rem;
 }
 
-.scripts-panel, .script-editor-panel, .admin-sidebar {
+.scripts-panel, .script-viewer-panel, .admin-sidebar {
   background-color: #fff;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.scripts-panel {
+  width: 250px;
+  flex-shrink: 0;
+}
+
+.script-viewer-panel {
+  flex: 2;
+  padding: 1rem;
+}
+
+.admin-sidebar {
+  width: 300px;
+  flex-shrink: 0;
 }
 
 .scripts-header {
@@ -204,10 +306,46 @@ input, select, textarea {
 }
 
 .script-item {
-  padding: 1rem;
+  padding: 0.75rem;
   border-bottom: 1px solid #eee;
   cursor: pointer;
   transition: background-color 0.3s;
+}
+
+.script-item:hover {
+  background-color: #f8f9fa;
+}
+
+.script-item.selected {
+  border-left: 4px solid #007bff;
+  background-color: #f0f7ff;
+}
+
+.script-item-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.script-item-date {
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+.script-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.script-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .script-item:hover {

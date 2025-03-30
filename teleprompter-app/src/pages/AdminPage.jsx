@@ -6,14 +6,14 @@ import { sendControlMessage, registerMessageHandler } from '../services/websocke
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
 import QRCodeGenerator from '../components/QRCodeGenerator';
+import ScriptEntryModal from '../components/ScriptEntryModal';
 import '../styles.css';
 
 const AdminPage = () => {
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
-  const [scriptTitle, setScriptTitle] = useState('');
-  const [scriptContent, setScriptContent] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
+  const [selectedScript, setSelectedScript] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
@@ -55,11 +55,10 @@ const AdminPage = () => {
   // Handle script selection
   const handleScriptSelect = async (scriptId) => {
     try {
-      const selectedScript = await db.getScriptById(scriptId);
-      if (selectedScript) {
+      const script = await db.getScriptById(scriptId);
+      if (script) {
         setSelectedScriptId(scriptId);
-        setScriptTitle(selectedScript.title);
-        setScriptContent(selectedScript.content);
+        setSelectedScript(script);
         
         // Load chapters for this script
         const scriptChapters = await db.getChaptersForScript(scriptId);
@@ -75,32 +74,31 @@ const AdminPage = () => {
   
   // Handle adding a new script
   const handleAddScript = () => {
-    setSelectedScriptId(null);
-    setScriptTitle('New Script');
-    setScriptContent('');
-    setChapters([]);
-    setIsEditing(true);
+    setSelectedScript(null);
+    setIsModalOpen(true);
   };
   
   // Handle editing an existing script
   const handleEditScript = () => {
-    setIsEditing(true);
+    if (selectedScript) {
+      setIsModalOpen(true);
+    }
   };
   
   // Handle saving a script (new or edited)
-  const handleSaveScript = async () => {
+  const handleSaveScript = async (scriptData) => {
     try {
-      if (selectedScriptId) {
+      if (selectedScriptId && selectedScript) {
         // Update existing script
         await db.updateScript(selectedScriptId, {
-          title: scriptTitle,
-          content: scriptContent
+          title: scriptData.title,
+          body: scriptData.body
         });
       } else {
         // Add new script
         const newScriptId = await db.addScript({
-          title: scriptTitle,
-          content: scriptContent
+          title: scriptData.title,
+          body: scriptData.body
         });
         
         // Select the new script
@@ -110,8 +108,8 @@ const AdminPage = () => {
       // Reload scripts to update the list
       await loadScripts();
       
-      // Exit editing mode
-      setIsEditing(false);
+      // Close the modal
+      setIsModalOpen(false);
       
       // Notify other clients about the script change
       sendControlMessage('LOAD_SCRIPT', selectedScriptId);
@@ -124,7 +122,7 @@ const AdminPage = () => {
   const handleDeleteScript = async () => {
     if (!selectedScriptId) return;
     
-    if (window.confirm(`Are you sure you want to delete the script "${scriptTitle}"?`)) {
+    if (window.confirm(`Are you sure you want to delete the script "${selectedScript?.title}"?`)) {
       try {
         await db.deleteScript(selectedScriptId);
         
@@ -137,8 +135,7 @@ const AdminPage = () => {
           handleScriptSelect(allScripts[0].id);
         } else {
           setSelectedScriptId(null);
-          setScriptTitle('');
-          setScriptContent('');
+          setSelectedScript(null);
           setChapters([]);
         }
       } catch (error) {
@@ -227,6 +224,15 @@ const AdminPage = () => {
         </div>
       </header>
       
+      {/* Script Entry Modal */}
+      <ScriptEntryModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onSave={handleSaveScript}
+        initialTitle={selectedScript ? selectedScript.title : ''}
+        initialBody={selectedScript ? (selectedScript.body || selectedScript.content || '') : ''}
+      />
+      
       <div className="admin-content">
         <div className="scripts-panel">
           <div className="scripts-header">
@@ -256,118 +262,84 @@ const AdminPage = () => {
           </div>
         </div>
         
-        <div className="script-editor-panel">
-          {isEditing ? (
-            <div className="script-editor">
-              <div className="editor-header">
-                <input
-                  type="text"
-                  value={scriptTitle}
-                  onChange={(e) => setScriptTitle(e.target.value)}
-                  className="script-title-input"
-                  placeholder="Script Title"
-                />
+        <div className="script-viewer-panel">
+          {selectedScript ? (
+            <>
+              <div className="script-header">
+                <h2>{selectedScript.title}</h2>
+                <div className="script-actions">
+                  <button onClick={handleEditScript} className="edit-btn">Edit Script</button>
+                  <button onClick={handleDeleteScript} className="delete-btn">Delete Script</button>
+                </div>
+              </div>
+              
+              <div className="teleprompter-controls">
+                <div className="control-group">
+                  <button onClick={togglePlay} className={`play-btn ${isPlaying ? 'active' : ''}`}>
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </button>
+                  
+                  <button onClick={toggleDirection} className="direction-btn">
+                    Direction: {direction === 'forward' ? 'Forward' : 'Backward'}
+                  </button>
+                </div>
                 
-                <div className="editor-actions">
-                  <button onClick={handleSaveScript} className="save-btn">Save</button>
-                  <button onClick={() => setIsEditing(false)} className="cancel-btn">Cancel</button>
+                <div className="control-group">
+                  <label>Speed: {speed.toFixed(1)}x</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3"
+                    step="0.1"
+                    value={speed}
+                    onChange={(e) => changeSpeed(parseFloat(e.target.value))}
+                  />
+                </div>
+                
+                <div className="control-group">
+                  <label>Font Size: {fontSize}px</label>
+                  <input
+                    type="range"
+                    min="16"
+                    max="48"
+                    step="1"
+                    value={fontSize}
+                    onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
+                  />
                 </div>
               </div>
               
-              <textarea
-                value={scriptContent}
-                onChange={(e) => setScriptContent(e.target.value)}
-                className="script-content-editor"
-                placeholder="Enter your script here. Use 'FILM CLIP' to mark chapter breaks."
-              />
-              
-              <div className="editor-help">
-                <h3>Editor Help</h3>
-                <p>
-                  Write your script in the text area above. To mark chapter points, 
-                  include the text 'FILM CLIP' in a line. These will be highlighted 
-                  and used as navigation points in the teleprompter.
-                </p>
+              <div className="chapter-navigation">
+                <h3>Chapters</h3>
+                <div className="chapters-list">
+                  {chapters.map((chapter, index) => (
+                    <button
+                      key={chapter.id}
+                      className={`chapter-btn ${currentChapter === index ? 'active' : ''}`}
+                      onClick={() => jumpToChapter(index)}
+                    >
+                      {chapter.title.includes('FILM CLIP') 
+                        ? `FILM CLIP ${index + 1}` 
+                        : chapter.title}
+                    </button>
+                  ))}
+                  
+                  {chapters.length === 0 && (
+                    <div className="no-chapters-message">
+                      No chapters found. Add 'FILM CLIP' markers to create chapters.
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+              
+              <div className="preview-container">
+                <h3>Preview</h3>
+                <ScriptViewer />
+              </div>
+            </>
           ) : (
-            <div className="script-viewer-container">
-              {selectedScriptId ? (
-                <>
-                  <div className="viewer-actions">
-                    <button onClick={handleEditScript} className="edit-btn">Edit Script</button>
-                    <button onClick={handleDeleteScript} className="delete-btn">Delete Script</button>
-                  </div>
-                  
-                  <div className="teleprompter-controls">
-                    <div className="control-group">
-                      <button onClick={togglePlay} className={`play-btn ${isPlaying ? 'active' : ''}`}>
-                        {isPlaying ? 'Pause' : 'Play'}
-                      </button>
-                      
-                      <button onClick={toggleDirection} className="direction-btn">
-                        Direction: {direction === 'forward' ? 'Forward' : 'Backward'}
-                      </button>
-                    </div>
-                    
-                    <div className="control-group">
-                      <label>Speed: {speed.toFixed(1)}x</label>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="3"
-                        step="0.1"
-                        value={speed}
-                        onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-                      />
-                    </div>
-                    
-                    <div className="control-group">
-                      <label>Font Size: {fontSize}px</label>
-                      <input
-                        type="range"
-                        min="16"
-                        max="48"
-                        step="1"
-                        value={fontSize}
-                        onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="chapter-navigation">
-                    <h3>Chapters</h3>
-                    <div className="chapters-list">
-                      {chapters.map((chapter, index) => (
-                        <button
-                          key={chapter.id}
-                          className={`chapter-btn ${currentChapter === index ? 'active' : ''}`}
-                          onClick={() => jumpToChapter(index)}
-                        >
-                          {chapter.title.includes('FILM CLIP') 
-                            ? `FILM CLIP ${index + 1}` 
-                            : chapter.title}
-                        </button>
-                      ))}
-                      
-                      {chapters.length === 0 && (
-                        <div className="no-chapters-message">
-                          No chapters found. Add 'FILM CLIP' markers to create chapters.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="preview-container">
-                    <h3>Preview</h3>
-                    <ScriptViewer />
-                  </div>
-                </>
-              ) : (
-                <div className="no-script-selected">
-                  <p>No script selected. Please select a script from the list or add a new one.</p>
-                </div>
-              )}
+            <div className="no-script-selected">
+              <p>No script selected. Please select a script from the list or add a new one.</p>
             </div>
           )}
         </div>

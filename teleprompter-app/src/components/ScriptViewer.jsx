@@ -146,12 +146,15 @@ const ScriptViewer = ({ fullScreen = false }) => {
     };
   }, [isPlaying, speed, direction, script, currentPosition, chapters, currentChapter]);
   
-  // Parse script content to highlight film clips
+  // Parse script body to highlight film clips
   const renderScriptContent = () => {
     if (!script) return null;
     
-    const content = script.content;
-    const lines = content.split('\n');
+    // Use body if available, fall back to content for backwards compatibility
+    const body = script.body || script.content;
+    if (!body) return null;
+    
+    const lines = body.split('\n');
     
     return lines.map((line, index) => {
       // Check if line contains 'FILM CLIP'
