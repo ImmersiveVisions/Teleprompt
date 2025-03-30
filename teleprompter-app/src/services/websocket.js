@@ -130,48 +130,71 @@ let clientWs = null;
 let messageHandlers = [];
 
 const initWebSocket = (statusCb) => {
-  statusCallback = statusCb;
-  
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
-  
-  clientWs = new WebSocket(wsUrl);
-  
-  clientWs.onopen = () => {
-    console.log('WebSocket connected');
-    statusCallback('connected');
+  try {
+    statusCallback = statusCb;
     
-    // Request current state
-    clientWs.send(JSON.stringify({
-      type: 'GET_STATE'
-    }));
-  };
-  
-  clientWs.onmessage = (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      
-      // Dispatch message to all registered handlers
-      messageHandlers.forEach(handler => handler(message));
-    } catch (error) {
-      console.error('Error handling message:', error);
+    // Guard against running in non-browser environment
+    if (typeof window === 'undefined') {
+      console.warn('WebSocket cannot be initialized in non-browser environment');
+      return;
     }
-  };
-  
-  clientWs.onclose = () => {
-    console.log('WebSocket disconnected');
-    statusCallback('disconnected');
     
-    // Attempt to reconnect after a delay
-    setTimeout(() => {
-      initWebSocket(statusCallback);
-    }, 5000);
-  };
-  
-  clientWs.onerror = (error) => {
-    console.error('WebSocket error:', error);
-    statusCallback('error');
-  };
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    console.log('Initializing WebSocket connection to:', wsUrl);
+    
+    try {
+      clientWs = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error('Error creating WebSocket:', err);
+      statusCallback('error');
+      return;
+    }
+    
+    clientWs.onopen = () => {
+      console.log('WebSocket connected');
+      statusCallback('connected');
+      
+      // Request current state
+      try {
+        clientWs.send(JSON.stringify({
+          type: 'GET_STATE'
+        }));
+      } catch (err) {
+        console.error('Error sending initial state request:', err);
+      }
+    };
+    
+    clientWs.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        // Dispatch message to all registered handlers
+        messageHandlers.forEach(handler => handler(message));
+      } catch (error) {
+        console.error('Error handling message:', error);
+      }
+    };
+    
+    clientWs.onclose = () => {
+      console.log('WebSocket disconnected');
+      statusCallback('disconnected');
+      
+      // Attempt to reconnect after a delay
+      setTimeout(() => {
+        initWebSocket(statusCallback);
+      }, 5000);
+    };
+    
+    clientWs.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      statusCallback('error');
+    };
+  } catch (error) {
+    console.error('Error in initWebSocket:', error);
+    if (statusCallback) statusCallback('error');
+  }
 };
 
 const sendControlMessage = (action, value = null) => {

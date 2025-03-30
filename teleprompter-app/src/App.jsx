@@ -14,17 +14,26 @@ const App = () => {
   
   // Initialize WebSocket connection for real-time control
   useEffect(() => {
-    initWebSocket((status) => {
-      setWsStatus(status);
-    });
-    
-    // Initialize Bluetooth service
-    initBluetoothService((status) => {
-      setBtStatus(status);
-    });
+    try {
+      initWebSocket((status) => {
+        console.log('WebSocket status updated:', status);
+        setWsStatus(status);
+      });
+      
+      // Initialize Bluetooth service
+      initBluetoothService((status) => {
+        console.log('Bluetooth status updated:', status);
+        setBtStatus(status);
+      });
+    } catch (error) {
+      console.error('Error initializing services:', error);
+      setWsStatus('error');
+      setBtStatus('error');
+    }
     
     return () => {
       // Cleanup WebSocket and Bluetooth connections
+      console.log('App component unmounting');
     };
   }, []);
   

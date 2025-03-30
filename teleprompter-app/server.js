@@ -12,6 +12,11 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'build')));
 
+// Add a diagnostic endpoint to check for server health
+app.get('/api/status', (req, res) => {
+  res.json({ status: 'running', timestamp: new Date() });
+});
+
 // For any request that doesn't match one above, send back React's index.html file
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
@@ -21,7 +26,9 @@ app.get('*', (req, res) => {
 const server = http.createServer(app);
 
 // Initialize WebSocket server
+console.log('Initializing WebSocket server...');
 const wss = websocketService.initWebSocketServer(server);
+console.log('WebSocket server initialized');
 
 // Start the server
 server.listen(PORT, () => {
