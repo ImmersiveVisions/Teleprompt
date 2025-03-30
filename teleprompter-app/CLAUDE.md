@@ -8,6 +8,9 @@
 - `npm test` - Run all tests
 - `npm test -- -t "test name"` - Run specific test
 
+## Milestones
+- Commit 1cdd6f3: Working ScriptPlayer component with scrolling animation (2025-03-30)
+
 ## Code Style
 
 ### Import Order
