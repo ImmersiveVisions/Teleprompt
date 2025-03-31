@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ScriptPlayer from '../components/ScriptPlayer';
 import { registerMessageHandler } from '../services/websocket';
-import scriptRepository from '../database/scriptRepository';
+import fileSystemRepository from '../database/fileSystemRepository';
 import '../styles.css';
 
 const ViewerPage = () => {
@@ -35,23 +35,70 @@ const ViewerPage = () => {
       iframes.forEach(iframe => {
         console.log('Setting up iframe load handler');
         
-        // Handle iframe load to inject styles
+        // Handle iframe load to inject styles or communicate with teleprompter-font.js
         iframe.onload = () => {
           try {
-            console.log('iframe loaded, attempting to inject styles');
-            if (iframe.contentDocument) {
-              // Create a style element
-              const style = document.createElement('style');
-              style.textContent = `
+            console.log('iframe loaded, attempting to set font size to', fontSize);
+            
+            // First check if the iframe has the teleprompter-font.js script loaded
+            if (iframe.contentWindow && typeof iframe.contentWindow.setTeleprompterFontSize === 'function') {
+              console.log('teleprompter-font.js detected in iframe, using its API');
+              iframe.contentWindow.setTeleprompterFontSize(fontSize);
+              
+              // Also listen for the custom fontSizeChanged event from the script
+              if (iframe.contentDocument) {
+                iframe.contentDocument.addEventListener('fontSizeChanged', (event) => {
+                  console.log('Received fontSizeChanged event from iframe:', event.detail);
+                });
+              }
+            } 
+            // Otherwise fall back to direct DOM manipulation
+            else if (iframe.contentDocument) {
+              console.log('No teleprompter-font.js detected, using direct style injection');
+              
+              // Check if our style element exists
+              let styleEl = iframe.contentDocument.getElementById('viewer-font-style');
+              
+              if (!styleEl) {
+                // Create a style element
+                styleEl = iframe.contentDocument.createElement('style');
+                styleEl.id = 'viewer-font-style';
+                iframe.contentDocument.head.appendChild(styleEl);
+              }
+              
+              // Update the style content
+              styleEl.textContent = `
+                /* Base styles */
                 body, html {
                   color: white !important;
                   background-color: black !important;
                   font-size: ${fontSize}px !important;
+                  font-family: 'Arial', sans-serif !important;
                 }
                 
-                /* Ensure all text is readable */
-                p, div, span, h1, h2, h3, h4, h5, h6 {
-                  color: white !important;
+                /* Apply font size to all text elements */
+                body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
+                  font-size: ${fontSize}px !important;
+                }
+                
+                /* Ensure specific selectors have the font size */
+                p[style*="padding-left"] {
+                  font-size: ${fontSize}px !important;
+                }
+
+                /* Character names */
+                p[style*="padding-left: 166pt"], 
+                p[style*="padding-left: 165pt"], 
+                p[style*="padding-left: 178pt"],
+                p[style*="padding-left: 142pt"],
+                p[style*="padding-left: 40pt"],
+                p[style*="padding-left: 84pt"],
+                p[style*="padding-left: 65pt"],
+                p[style*="padding-left: 77pt"],
+                p[style*="padding-left: 91pt"],
+                p[style*="padding-left: 104pt"],
+                p[style*="padding-left: 83pt"] {
+                  font-size: ${fontSize}px !important;
                 }
                 
                 /* Make links visible but not distracting */
@@ -59,9 +106,6 @@ const ViewerPage = () => {
                   color: #ADD8E6 !important;
                 }
               `;
-              
-              // Add to iframe head
-              iframe.contentDocument.head.appendChild(style);
               console.log('Successfully injected styles into iframe');
               
               // Also attempt to handle HTML content specifically
@@ -79,9 +123,31 @@ const ViewerPage = () => {
               }
             } else {
               console.warn('Could not access iframe contentDocument - may be cross-origin restricted');
+              
+              // Last resort: try using postMessage API
+              try {
+                console.log('Attempting to use postMessage as fallback');
+                iframe.contentWindow.postMessage({
+                  type: 'SET_FONT_SIZE',
+                  fontSize: fontSize
+                }, '*');
+              } catch (postMsgErr) {
+                console.error('Error sending postMessage to iframe:', postMsgErr);
+              }
             }
           } catch (e) {
             console.error('Error injecting styles into iframe:', e);
+            
+            // Try postMessage as a fallback after error
+            try {
+              iframe.contentWindow.postMessage({
+                type: 'SET_FONT_SIZE',
+                fontSize: fontSize
+              }, '*');
+              console.log('Sent postMessage after error (fallback)');
+            } catch (postMsgErr) {
+              console.error('Even postMessage fallback failed:', postMsgErr);
+            }
           }
         };
         
@@ -95,6 +161,16 @@ const ViewerPage = () => {
           }
         } catch (e) {
           console.error('Error checking iframe load status:', e);
+          
+          // Try postMessage for loaded iframes that we can't check
+          try {
+            iframe.contentWindow.postMessage({
+              type: 'SET_FONT_SIZE',
+              fontSize: fontSize
+            }, '*');
+          } catch (postMsgErr) {
+            console.error('Error with postMessage for loaded iframe:', postMsgErr);
+          }
         }
       });
     };
@@ -194,16 +270,32 @@ const ViewerPage = () => {
         
         // Load the current script data
         try {
-          // Get the script using the repository
-          const script = await scriptRepository.getScriptById(data.currentScript);
-          if (script) {
-            console.log('Viewer loaded script successfully:', script.title);
-            setCurrentScript(script);
+          // Check if it's an HTML file that we can load directly
+          if (typeof data.currentScript === 'string' && 
+              (data.currentScript.toLowerCase().endsWith('.html') || 
+               data.currentScript.toLowerCase().endsWith('.htm'))) {
+            console.log('HTML file detected, creating script object for direct loading:', data.currentScript);
+            // Create a simple script object that points to the HTML file
+            const htmlScript = {
+              id: data.currentScript,
+              title: data.currentScript.replace(/\.(html|htm)$/i, ''),
+              isHtml: true,
+              lastModified: new Date()
+            };
+            setCurrentScript(htmlScript);
           } else {
-            // Script was not found in the database
-            console.error(`Script with ID ${data.currentScript} not found in database`);
-            setScriptLoaded(false);
-            setCurrentScript(null);
+            // Get the script using the file system repository
+            console.log('Loading script from file system repository:', data.currentScript);
+            const script = await fileSystemRepository.getScriptById(data.currentScript);
+            if (script) {
+              console.log('Viewer loaded script successfully:', script.title);
+              setCurrentScript(script);
+            } else {
+              // Script was not found
+              console.error(`Script with ID ${data.currentScript} not found`);
+              setScriptLoaded(false);
+              setCurrentScript(null);
+            }
           }
         } catch (error) {
           console.error('Error loading script:', error);
