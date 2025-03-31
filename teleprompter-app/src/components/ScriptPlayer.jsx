@@ -30,10 +30,18 @@ const ScriptPlayer = ({
   const containerRef = useRef(null);
   const animationRef = useRef(null);
   
-  // We only deal with HTML files now
-  if (script) {
-    console.log('HTML file will be loaded directly via iframe:', script.id);
-  }
+  // When we receive a script, ensure the parent knows about it
+  useEffect(() => {
+    if (script) {
+      console.log('ScriptPlayer received HTML script and is loading it in iframe:', script.id);
+      
+      // Ensure script is available in global scope for error recovery
+      if (typeof window !== 'undefined') {
+        window.__currentScript = script;
+        console.log('Stored script reference in window.__currentScript for error recovery');
+      }
+    }
+  }, [script]);
   
 
   // Apply font size to iframe content when it changes
@@ -437,12 +445,18 @@ const ScriptPlayer = ({
   
   // jQuery-based jump to position function
   const jumpToPosition = (position) => {
-    if (!containerRef.current || !script) return;
+    console.log('===== [SCRIPT PLAYER] jumpToPosition called with position:', position);
+    
+    if (!containerRef.current || !script) {
+      console.error('===== [SCRIPT PLAYER] Cannot jump - no container or script available');
+      return;
+    }
     
     const container = containerRef.current;
     
     // Stop any ongoing animations
     try {
+      console.log('===== [SCRIPT PLAYER] Stopping ongoing animations');
       // Use jQuery to stop all animations
       $(container).stop(true, true);
       
@@ -455,76 +469,253 @@ const ScriptPlayer = ({
             $iframe('html, body').stop(true, true);
           }
         } catch (e) {
-          console.warn('Could not stop iframe animations:', e);
+          console.warn('===== [SCRIPT PLAYER] Could not stop iframe animations:', e);
         }
       }
     } catch (e) {
-      console.error('Error stopping animations:', e);
+      console.error('===== [SCRIPT PLAYER] Error stopping animations:', e);
     }
     
-    // Calculate position as percentage
-    const scriptContent = script.body || script.content || '';
-    const maxLength = Math.max(1, scriptContent.length);
-    const percentage = Math.max(0, Math.min(position, maxLength)) / maxLength;
+    // Check if position is an object (from SEARCH_POSITION message)
+    // or a simple number (from JUMP_TO_POSITION control)
+    let percentage = 0;
+    let isSearchPositionObject = false;
     
-    console.log(`Jumping to position: ${position}, percentage: ${percentage.toFixed(4)}`);
+    if (typeof position === 'object' && position !== null) {
+      console.log('===== [SCRIPT PLAYER] Position is an object:', position);
+      // Enhanced position data - extract the normalized position value
+      if (position.position !== undefined) {
+        percentage = position.position;
+        isSearchPositionObject = true;
+        console.log('===== [SCRIPT PLAYER] Using object.position value:', percentage);
+      } else {
+        console.error('===== [SCRIPT PLAYER] Invalid position object - missing position property');
+        return;
+      }
+    } else {
+      // Simple number for position - calculate percentage
+      console.log('===== [SCRIPT PLAYER] Position is a simple number');
+      const scriptContent = script.body || script.content || '';
+      const maxLength = Math.max(1, scriptContent.length);
+      percentage = Math.max(0, Math.min(position, maxLength)) / maxLength;
+    }
+    
+    // Ensure position is within bounds
+    percentage = Math.max(0, Math.min(1, percentage));
+    
+    console.log(`===== [SCRIPT PLAYER] Jumping to position: ${position}, calculated percentage: ${percentage.toFixed(4)}`);
     
     // Apply the scroll
     if (script.id && script.id.toLowerCase().endsWith('.html')) {
+      console.log('===== [SCRIPT PLAYER] Handling HTML content in iframe');
       // For HTML content, find the iframe and scroll it
       const iframe = container.querySelector('iframe');
-      if (iframe && iframe.contentWindow) {
-        // Wait for iframe to load
-        const checkIframeLoaded = () => {
+      
+      if (!iframe) {
+        console.error('===== [SCRIPT PLAYER] Cannot find iframe in container');
+        return;
+      }
+      
+      if (!iframe.contentWindow) {
+        console.error('===== [SCRIPT PLAYER] iframe.contentWindow not available');
+        return;
+      }
+      
+      console.log('===== [SCRIPT PLAYER] Found iframe, preparing to scroll');
+      
+      // If we have a search position object with text, try to find and highlight that text
+      if (isSearchPositionObject && position.text) {
+        console.log('===== [SCRIPT PLAYER] Enhanced scroll with text search:', position.text.substring(0, 30) + '...');
+        
+        // Create a function that will search for text in the iframe
+        const findAndScrollToText = () => {
           try {
-            // Try to access contentDocument to check if loaded
-            if (iframe.contentDocument && iframe.contentDocument.body) {
-              const viewportHeight = iframe.contentWindow.innerHeight || iframe.clientHeight;
-              const scrollHeight = iframe.contentDocument.body.scrollHeight;
-              const maxScroll = Math.max(0, scrollHeight - viewportHeight);
-              const targetScroll = percentage * maxScroll;
+            if (!iframe.contentDocument || !iframe.contentDocument.body) {
+              console.error('===== [SCRIPT PLAYER] Cannot access iframe content document or body');
+              return false;
+            }
+            
+            // Normalize the search text
+            const searchText = position.text.trim().toLowerCase();
+            console.log('===== [SCRIPT PLAYER] Normalized search text:', searchText);
+            
+            // Create a tree walker to search all text nodes
+            const walker = document.createTreeWalker(
+              iframe.contentDocument.body,
+              NodeFilter.SHOW_TEXT,
+              null,
+              false
+            );
+            
+            let foundNode = null;
+            let node;
+            let nodeCount = 0;
+            
+            // Walk through all text nodes
+            while ((node = walker.nextNode())) {
+              nodeCount++;
               
-              console.log('Jumping iframe to:', {
-                targetScroll,
-                maxScroll,
-                scrollHeight,
-                viewportHeight
-              });
-              
-              // Try to use jQuery inside iframe if available
-              try {
-                if (iframe.contentWindow.$ || iframe.contentWindow.jQuery) {
-                  const $iframe = iframe.contentWindow.$ || iframe.contentWindow.jQuery;
-                  $iframe('html, body').animate({
-                    scrollTop: targetScroll
-                  }, 500, 'swing');
-                  return;
-                }
-              } catch (e) {
-                console.warn('Could not use iframe jQuery for jumping:', e);
+              // Only check nodes that have content
+              const nodeText = node.textContent.trim();
+              if (nodeText && nodeText.toLowerCase().includes(searchText)) {
+                console.log('===== [SCRIPT PLAYER] Found matching text node:', nodeText.substring(0, 30) + '...');
+                foundNode = node;
+                break;
               }
               
-              // Fallback if jQuery not available in iframe
-              iframe.contentWindow.scrollTo({
-                top: targetScroll,
-                behavior: 'smooth'
-              });
-            } else {
-              console.log('Iframe not fully loaded, retrying...');
-              // Try again in a moment
-              setTimeout(checkIframeLoaded, 100);
+              // Log progress periodically
+              if (nodeCount % 100 === 0) {
+                console.log(`===== [SCRIPT PLAYER] Searched ${nodeCount} nodes so far...`);
+              }
             }
-          } catch (e) {
-            console.error('Error accessing iframe content:', e);
+            
+            // If no node found with exact match, try with a shorter substring
+            if (!foundNode && searchText.length > 10) {
+              console.log('===== [SCRIPT PLAYER] No exact match found, trying with shorter text...');
+              const shorterSearch = searchText.substring(0, 10);
+              
+              // Create a new tree walker for the second pass
+              const walker2 = document.createTreeWalker(
+                iframe.contentDocument.body,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+              );
+              
+              // Second pass with shorter text
+              while ((node = walker2.nextNode())) {
+                const nodeText = node.textContent.trim().toLowerCase();
+                if (nodeText && nodeText.includes(shorterSearch)) {
+                  console.log('===== [SCRIPT PLAYER] Found matching text with shorter search:', nodeText.substring(0, 30) + '...');
+                  foundNode = node;
+                  break;
+                }
+              }
+            }
+            
+            // If found, scroll directly to the node
+            if (foundNode && foundNode.parentElement) {
+              console.log('===== [SCRIPT PLAYER] Successfully found node, scrolling to it...');
+              
+              // Highlight for visibility
+              const originalBg = foundNode.parentElement.style.backgroundColor;
+              const originalColor = foundNode.parentElement.style.color;
+              
+              // Apply highlight
+              foundNode.parentElement.style.backgroundColor = '#ff6600';
+              foundNode.parentElement.style.color = '#ffffff';
+              
+              // Scroll to the element
+              foundNode.parentElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+              });
+              
+              console.log('===== [SCRIPT PLAYER] scrollIntoView called for the found node');
+              
+              // Reset styles after delay
+              setTimeout(() => {
+                foundNode.parentElement.style.backgroundColor = originalBg;
+                foundNode.parentElement.style.color = originalColor;
+                console.log('===== [SCRIPT PLAYER] Node highlighting removed');
+              }, 2000);
+              
+              return true; // Successfully found and scrolled
+            }
+            
+            return false; // Text not found
+          } catch (err) {
+            console.error('===== [SCRIPT PLAYER] Error finding node by text:', err);
+            return false;
           }
         };
         
-        checkIframeLoaded();
+        // Try to find and scroll to text, fall back to position-based if not found
+        if (!findAndScrollToText()) {
+          console.log('===== [SCRIPT PLAYER] Text search failed, falling back to position-based scrolling');
+          // Continue with position-based scrolling below
+        } else {
+          return; // Successfully scrolled to text, don't need to do position-based
+        }
       }
+      
+      // Wait for iframe to load and then scroll to position
+      const checkIframeLoaded = () => {
+        try {
+          // Try to access contentDocument to check if loaded
+          if (iframe.contentDocument && iframe.contentDocument.body) {
+            const viewportHeight = iframe.contentWindow.innerHeight || iframe.clientHeight;
+            const scrollHeight = iframe.contentDocument.body.scrollHeight;
+            const maxScroll = Math.max(0, scrollHeight - viewportHeight);
+            const targetScroll = percentage * maxScroll;
+            
+            console.log('===== [SCRIPT PLAYER] Jumping iframe to:', {
+              targetScroll,
+              maxScroll,
+              scrollHeight,
+              viewportHeight
+            });
+            
+            // Try to use jQuery inside iframe if available
+            try {
+              if (iframe.contentWindow.$ || iframe.contentWindow.jQuery) {
+                console.log('===== [SCRIPT PLAYER] Using jQuery to animate scroll');
+                const $iframe = iframe.contentWindow.$ || iframe.contentWindow.jQuery;
+                $iframe('html, body').animate({
+                  scrollTop: targetScroll
+                }, 500, 'swing');
+                return;
+              }
+            } catch (e) {
+              console.warn('===== [SCRIPT PLAYER] Could not use iframe jQuery for jumping:', e);
+            }
+            
+            // Try to use teleprompterScrollTo if available
+            try {
+              if (typeof iframe.contentWindow.teleprompterScrollTo === 'function') {
+                console.log('===== [SCRIPT PLAYER] Using teleprompterScrollTo function');
+                iframe.contentWindow.teleprompterScrollTo(percentage);
+                return;
+              }
+            } catch (e) {
+              console.warn('===== [SCRIPT PLAYER] Could not use teleprompterScrollTo:', e);
+            }
+            
+            // Fallback to basic scrollTo
+            console.log('===== [SCRIPT PLAYER] Using basic scrollTo fallback');
+            iframe.contentWindow.scrollTo({
+              top: targetScroll,
+              behavior: 'smooth'
+            });
+          } else {
+            console.log('===== [SCRIPT PLAYER] Iframe not fully loaded, retrying...');
+            // Try again in a moment
+            setTimeout(checkIframeLoaded, 100);
+          }
+        } catch (e) {
+          console.error('===== [SCRIPT PLAYER] Error accessing iframe content:', e);
+          
+          // Last resort: try using postMessage API
+          try {
+            console.log('===== [SCRIPT PLAYER] Using postMessage as last resort');
+            iframe.contentWindow.postMessage({
+              type: 'SCROLL_TO_POSITION',
+              position: percentage
+            }, '*');
+          } catch (postMsgErr) {
+            console.error('===== [SCRIPT PLAYER] Even postMessage failed:', postMsgErr);
+          }
+        }
+      };
+      
+      checkIframeLoaded();
     } else {
+      console.log('===== [SCRIPT PLAYER] Handling regular text content');
       // For regular text content
       const maxScroll = container.scrollHeight - container.clientHeight;
       const targetScroll = percentage * maxScroll;
+      
+      console.log('===== [SCRIPT PLAYER] Scrolling container to', targetScroll);
       
       // Use jQuery for smooth animation
       $(container).animate({
@@ -618,6 +809,19 @@ const ScriptPlayer = ({
             id="html-script-frame"
             onLoad={(e) => {
               console.log('HTML iframe loaded in ScriptPlayer');
+              
+              // Create and dispatch a custom event to notify the ViewerPage that the iframe is loaded
+              const loadEvent = new CustomEvent('iframeLoaded', {
+                detail: {
+                  iframe: e.target,
+                  scriptId: script.id
+                },
+                bubbles: true
+              });
+              e.target.dispatchEvent(loadEvent);
+              
+              // Make sure iframe is marked as loaded
+              e.target.dataset.loaded = 'true';
               
               // Apply font size when iframe loads
               try {

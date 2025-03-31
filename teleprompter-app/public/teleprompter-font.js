@@ -82,15 +82,99 @@
     }
   }
   
-  // Listen for font size change messages
+  // Function to scroll to a position
+  function scrollToPosition(position) {
+    console.log('===== [TELEPROMPTER SCRIPT] Scrolling to normalized position:', position);
+    console.log('===== [TELEPROMPTER SCRIPT] Page URL:', window.location.href);
+    try {
+      // Get total height of document
+      const totalHeight = document.body.scrollHeight;
+      // Calculate absolute scroll position
+      const scrollPosition = Math.floor(position * totalHeight);
+      
+      console.log(`Scrolling to ${scrollPosition}px of ${totalHeight}px total height`);
+      
+      // Create a visual indicator to show where we're scrolling to (temporary)
+      const indicator = document.createElement('div');
+      indicator.style.position = 'absolute';
+      indicator.style.left = '0';
+      indicator.style.right = '0';
+      indicator.style.top = scrollPosition + 'px';
+      indicator.style.height = '5px';
+      indicator.style.backgroundColor = '#ff6600';
+      indicator.style.zIndex = '9999';
+      indicator.style.opacity = '0.8';
+      indicator.id = 'scroll-indicator';
+      
+      // Add a message
+      const message = document.createElement('div');
+      message.textContent = 'Jump to position';
+      message.style.position = 'absolute';
+      message.style.left = '10px';
+      message.style.top = (scrollPosition - 30) + 'px';
+      message.style.backgroundColor = '#ff6600';
+      message.style.color = 'white';
+      message.style.padding = '5px 10px';
+      message.style.borderRadius = '3px';
+      message.style.zIndex = '9999';
+      message.style.fontWeight = 'bold';
+      message.id = 'scroll-message';
+      
+      // Remove any existing indicators
+      const oldIndicator = document.getElementById('scroll-indicator');
+      const oldMessage = document.getElementById('scroll-message');
+      if (oldIndicator) oldIndicator.remove();
+      if (oldMessage) oldMessage.remove();
+      
+      // Add new indicators
+      document.body.appendChild(indicator);
+      document.body.appendChild(message);
+      
+      // Scroll with smooth behavior
+      window.scrollTo({
+        top: scrollPosition,
+        behavior: 'smooth'
+      });
+      
+      // Remove the indicator after a delay
+      setTimeout(() => {
+        if (indicator.parentNode) indicator.remove();
+        if (message.parentNode) message.remove();
+      }, 2000);
+      
+      // Log success
+      console.log('Scroll command executed');
+    } catch (error) {
+      console.error('Error scrolling to position:', error);
+    }
+  }
+  
+  // Listen for font size and position change messages
   window.addEventListener('message', function(event) {
-    console.log('Message received in teleprompter-font.js:', event.data);
+    console.log('===== [TELEPROMPTER SCRIPT] Message received in teleprompter-font.js:', event.data);
+    console.log('===== [TELEPROMPTER SCRIPT] Message origin:', event.origin);
     
-    // Handle SET_FONT_SIZE message type
-    if (event.data && event.data.type === 'SET_FONT_SIZE') {
-      const fontSize = event.data.fontSize;
-      console.log('Changing font size to', fontSize, 'px');
-      setFontSize(fontSize);
+    if (!event.data || typeof event.data !== 'object') {
+      console.warn('Received invalid message format:', event.data);
+      return;
+    }
+    
+    // Handle message types
+    switch (event.data.type) {
+      case 'SET_FONT_SIZE':
+        const fontSize = event.data.fontSize;
+        console.log('Changing font size to', fontSize, 'px');
+        setFontSize(fontSize);
+        break;
+        
+      case 'SCROLL_TO_POSITION':
+        const position = event.data.position;
+        console.log('Received scroll position command:', position);
+        scrollToPosition(position);
+        break;
+        
+      default:
+        console.log('Unknown message type:', event.data.type);
     }
   });
   
@@ -109,9 +193,10 @@
     setFontSize(24);
   }
   
-  // Expose global function to set font size
+  // Expose global functions
   window.setTeleprompterFontSize = setFontSize;
+  window.teleprompterScrollTo = scrollToPosition;
 
   // Debug logger to track changes
-  console.log('Teleprompter font adjustment script fully initialized');
+  console.log('Teleprompter font adjustment script fully initialized with scrolling support');
 })();

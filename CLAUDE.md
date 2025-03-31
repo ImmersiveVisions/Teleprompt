@@ -1,5 +1,8 @@
 # Claude Code Guidelines for Teleprompter App
 
+## Important Commit References
+- `f3387d4` - Fixed ViewerPage variable reference ordering issue (3/30/2025)
+
 ## Build Commands
 - `npm install` - Install dependencies
 - `npm run build` - Build the application

@@ -82,6 +82,23 @@ function handleMessage(message, sender) {
         console.error('Error preprocessing message data:', preprocessErr);
       }
       
+      // Validate that we have proper data before forwarding
+      if (!message.data) {
+        console.error('SEARCH_POSITION message missing data, not forwarding');
+        return;
+      }
+      
+      // Ensure position is present
+      if (typeof message.data === 'object' && message.data.position === undefined) {
+        console.log('SEARCH_POSITION data missing position property, adding default');
+        message.data.position = 0;
+      }
+      
+      console.log('Forwarding SEARCH_POSITION message to clients:', 
+        typeof message.data === 'object' 
+          ? `position: ${message.data.position}, text: ${message.data.text ? message.data.text.substring(0, 20) + '...' : 'none'}`
+          : message.data);
+      
       // Forward search position to all clients without storing in shared state
       const searchMessage = JSON.stringify({
         type: 'SEARCH_POSITION',
@@ -89,6 +106,7 @@ function handleMessage(message, sender) {
       });
       
       // Forward to all clients
+      console.log(`Forwarding to ${connections.length} connected clients`);
       connections.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(searchMessage);
@@ -138,8 +156,10 @@ function handleMessage(message, sender) {
           
           // Handle both simple number and complex object formats
           if (typeof message.value === 'object' && message.value !== null) {
-            // Only update the position for compatibility, don't store scrollData
+            // Only update the position value, don't store scrollData in shared state
+            // Complex scrollData should use SEARCH_POSITION message type instead
             sharedState.currentPosition = message.value.position;
+            console.log('Received complex position data, updating currentPosition only');
           } else {
             // Simple numeric value
             sharedState.currentPosition = message.value;
@@ -211,7 +231,7 @@ function broadcastState() {
     isPlaying: !!sharedState.isPlaying,
     direction: sharedState.direction || 'forward',
     fontSize: sharedState.fontSize || 24
-    // scrollData removed - now sent via dedicated SEARCH_POSITION messages
+    // No scrollData - that's handled by explicit SEARCH_POSITION messages now
   };
   
   // Broadcast state to all clients
