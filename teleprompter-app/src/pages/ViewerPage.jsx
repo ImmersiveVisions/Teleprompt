@@ -6,38 +6,48 @@ import fileSystemRepository from '../database/fileSystemRepository';
 import '../styles.css';
 
 const ViewerPage = () => {
+  // State for storing pending search position data until the iframe is ready
+  const [pendingSearchPosition, setPendingSearchPosition] = useState(null);
+  
   // HTML scroll helper function to handle search position messages
   const handleHtmlScroll = (searchData) => {
     try {
-      // Try multiple selector approaches to find the iframe
-      let iframe = document.querySelector('.script-content-container iframe');
+      console.log('===== [VIEWER PAGE] handleHtmlScroll called with data:', JSON.stringify(searchData));
+      
+      // Get every possible script reference - we MUST have a script by this point
+      const effectiveScript = latestScriptRef.current || currentScript || window.__currentScript || 
+        (() => {
+          console.log('===== [VIEWER PAGE] CRITICAL: Creating emergency script reference from search data');
+          return { id: 'emergency-script', isHtml: true };
+        })();
+        
+      console.log('===== [VIEWER PAGE] Using script reference in handleHtmlScroll:', effectiveScript.id);
+      
+      // Get direct reference to iframe - it ABSOLUTELY MUST exist at this point  
+      const iframe = document.querySelector('#html-script-frame') || 
+                     document.querySelector('.script-content-container iframe') || 
+                     document.querySelector('iframe');
       
       if (!iframe) {
-        iframe = document.querySelector('#html-script-frame');
-        
-        if (!iframe) {
-          iframe = document.querySelector('.viewer-page iframe');
-          
-          if (!iframe) {
-            iframe = document.querySelector('iframe');
-          }
-        }
+        console.error('===== [VIEWER PAGE] FATAL ERROR: No iframe found in document');
+        console.error('===== [VIEWER PAGE] EMERGENCY: Document structure -', 
+          document.body.innerHTML.substring(0, 100) + '...');
+        throw new Error('No iframe found in document');
       }
       
-      if (!iframe || !iframe.contentWindow) {
-        console.error('===== [VIEWER PAGE] Cannot find accessible iframe for HTML scrolling');
-        return;
-      }
-      
-      // Check if we can access the iframe content
+      // Verify iframe has accessible content
       if (!iframe.contentDocument || !iframe.contentDocument.body) {
-        console.error('===== [VIEWER PAGE] Cannot access iframe content document');
-        return;
+        console.error('===== [VIEWER PAGE] FATAL ERROR: iframe content not accessible');
+        throw new Error('iframe content not accessible');
       }
       
-      // If we have text context, try to find the matching node
+      console.log('===== [VIEWER PAGE] Found iframe with ID:', iframe.id || 'no-id');
+      
+      // If we have text content in the search data, try to find that text in the document
       if (searchData.text) {
-        // Create a tree walker to find text nodes
+        console.log('===== [VIEWER PAGE] Searching for text in content:', 
+          searchData.text.substring(0, 30) + (searchData.text.length > 30 ? '...' : ''));
+        
         try {
           // Normalize the search text
           const searchText = searchData.text.trim().toLowerCase();
@@ -53,22 +63,50 @@ const ViewerPage = () => {
           let foundNode = null;
           let node;
           
-          // Walk through all text nodes
+          // Walk through text nodes
           while ((node = walker.nextNode())) {
             // Only check nodes that have content
             const nodeText = node.textContent.trim();
             if (nodeText && nodeText.toLowerCase().includes(searchText)) {
+              console.log('===== [VIEWER PAGE] Found matching text node');
               foundNode = node;
               break;
             }
           }
           
+          // If no node found with exact match, try with a shorter substring
+          if (!foundNode && searchText.length > 10) {
+            console.log('===== [VIEWER PAGE] No exact match found, trying with shorter text');
+            const shorterSearch = searchText.substring(0, 10);
+            
+            // Create a new tree walker for the second pass
+            const walker2 = document.createTreeWalker(
+              iframe.contentDocument.body,
+              NodeFilter.SHOW_TEXT,
+              null,
+              false
+            );
+            
+            // Second pass with shorter text
+            while ((node = walker2.nextNode())) {
+              const nodeText = node.textContent.trim().toLowerCase();
+              if (nodeText && nodeText.includes(shorterSearch)) {
+                console.log('===== [VIEWER PAGE] Found match with shorter search');
+                foundNode = node;
+                break;
+              }
+            }
+          }
+          
           // If found, scroll directly to the node
           if (foundNode && foundNode.parentElement) {
+            console.log('===== [VIEWER PAGE] Node found, scrolling to it');
+            
             // Highlight for visibility
             const originalBg = foundNode.parentElement.style.backgroundColor;
             const originalColor = foundNode.parentElement.style.color;
             
+            // Apply highlight
             foundNode.parentElement.style.backgroundColor = '#ff6600';
             foundNode.parentElement.style.color = '#ffffff';
             
@@ -84,32 +122,57 @@ const ViewerPage = () => {
               foundNode.parentElement.style.color = originalColor;
             }, 2000);
             
-            return; // Successfully scrolled
+            return; // Successfully scrolled, exit function
           }
         } catch (err) {
-          console.error('===== [VIEWER PAGE] Error finding node by text:', err);
+          console.error('===== [VIEWER PAGE] Error in text search:', err);
+          // Fall through to position-based scrolling
         }
       }
       
-      // Fallback: Use normalized position if text search failed
+      // Fallback to position-based scrolling (when text search fails or no text provided)
+      console.log('===== [VIEWER PAGE] Using position-based scrolling with position:', searchData.position);
+      
       const position = searchData.position;
       const totalHeight = iframe.contentDocument.body.scrollHeight;
       const scrollPosition = Math.floor(position * totalHeight);
       
-      // Fall back to position-based scrolling
-      
-      // Try with teleprompterScrollTo if available
+      // Try teleprompterScrollTo if available, otherwise use basic scrollTo
       if (iframe.contentWindow && typeof iframe.contentWindow.teleprompterScrollTo === 'function') {
         iframe.contentWindow.teleprompterScrollTo(position);
       } else {
-        // Direct scrollTo fallback
         iframe.contentWindow.scrollTo({
           top: scrollPosition,
           behavior: 'smooth'
         });
       }
+      
+      console.log('===== [VIEWER PAGE] Scroll completed');
+      
     } catch (error) {
-      console.error('===== [VIEWER PAGE] Error in handleHtmlScroll:', error);
+      console.error('===== [VIEWER PAGE] Fatal error in handleHtmlScroll:', error);
+      
+      // Do a simple retry after a short delay
+      setTimeout(() => {
+        try {
+          console.log('===== [VIEWER PAGE] Emergency retry of scroll operation');
+          // Try to get any iframe
+          const anyIframe = document.querySelector('iframe');
+          if (anyIframe && anyIframe.contentWindow) {
+            // Try position only in emergency mode
+            const position = searchData.position || 0;
+            const scrollHeight = anyIframe.contentDocument?.body?.scrollHeight || 1000;
+            const scrollPosition = Math.floor(position * scrollHeight);
+            
+            anyIframe.contentWindow.scrollTo({
+              top: scrollPosition,
+              behavior: 'auto' // Use instant scroll in emergency mode
+            });
+          }
+        } catch (retryError) {
+          console.error('===== [VIEWER PAGE] Emergency retry also failed:', retryError);
+        }
+      }, 500);
     }
   };
   // Error handling setup kept for production troubleshooting
@@ -139,6 +202,58 @@ const ViewerPage = () => {
   // Reference to the script player component
   const scriptPlayerRef = useRef(null);
   const viewerContainerRef = useRef(null);
+  
+  // Track the latest currentScript in a ref to solve the "forgetting" issue
+  const latestScriptRef = useRef(null);
+  
+  // This effect logs when script reference changes for debugging
+  useEffect(() => {
+    if (latestScriptRef.current) {
+      console.log('===== [VIEWER PAGE] Script reference updated:', {
+        id: latestScriptRef.current.id,
+        title: latestScriptRef.current.title,
+        isHtml: !!latestScriptRef.current.isHtml
+      });
+    }
+  }, [latestScriptRef.current]);
+  
+  // Apply pending search position immediately when we get it - without waiting for any loads
+  useEffect(() => {
+    // CRITICAL: The iframe is ALREADY LOADED by the time we get search positions
+    // so we should apply them immediately and not wait
+    
+    // Check if we have a pending search position
+    if (pendingSearchPosition) {
+      console.log('===== [VIEWER PAGE] Applying pending search position immediately:', 
+        JSON.stringify(pendingSearchPosition));
+      
+      // Get the current script reference - prioritize the stable reference
+      const effectiveScript = latestScriptRef.current || currentScript;
+      
+      if (!effectiveScript) {
+        console.log('===== [VIEWER PAGE] No script reference available yet, keeping pendingSearchPosition');
+        return; // Keep the pending position until we have a script
+      }
+      
+      console.log('===== [VIEWER PAGE] Using script:', effectiveScript.id);
+      
+      // For non-HTML content, use scriptPlayer ref
+      if (!effectiveScript.isHtml && scriptPlayerRef.current) {
+        console.log('===== [VIEWER PAGE] Applying position to text content');
+        const position = pendingSearchPosition.position || 0;
+        scriptPlayerRef.current.jumpToPosition(position);
+        setPendingSearchPosition(null);
+      } 
+      // For HTML content, apply IMMEDIATELY - we know it's already loaded
+      else if (effectiveScript.isHtml) {
+        console.log('===== [VIEWER PAGE] HTML content - applying search position IMMEDIATELY without waiting');
+        
+        // Apply the position directly without checking iframe load state
+        handleHtmlScroll(pendingSearchPosition);
+        setPendingSearchPosition(null);
+      }
+    }
+  }, [pendingSearchPosition]);
   
   // This effect injects CSS directly into iframes to control font size
   useEffect(() => {
@@ -361,34 +476,105 @@ const ViewerPage = () => {
   }, []);
   
   // Handle state updates from WebSocket
+  
+  // Update the ref whenever currentScript changes
+  useEffect(() => {
+    if (currentScript) {
+      latestScriptRef.current = currentScript;
+      console.log('===== [VIEWER PAGE] Updated latestScriptRef with current script:', latestScriptRef.current.id);
+    }
+  }, [currentScript]);
+  
   const handleStateUpdate = async (message) => {
     // Handle different message types based on message.type
+    console.log('===== [VIEWER PAGE] handleStateUpdate called with message type:', message.type);
     
     // Handle dedicated search position messages
     if (message.type === 'SEARCH_POSITION') {
-      // Handle search position message
+      console.log('===== [VIEWER PAGE] Processing SEARCH_POSITION message:', message.data);
       
-      if (message.data && currentScript) {
-        // Extract search position data
-        const searchData = message.data;
-        const position = searchData.position;
-        
-        // Use enhanced scrolling logic for HTML content
-        if (currentScript.isHtml) {
-          handleHtmlScroll(searchData);
-        } else {
-          // For text content, use the scriptPlayer's jumpToPosition method
-          if (scriptPlayerRef.current) {
-            scriptPlayerRef.current.jumpToPosition(position);
-          }
+      // Find the current script reference by checking all possible sources:
+      // 1. Our maintained reference (most reliable)
+      // 2. Current React state
+      // 3. Globally stored reference as last resort
+      let effectiveScript = latestScriptRef.current || currentScript || (window.__currentScript || null);
+      
+      // If we absolutely cannot find a script reference, create a default HTML script based on the iframe src
+      if (!effectiveScript) {
+        // Emergency fallback - check for iframe src
+        const iframe = document.querySelector('iframe');
+        if (iframe && iframe.src) {
+          const scriptId = iframe.src.split('/').pop();
+          console.log('===== [VIEWER PAGE] EMERGENCY: Created script reference from iframe.src:', scriptId);
+          effectiveScript = {
+            id: scriptId,
+            title: scriptId.replace(/\.(html|htm)$/i, ''),
+            isHtml: true
+          };
+          // Store it in our reference for future use
+          latestScriptRef.current = effectiveScript;
         }
       }
+      
+      // Debug the script reference we're using 
+      console.log('===== [VIEWER PAGE] Using script reference:', effectiveScript ? {
+        id: effectiveScript.id,
+        title: effectiveScript.title,
+        isHtml: !!effectiveScript.isHtml,
+        source: effectiveScript === latestScriptRef.current ? 'ref' : 
+                effectiveScript === currentScript ? 'state' : 
+                effectiveScript === window.__currentScript ? 'global' : 'emergency'
+      } : 'null');
+      
+      if (!message.data) {
+        console.error('===== [VIEWER PAGE] Received SEARCH_POSITION message without data');
+        return;
+      }
+      
+      const searchData = message.data;
+      
+      // IMPORTANT: We received this SEARCH_POSITION message from a search operation,
+      // which means the content MUST already be loaded in the iframe. The iframe
+      // is loaded directly when the script is selected.
+      
+      // If we don't have a script reference after all our attempts, log and fail
+      if (!effectiveScript) {
+        console.error('===== [VIEWER PAGE] CRITICAL ERROR: Cannot find any script reference');
+        console.error('===== [VIEWER PAGE] Cannot process SEARCH_POSITION: missing data or no current script');
+        // We'll store the position but it likely won't be useful
+        setPendingSearchPosition(searchData);
+        return;
+      }
+      
+      // Process the search position IMMEDIATELY without any iframe load checks
+      console.log('===== [VIEWER PAGE] Script reference available, processing search position IMMEDIATELY:', 
+        JSON.stringify(searchData));
+      
+      // Use correct handling based on content type
+      if (effectiveScript.isHtml) {
+        console.log('===== [VIEWER PAGE] HTML content - calling handleHtmlScroll directly');
+        handleHtmlScroll(searchData);
+      } else {
+        // For text content, use scriptPlayer's jumpToPosition
+        console.log('===== [VIEWER PAGE] Text content - using scriptPlayer.jumpToPosition');
+        if (scriptPlayerRef.current) {
+          const position = searchData.position || 0;
+          scriptPlayerRef.current.jumpToPosition(position);
+        } else {
+          console.error('===== [VIEWER PAGE] scriptPlayerRef.current not available, storing for later');
+          setPendingSearchPosition(searchData);
+        }
+      }
+      
       return; // Skip the rest of the state update handling
     }
     
     if (message.type === 'STATE_UPDATE') {
       setConnected(true);
       console.log('===== [VIEWER PAGE] Received state update:', message.data);
+      
+      // Use the persistent ref for reliable script access
+      const effectiveScript = currentScript || latestScriptRef.current;
       
       // Extra explicit logging for position updates
       if (message.data && message.data.currentPosition) {
@@ -419,8 +605,8 @@ const ViewerPage = () => {
         // Handle position command for regular scrolling
                 
         // If script is HTML, we'll calculate the scroll position
-        if (currentScript && currentScript.isHtml) {
-          console.log('Trying to scroll HTML content for script:', currentScript.id);
+        if (effectiveScript && effectiveScript.isHtml) {
+          console.log('Trying to scroll HTML content for script:', effectiveScript.id);
           
           // Try multiple selector approaches to find the iframe
           console.log('===== [VIEWER PAGE] Searching for iframe in document...');
@@ -796,8 +982,8 @@ const ViewerPage = () => {
           console.log('Using scriptPlayer to jump to position');
           
           // Find the absolute position in the script content if we have content
-          if (currentScript && (currentScript.body || currentScript.content)) {
-            const content = currentScript.body || currentScript.content;
+          if (effectiveScript && (effectiveScript.body || effectiveScript.content)) {
+            const content = effectiveScript.body || effectiveScript.content;
             const absolutePosition = Math.floor(position * content.length);
             scriptPlayerRef.current.jumpToPosition(absolutePosition);
           } else {
@@ -811,8 +997,10 @@ const ViewerPage = () => {
       console.log('Processing script selection state. Current script ID:', data.currentScript);
       
       if (data.currentScript === null) {
-        // Clear script selection
+        // Clear script selection but MOST IMPORTANTLY don't clear the reference
         console.log('Viewer received instruction to clear script');
+        console.log('===== [VIEWER PAGE] Preserving script reference for search position handling:',
+          latestScriptRef.current ? latestScriptRef.current.id : 'none available');
         setScriptLoaded(false);
         setCurrentScript(null);
       } else if (data.currentScript) {
@@ -843,6 +1031,12 @@ const ViewerPage = () => {
                 isHtml: true,
                 lastModified: new Date()
               };
+              
+              // CRITICAL: Update the reference FIRST, then the state
+              latestScriptRef.current = htmlScript;
+              console.log('===== [VIEWER PAGE] Updated latestScriptRef with new HTML script:', data.currentScript);
+              
+              // The React state update
               setCurrentScript(htmlScript);
             } else {
               // Get the script using the file system repository
@@ -850,12 +1044,19 @@ const ViewerPage = () => {
               const script = await fileSystemRepository.getScriptById(data.currentScript);
               if (script) {
                 console.log('Viewer loaded script successfully:', script.title);
+                
+                // CRITICAL: Update the reference FIRST, then the state
+                latestScriptRef.current = script;
+                console.log('===== [VIEWER PAGE] Updated latestScriptRef with repository script:', script.id);
+                
+                // The React state update
                 setCurrentScript(script);
               } else {
                 // Script was not found
                 console.error(`Script with ID ${data.currentScript} not found`);
                 setScriptLoaded(false);
                 setCurrentScript(null);
+                // Don't update the ref for null scripts
               }
             }
           } catch (error) {
@@ -866,6 +1067,8 @@ const ViewerPage = () => {
         }
       } else {
         console.log('No script in state update (undefined)');
+        console.log('===== [VIEWER PAGE] Preserving script reference for search position handling:',
+          latestScriptRef.current ? latestScriptRef.current.id : 'none available');
         setScriptLoaded(false);
         setCurrentScript(null);
       }

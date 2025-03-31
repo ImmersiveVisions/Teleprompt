@@ -233,6 +233,7 @@ if (typeof window !== 'undefined') {
       getWebSocketStatus
     };
     
+    
     // We'll let the App component initialize the connection
   } else {
     console.log('websocketService already exists, not reinitializing');

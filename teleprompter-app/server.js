@@ -30,9 +30,50 @@ app.use(express.static(path.join(__dirname, 'build')));
 // Serve files from the public directory at the root path
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Add a diagnostic endpoint to check for server health
+// Add a diagnostic endpoint to check for server health and get server IP
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'running', timestamp: new Date() });
+  // Get local IP addresses
+  const networkInterfaces = os.networkInterfaces();
+  const addresses = [];
+  let primaryIp = 'localhost';
+  
+  // First, collect all non-internal IPv4 addresses
+  for (const name of Object.keys(networkInterfaces)) {
+    for (const net of networkInterfaces[name]) {
+      // Skip internal and non-IPv4 addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+        
+        // Prefer non-localhost addresses over localhost
+        if (net.address !== '127.0.0.1' && primaryIp === 'localhost') {
+          primaryIp = net.address;
+        }
+        
+        // Prefer addresses that start with 192.168 (common home network)
+        if (net.address.startsWith('192.168.')) {
+          primaryIp = net.address;
+        }
+      }
+    }
+  }
+  
+  // If client is coming from a specific IP and it's different from localhost,
+  // use that as a hint for the preferred interface
+  const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1') {
+    console.log(`Client request from IP: ${clientIp}`);
+  }
+  
+  console.log('Status API - Found IP addresses:', addresses);
+  console.log('Status API - Selected primary IP:', primaryIp);
+  
+  res.json({ 
+    status: 'running', 
+    timestamp: new Date(),
+    ipAddresses: addresses,
+    primaryIp: primaryIp,
+    clientIp: clientIp
+  });
 });
 
 // Scripts directory - relative to the application root
@@ -227,6 +268,16 @@ const server = http.createServer(app);
 console.log('Initializing WebSocket server...');
 const wss = serverUtils.initWebSocketServer(server);
 console.log('WebSocket server initialized');
+
+// Generate QR codes before starting the server
+console.log('Generating QR codes...');
+const { execSync } = require('child_process');
+try {
+  execSync('node generate-qrcodes.js', { stdio: 'inherit' });
+  console.log('QR codes generated successfully');
+} catch (error) {
+  console.error('Error generating QR codes:', error.message);
+}
 
 // Start the server
 server.listen(PORT, '0.0.0.0', () => {

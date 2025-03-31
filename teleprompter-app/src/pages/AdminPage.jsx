@@ -6,7 +6,6 @@ import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer';
-import QRCodeGenerator from '../components/QRCodeGenerator';
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import SearchModal from '../components/SearchModal';
 import '../styles.css';
@@ -22,6 +21,12 @@ const AdminPage = () => {
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
   // Directory handling removed for web version
   
+  // QR code URL state
+  const [qrUrls, setQrUrls] = useState({
+    viewer: null,
+    remote: null
+  });
+  
   // Teleprompter control states
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -30,9 +35,10 @@ const AdminPage = () => {
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
   
-  // Load scripts on component mount
+  // Load scripts and QR code URLs on component mount
   useEffect(() => {
     loadScripts();
+    loadQrCodeUrls();
     
     // Register for state updates
     const unregisterHandler = registerMessageHandler(handleStateUpdate);
@@ -41,6 +47,27 @@ const AdminPage = () => {
       unregisterHandler();
     };
   }, []);
+  
+  // Load QR code URLs from the server
+  const loadQrCodeUrls = async () => {
+    try {
+      // Fetch from API status endpoint to get IP address
+      const response = await fetch('/api/status');
+      const data = await response.json();
+      
+      if (data && data.primaryIp) {
+        const ip = data.primaryIp;
+        const port = window.location.port ? `:${window.location.port}` : '';
+        
+        setQrUrls({
+          viewer: `${ip}${port}/viewer`,
+          remote: `${ip}${port}/remote`
+        });
+      }
+    } catch (error) {
+      console.error('Error loading QR code URLs:', error);
+    }
+  };
   
   // Directory selection disabled for web version
   
@@ -1029,16 +1056,31 @@ const AdminPage = () => {
             </div>
             
             <div className="qr-code-panel">
-              <h4>QR Codes for Quick Access</h4>
+              <h4>Network Access</h4>
+              <p className="qr-code-instruction">Scan these QR codes with your mobile device:</p>
               <div className="qr-codes">
                 <div className="qr-code-item">
-                  <h5>Viewer Mode</h5>
-                  <QRCodeGenerator path="/viewer" />
+                  <h5>Viewer Mode <span className="qr-code-label">(Teleprompter Display)</span></h5>
+                  <div className="qr-code-container">
+                    <div className="qr-code">
+                      <img src="/qr/qr-viewer.png" alt="Viewer QR Code" width="160" height="160" />
+                    </div>
+                    <div className="qr-url">
+                      {qrUrls.viewer || 'Loading URL...'}
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="qr-code-item">
-                  <h5>Remote Control</h5>
-                  <QRCodeGenerator path="/remote" />
+                  <h5>Remote Control <span className="qr-code-label">(Control Panel)</span></h5>
+                  <div className="qr-code-container">
+                    <div className="qr-code">
+                      <img src="/qr/qr-remote.png" alt="Remote QR Code" width="160" height="160" />
+                    </div>
+                    <div className="qr-url">
+                      {qrUrls.remote || 'Loading URL...'}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1048,7 +1090,7 @@ const AdminPage = () => {
             <h3>Help</h3>
             <ul className="help-list">
               <li>
-                <strong>QR Codes:</strong> Scan these with mobile devices for quick access to Viewer and Remote modes.
+                <strong>Network Access:</strong> Use the QR codes to connect other devices to your teleprompter over your local network. The Viewer displays the script, while the Remote controls playback.
               </li>
               <li>
                 <strong>Bluetooth Remote:</strong> Connect a compatible Bluetooth presentation remote to control the teleprompter.

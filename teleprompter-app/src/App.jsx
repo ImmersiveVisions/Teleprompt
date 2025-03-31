@@ -15,6 +15,31 @@ const App = () => {
   // Initialize services
   useEffect(() => {
     try {
+      // Fetch server status to get IP address
+      const fetchServerStatus = async () => {
+        try {
+          const response = await fetch('/api/status');
+          const data = await response.json();
+          
+          // Store the server's IP address globally so QR code generator can use it
+          if (data.primaryIp) {
+            window.serverIpAddress = data.primaryIp;
+            console.log('Server IP address set:', window.serverIpAddress);
+            
+            // Dispatch a custom event to notify components that IP is available
+            const ipEvent = new CustomEvent('serverIpAvailable', { 
+              detail: { ip: data.primaryIp } 
+            });
+            window.dispatchEvent(ipEvent);
+            
+            // Also expose a function to directly get the IP
+            window.getServerIp = () => data.primaryIp;
+          }
+        } catch (error) {
+          console.error('Error fetching server status:', error);
+        }
+      };
+      
       // Initialize file system repository and services
       const initServices = async () => {
         try {
@@ -31,8 +56,11 @@ const App = () => {
         }
       };
       
-      // First init the file system repository
-      initServices().then(() => {
+      // First fetch server status to get IP
+      fetchServerStatus().then(() => {
+        // Then init the file system repository
+        return initServices();
+      }).then(() => {
         // Then initialize WebSocket and Bluetooth
         console.log('Initializing app services...');
       
