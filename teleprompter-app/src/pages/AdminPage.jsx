@@ -20,9 +20,7 @@ const AdminPage = () => {
   // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
-  const [currentDirectory, setCurrentDirectory] = useState(() => {
-    return fileSystemRepository.getScriptsDirectory() || './scripts';
-  });
+  // Directory handling removed for web version
   
   // Teleprompter control states
   const [isPlaying, setIsPlaying] = useState(false);
@@ -44,38 +42,14 @@ const AdminPage = () => {
     };
   }, []);
   
-  // Function to handle directory selection
-  const handleSelectDirectory = async () => {
-    try {
-      if (!window.electron) {
-        console.error('Electron API not available - cannot select directory');
-        alert('Directory selection is only available in the desktop app.');
-        return;
-      }
-      
-      const selectedPath = await window.electron.selectDirectory();
-      if (selectedPath) {
-        console.log(`Selected new scripts directory: ${selectedPath}`);
-        
-        // Update the repository with the new directory
-        fileSystemRepository.setScriptsDirectory(selectedPath);
-        setCurrentDirectory(selectedPath);
-        
-        // Reload scripts from the new directory
-        await loadScripts();
-      }
-    } catch (error) {
-      console.error('Error selecting directory:', error);
-      alert('Failed to select directory: ' + error.message);
-    }
-  };
+  // Directory selection disabled for web version
   
   // Load all scripts from the scripts directory
   const loadScripts = async () => {
     try {
       // Load the scripts using the repository
       const allScripts = await fileSystemRepository.getAllScripts();
-      console.log(`AdminPage: loaded ${allScripts.length} scripts from directory ${currentDirectory}`);
+      console.log(`AdminPage: loaded ${allScripts.length} scripts`);
       setScripts(allScripts);
       
       // If the currently selected script no longer exists, clear the selection
@@ -984,10 +958,6 @@ const AdminPage = () => {
                 </div>
                 {selectedScript ? (
                   <>
-                    {/* Debug info - remove in production */}
-                    <div style={{ color: 'white', fontSize: '10px', padding: '5px', backgroundColor: '#333', marginBottom: '5px' }}>
-                      Script ID: {selectedScript.id} (type: {typeof selectedScript.id})
-                    </div>
                     <ScriptPlayer 
                       ref={scriptPlayerRef}
                       key={`preview-${selectedScript.id}`} 
@@ -1019,11 +989,9 @@ const AdminPage = () => {
                 className="admin-script-dropdown"
                 value={selectedScriptId || ''}
                 onChange={(e) => {
-                  console.log('Dropdown selection changed to:', e.target.value, 'type:', typeof e.target.value);
                   // Convert to number if it looks like a number
                   const val = e.target.value;
                   const numVal = !isNaN(Number(val)) && val !== 'none' ? Number(val) : val;
-                  console.log('Converted value for script selection:', numVal, 'type:', typeof numVal);
                   handleScriptSelect(numVal);
                 }}
               >
@@ -1031,24 +999,12 @@ const AdminPage = () => {
                 <option value="none">No script (clear selection)</option>
                 {scripts.map(script => (
                   <option key={script.id} value={script.id}>
-                    {script.title} (ID: {script.id})
+                    {script.title}
                   </option>
                 ))}
               </select>
             </div>
             
-            <div className="directory-selector">
-              <h4>Scripts Directory</h4>
-              <div className="current-directory">
-                Current: <span className="directory-path">{currentDirectory}</span>
-              </div>
-              <button 
-                onClick={handleSelectDirectory} 
-                className="select-directory-btn"
-              >
-                Change Scripts Directory
-              </button>
-            </div>
           </div>
           
           <div className="connection-panel">
@@ -1093,9 +1049,6 @@ const AdminPage = () => {
             <ul className="help-list">
               <li>
                 <strong>QR Codes:</strong> Scan these with mobile devices for quick access to Viewer and Remote modes.
-              </li>
-              <li>
-                {/* Removed chapter help text */}
               </li>
               <li>
                 <strong>Bluetooth Remote:</strong> Connect a compatible Bluetooth presentation remote to control the teleprompter.
