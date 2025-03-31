@@ -38,37 +38,143 @@ const ScriptPlayer = ({
 
   // Apply font size to iframe content when it changes
   useEffect(() => {
+    console.log(`FONT SIZE CHANGED to: ${fontSize}px`);
+    
     // Only proceed if we have a script
-    if (!script) return;
+    if (!script) {
+      console.log('No script available, cannot apply font size');
+      return;
+    }
     
     // Try to find the iframe element directly
     const container = containerRef.current;
-    if (!container) return;
-    
-    const iframe = container.querySelector('iframe');
-    if (!iframe) return;
-    
-    // Try direct style setting first (may fail due to cross-origin issues)
-    try {
-      if (iframe.contentDocument && iframe.contentDocument.body) {
-        // Set font size on body element
-        iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
-        console.log(`Updated font size to ${fontSize}px in iframe content (direct method)`);
-      }
-    } catch (e) {
-      console.warn('Could not directly set font size on iframe content:', e);
+    if (!container) {
+      console.log('No container ref available, cannot apply font size');
+      return;
     }
     
-    // Always attempt to send a postMessage as a fallback
-    try {
-      // Send a message to the iframe content to update font size
-      iframe.contentWindow.postMessage({
-        type: 'SET_FONT_SIZE',
-        fontSize: fontSize
-      }, '*');
-      console.log(`Sent postMessage to set font size to ${fontSize}px`);
-    } catch (e) {
-      console.error('Error sending postMessage to iframe:', e);
+    const iframe = container.querySelector('iframe');
+    if (!iframe) {
+      console.log('No iframe found in container, cannot apply font size');
+      return;
+    }
+    
+    console.log('Found iframe, attempting to apply font size:', fontSize);
+    
+    // Define our approaches to updating the font size
+    const updateFontSizeMethods = [
+      // Method 1: Use the exposed global function if available
+      function useGlobalFunction() {
+        try {
+          if (iframe.contentWindow && typeof iframe.contentWindow.setTeleprompterFontSize === 'function') {
+            console.log('Using exposed global function to set font size');
+            iframe.contentWindow.setTeleprompterFontSize(fontSize);
+            return true;
+          }
+        } catch (e) {
+          console.warn('Error using global function:', e);
+        }
+        return false;
+      },
+      
+      // Method 2: Direct DOM manipulation if same-origin
+      function useDomManipulation() {
+        try {
+          if (iframe.contentDocument && iframe.contentDocument.body) {
+            console.log('Using direct DOM manipulation to set font size');
+            
+            // Set directly on body
+            iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+            
+            // Update or create style element
+            const styleId = 'teleprompter-font-size-style';
+            let styleEl = iframe.contentDocument.getElementById(styleId);
+            
+            if (!styleEl) {
+              styleEl = iframe.contentDocument.createElement('style');
+              styleEl.id = styleId;
+              iframe.contentDocument.head.appendChild(styleEl);
+            }
+            
+            // More specific CSS selectors for better specificity
+            styleEl.textContent = `
+              /* Base styles */
+              body, html {
+                color: white !important;
+                background-color: black !important;
+                font-size: ${fontSize}px !important;
+                font-family: 'Arial', sans-serif !important;
+              }
+              
+              /* Apply font size to all text elements */
+              body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
+                font-size: ${fontSize}px !important;
+              }
+              
+              /* Ensure specific selectors have the font size */
+              p[style*="padding-left"] {
+                font-size: ${fontSize}px !important;
+              }
+            `;
+            
+            console.log('Successfully set font size via DOM manipulation:', fontSize);
+            return true;
+          }
+        } catch (e) {
+          console.warn('Error with DOM manipulation:', e);
+        }
+        return false;
+      },
+      
+      // Method 3: postMessage API (works cross-origin)
+      function usePostMessage() {
+        try {
+          console.log('Using postMessage to set font size');
+          iframe.contentWindow.postMessage({
+            type: 'SET_FONT_SIZE',
+            fontSize: fontSize
+          }, '*');
+          return true;
+        } catch (e) {
+          console.error('Error with postMessage:', e);
+        }
+        return false;
+      },
+      
+      // Method 4: URL parameter (requires reload)
+      function useUrlParameter() {
+        try {
+          console.log('Using URL parameter to set font size (last resort)');
+          // Get current src
+          const currentSrc = iframe.src;
+          // Parse current URL
+          const url = new URL(currentSrc, window.location.origin);
+          // Set/update font size parameter
+          url.searchParams.set('fontSize', fontSize);
+          // Only update if the URL actually changed
+          if (url.toString() !== currentSrc) {
+            iframe.src = url.toString();
+            return true;
+          }
+        } catch (e) {
+          console.error('Error with URL parameter:', e);
+        }
+        return false;
+      }
+    ];
+    
+    // Try each method in order until one succeeds
+    let methodSucceeded = false;
+    for (const method of updateFontSizeMethods) {
+      methodSucceeded = method();
+      if (methodSucceeded) {
+        console.log('Font size update method succeeded');
+        break;
+      }
+    }
+    
+    if (!methodSucceeded) {
+      console.error('All font size update methods failed');
     }
   }, [fontSize, script]);
 
@@ -516,44 +622,158 @@ const ScriptPlayer = ({
               // Apply font size when iframe loads
               try {
                 const iframe = e.target;
-                if (iframe.contentDocument && iframe.contentDocument.body) {
+                
+                // First, check if teleprompter-font.js is doing its job
+                if (iframe.contentWindow && typeof iframe.contentWindow.setTeleprompterFontSize === 'function') {
+                  console.log('teleprompter-font.js script detected, using the global function');
+                  
+                  // Using the exposed global function from teleprompter-font.js
+                  iframe.contentWindow.setTeleprompterFontSize(fontSize);
+                  
+                  // Add event listener for custom event
+                  iframe.contentDocument.addEventListener('fontSizeChanged', (event) => {
+                    console.log('Received fontSizeChanged event from iframe:', event.detail);
+                  });
+                  
+                  console.log('Successfully initialized font size via teleprompter-font.js');
+                } 
+                // If teleprompter-font.js isn't loaded, fall back to direct manipulation
+                else if (iframe.contentDocument && iframe.contentDocument.body) {
+                  console.log(`teleprompter-font.js not detected, using direct DOM manipulation for font size: ${fontSize}px`);
+                  
+                  // Direct DOM manipulation
+                  // Make text color white by default
+                  iframe.contentDocument.body.style.color = 'white';
+                  iframe.contentDocument.body.style.backgroundColor = 'black';
+                  
                   // Set font size on body element
                   iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
                   
                   // Add a style element to the iframe head for more comprehensive font sizing
                   const style = iframe.contentDocument.createElement('style');
+                  style.id = 'teleprompter-font-size-style';
                   style.textContent = `
-                    body {
+                    /* Base styles */
+                    body, html {
+                      color: white !important;
+                      background-color: black !important;
+                      font-size: ${fontSize}px !important;
+                      font-family: 'Arial', sans-serif !important;
+                    }
+                    
+                    /* Apply font size to all text elements */
+                    body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
                       font-size: ${fontSize}px !important;
                     }
-                    p, div, span, h1, h2, h3, h4, h5, h6 {
+                    
+                    /* Ensure specific selectors have the font size */
+                    p[style*="padding-left"] {
+                      font-size: ${fontSize}px !important;
+                    }
+                    
+                    /* Character names */
+                    p[style*="padding-left: 166pt"], 
+                    p[style*="padding-left: 165pt"], 
+                    p[style*="padding-left: 178pt"],
+                    p[style*="padding-left: 142pt"],
+                    p[style*="padding-left: 40pt"],
+                    p[style*="padding-left: 84pt"],
+                    p[style*="padding-left: 65pt"],
+                    p[style*="padding-left: 77pt"],
+                    p[style*="padding-left: 91pt"],
+                    p[style*="padding-left: 104pt"],
+                    p[style*="padding-left: 83pt"] {
                       font-size: ${fontSize}px !important;
                     }
                   `;
                   iframe.contentDocument.head.appendChild(style);
                   
-                  // Set up a message listener in the iframe for font size changes
-                  iframe.contentWindow.addEventListener('message', (event) => {
+                  // Set up a message listener in the iframe for font size changes 
+                  const messageListener = (event) => {
+                    console.log('Iframe received message:', event.data);
+                    
                     if (event.data && event.data.type === 'SET_FONT_SIZE') {
                       const newSize = event.data.fontSize;
+                      console.log(`Iframe received font size update: ${newSize}px`);
+                      
+                      // Update body font size
                       iframe.contentDocument.body.style.fontSize = `${newSize}px`;
                       
-                      // Update style element
-                      style.textContent = `
-                        body {
-                          font-size: ${newSize}px !important;
-                        }
-                        p, div, span, h1, h2, h3, h4, h5, h6 {
-                          font-size: ${newSize}px !important;
-                        }
-                      `;
+                      // Find and update our style element
+                      const styleEl = iframe.contentDocument.getElementById('teleprompter-font-size-style');
+                      if (styleEl) {
+                        styleEl.textContent = `
+                          /* Base styles */
+                          body, html {
+                            color: white !important;
+                            background-color: black !important;
+                            font-size: ${newSize}px !important;
+                            font-family: 'Arial', sans-serif !important;
+                          }
+                          
+                          /* Apply font size to all text elements */
+                          body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
+                            font-size: ${newSize}px !important;
+                          }
+                          
+                          /* Ensure specific selectors have the font size */
+                          p[style*="padding-left"] {
+                            font-size: ${newSize}px !important;
+                          }
+                          
+                          /* Character names */
+                          p[style*="padding-left: 166pt"], 
+                          p[style*="padding-left: 165pt"], 
+                          p[style*="padding-left: 178pt"],
+                          p[style*="padding-left: 142pt"],
+                          p[style*="padding-left: 40pt"],
+                          p[style*="padding-left: 84pt"],
+                          p[style*="padding-left: 65pt"],
+                          p[style*="padding-left: 77pt"],
+                          p[style*="padding-left: 91pt"],
+                          p[style*="padding-left: 104pt"],
+                          p[style*="padding-left: 83pt"] {
+                            font-size: ${newSize}px !important;
+                          }
+                        `;
+                        console.log('Updated style element with new font size');
+                      }
                     }
-                  });
+                  };
                   
-                  console.log(`Applied font size ${fontSize}px to iframe content with style injection`);
+                  // We need to add the listener to the content window
+                  if (iframe.contentWindow) {
+                    iframe.contentWindow.addEventListener('message', messageListener);
+                    console.log('Added message listener to iframe content window');
+                  } else {
+                    // Fall back to window-level listener
+                    window.addEventListener('message', messageListener);
+                    console.log('Added message listener to window (fallback)');
+                  }
+                  
+                  console.log(`Applied font size ${fontSize}px to iframe content with direct style injection`);
+                } else {
+                  // If we can't access the iframe contentDocument, resort to postMessage
+                  console.log('Cannot access iframe content directly, using postMessage');
+                  iframe.contentWindow.postMessage({
+                    type: 'SET_FONT_SIZE',
+                    fontSize: fontSize
+                  }, '*');
                 }
               } catch (err) {
                 console.error('Error setting font size on iframe:', err);
+                
+                // Last resort - try postMessage even after error
+                try {
+                  const iframe = e.target;
+                  iframe.contentWindow.postMessage({
+                    type: 'SET_FONT_SIZE',
+                    fontSize: fontSize
+                  }, '*');
+                  console.log('Sent postMessage after error (last resort)');
+                } catch (postMsgErr) {
+                  console.error('Even postMessage failed:', postMsgErr);
+                }
               }
             }}
           />
