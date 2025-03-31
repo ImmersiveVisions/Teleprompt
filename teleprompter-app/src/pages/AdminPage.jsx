@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import fileSystemRepository from '../database/fileSystemRepository';
-import { sendControlMessage, registerMessageHandler } from '../services/websocket';
+import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer';
@@ -121,32 +121,234 @@ const AdminPage = () => {
   
   // Handle script search
   const handleScriptSearch = (searchTerm) => {
+    console.log('Search initiated for term:', searchTerm);
     setSearchTerm(searchTerm);
     
     if (!selectedScript || !searchTerm) {
+      console.log('No script or search term provided');
       setSearchResults([]);
       return;
     }
     
-    // Get script content
-    const scriptContent = selectedScript.body || selectedScript.content || '';
-    if (!scriptContent) return;
-    
-    // Simple search implementation
-    const lines = scriptContent.split('\n');
-    const results = [];
-    
-    lines.forEach((line, index) => {
-      if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
-        results.push({ line, index });
-      }
+    console.log('Selected script for search:', {
+      id: selectedScript.id,
+      title: selectedScript.title,
+      isHtml: selectedScript.id && (
+        selectedScript.id.toLowerCase().endsWith('.html') || 
+        selectedScript.id.toLowerCase().endsWith('.htm')
+      )
     });
     
-    setSearchResults(results);
+    // Check if this is an HTML script
+    const isHtmlScript = selectedScript.id && 
+      (selectedScript.id.toLowerCase().endsWith('.html') || 
+       selectedScript.id.toLowerCase().endsWith('.htm'));
     
-    // Open the search modal if we have results
-    if (results.length > 0) {
-      setIsSearchModalOpen(true);
+    if (isHtmlScript) {
+      // For HTML scripts, we need to search the iframe content
+      const iframe = document.querySelector('#html-script-frame');
+      console.log('Search in HTML: iframe element found:', !!iframe);
+      
+      if (!iframe) {
+        console.error('Cannot search - iframe element not found');
+        alert('Cannot search - iframe not found. Please try again after the content has loaded.');
+        return;
+      }
+      
+      // Check if iframe is loaded
+      const isLoaded = iframe.dataset.loaded === 'true';
+      console.log('Is iframe marked as loaded:', isLoaded);
+      
+      if (!isLoaded) {
+        console.warn('Iframe not yet marked as fully loaded. Search might not work correctly.');
+      }
+      
+      if (!iframe.contentDocument) {
+        console.error('Cannot search - iframe contentDocument not accessible (possible cross-origin issue)');
+        alert('Cannot search - cannot access iframe content. This may be due to security restrictions.');
+        return;
+      }
+      
+      if (!iframe.contentDocument.body) {
+        console.error('Cannot search - iframe body not available');
+        alert('Cannot search - iframe content not fully loaded. Please try again in a moment.');
+        return;
+      }
+      
+      console.log('HTML content accessible, searching for:', searchTerm);
+      
+      try {
+        // Get all text nodes from the iframe
+        const textNodes = [];
+        
+        // Function to collect all text nodes from a document
+        const collectTextNodes = (element, nodes = []) => {
+          if (!element) return nodes;
+          
+          // Process all child nodes
+          for (let i = 0; i < element.childNodes.length; i++) {
+            const node = element.childNodes[i];
+            
+            // If it's a text node with content
+            if (node.nodeType === Node.TEXT_NODE) {
+              const text = node.nodeValue.trim();
+              if (text) {
+                nodes.push({
+                  text: text,
+                  node: node,
+                  index: nodes.length
+                });
+              }
+            } 
+            // If it's an element, recurse into its children
+            else if (node.nodeType === Node.ELEMENT_NODE) {
+              // Skip script and style elements
+              if (node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+                collectTextNodes(node, nodes);
+              }
+            }
+          }
+          
+          return nodes;
+        };
+        
+        // Collect all text nodes in the document
+        const allTextNodes = collectTextNodes(iframe.contentDocument.body);
+        console.log(`Collected ${allTextNodes.length} text nodes using recursive approach`);
+        
+        // Try the TreeWalker approach as well
+        try {
+          const walkNodes = [];
+          const walk = document.createTreeWalker(
+            iframe.contentDocument.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+          );
+          
+          let node;
+          let index = 0;
+          while ((node = walk.nextNode())) {
+            const text = node.nodeValue.trim();
+            if (text) {
+              walkNodes.push({
+                text: text,
+                node: node,
+                index: index++
+              });
+            }
+          }
+          
+          console.log(`TreeWalker found ${walkNodes.length} text nodes`);
+          
+          // Use the method that found more nodes
+          if (walkNodes.length > allTextNodes.length) {
+            console.log('Using TreeWalker results as it found more nodes');
+            textNodes.push(...walkNodes);
+          } else {
+            console.log('Using recursive approach results');
+            textNodes.push(...allTextNodes);
+          }
+        } catch (walkError) {
+          console.warn('TreeWalker approach failed, using only recursive results:', walkError);
+          textNodes.push(...allTextNodes);
+        }
+        
+        console.log(`Found ${textNodes.length} text nodes in iframe content`);
+        if (textNodes.length === 0) {
+          console.warn('No text nodes found in iframe - iframe may not be fully loaded yet');
+          
+          // Fallback: If we can't find text nodes in the iframe, check if we have content in the script object
+          const fallbackContent = selectedScript.body || selectedScript.content || '';
+          if (fallbackContent) {
+            console.log('Using fallback: searching in script.body/content instead of iframe');
+            // Simple search implementation for fallback
+            const lines = fallbackContent.split('\n');
+            const fallbackResults = [];
+            
+            lines.forEach((line, index) => {
+              if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+                console.log(`Fallback match found in line ${index}: "${line.substring(0, 30)}..."`);
+                fallbackResults.push({ 
+                  line, 
+                  index,
+                  isHtml: false  // Mark as non-HTML since we're using the text content
+                });
+              }
+            });
+            
+            console.log(`Fallback search complete. Found ${fallbackResults.length} matches`);
+            
+            setSearchResults(fallbackResults);
+            
+            // Open the search modal if we have results
+            if (fallbackResults.length > 0) {
+              setIsSearchModalOpen(true);
+            } else {
+              alert(`No results found for "${searchTerm}" in script content`);
+            }
+            return;
+          } else {
+            console.error('No fallback content available for search');
+            alert('Unable to search: content not accessible. Try again after the script fully loads.');
+            return;
+          }
+        }
+        
+        // Search in text nodes
+        const results = [];
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        
+        textNodes.forEach((item) => {
+          if (item.text.toLowerCase().includes(lowerSearchTerm)) {
+            console.log(`Match found: "${item.text.substring(0, 30)}..."`);
+            results.push({
+              line: item.text,
+              index: item.index,
+              node: item.node,
+              isHtml: true
+            });
+          }
+        });
+        
+        console.log(`Search complete. Found ${results.length} matches for "${searchTerm}"`);
+        
+        setSearchResults(results);
+        
+        // Open the search modal if we have results
+        if (results.length > 0) {
+          setIsSearchModalOpen(true);
+        } else {
+          alert(`No results found for "${searchTerm}"`);
+        }
+      } catch (error) {
+        console.error('Error searching in HTML content:', error);
+        alert('Error searching in HTML content: ' + error.message);
+      }
+    } else {
+      // Regular text search for non-HTML scripts
+      // Get script content
+      const scriptContent = selectedScript.body || selectedScript.content || '';
+      if (!scriptContent) return;
+      
+      // Simple search implementation
+      const lines = scriptContent.split('\n');
+      const results = [];
+      
+      lines.forEach((line, index) => {
+        if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+          results.push({ line, index, isHtml: false });
+        }
+      });
+      
+      setSearchResults(results);
+      
+      // Open the search modal if we have results
+      if (results.length > 0) {
+        setIsSearchModalOpen(true);
+      } else {
+        alert(`No results found for "${searchTerm}"`);
+      }
     }
   };
   
@@ -160,61 +362,154 @@ const AdminPage = () => {
   // Reference to the script player component
   const scriptPlayerRef = React.useRef(null);
   
-  // Jump to search result - simplified direct approach
-  const jumpToSearchResult = (lineIndex) => {
+  // Jump to search result - handles both HTML and text content
+  const jumpToSearchResult = (result) => {
     if (!selectedScript) {
       console.error('Cannot jump to search result - no script selected');
       alert('Please select a script first');
       return;
     }
     
-    const scriptContent = selectedScript.body || selectedScript.content || '';
-    if (!scriptContent) {
-      console.error('Cannot jump to search result - script has no content');
-      return;
+    // Check if this is an HTML script result
+    if (result.isHtml && result.node) {
+      // For HTML content, we'll scroll the iframe to the node
+      console.log(`Jumping to HTML node containing: "${result.line.substring(0, 30)}..."`);
+      
+      // Pause playback when jumping
+      if (isPlaying) {
+        setIsPlaying(false);
+        sendControlMessage('PAUSE');
+      }
+      
+      // Get the iframe
+      const iframe = document.querySelector('#html-script-frame');
+      if (!iframe || !iframe.contentWindow) {
+        console.error('Cannot jump - iframe not accessible');
+        return;
+      }
+      
+      try {
+        // Scroll the node into view within the iframe
+        result.node.parentElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+        
+        // Highlight the element for visibility
+        const originalBackground = result.node.parentElement.style.backgroundColor;
+        const originalColor = result.node.parentElement.style.color;
+        
+        // Flash the element to make it visible
+        result.node.parentElement.style.backgroundColor = '#ff6600';
+        result.node.parentElement.style.color = '#ffffff';
+        
+        // Reset after a delay
+        setTimeout(() => {
+          result.node.parentElement.style.backgroundColor = originalBackground;
+          result.node.parentElement.style.color = originalColor;
+        }, 2000);
+        
+        // Send a SCROLL_TO message with the node information
+        try {
+          // Get text content to identify the node
+          const nodeText = result.node.textContent.trim();
+          // Get parent node tag name
+          const parentTag = result.node.parentElement.tagName;
+          // Get index of node among siblings
+          const siblings = Array.from(result.node.parentElement.childNodes);
+          const nodeIndex = siblings.indexOf(result.node);
+          
+          // Calculate the approximate position as a percentage of the document
+          const totalHeight = iframe.contentDocument.body.scrollHeight;
+          const currentPos = result.node.parentElement.getBoundingClientRect().top;
+          const viewportOffset = iframe.contentWindow.pageYOffset || iframe.contentDocument.documentElement.scrollTop;
+          const absolutePosition = currentPos + viewportOffset;
+          
+          // Calculate percentage (0-1)
+          const percentPos = Math.max(0, Math.min(1, absolutePosition / totalHeight));
+          
+          // Create a data object with multiple ways to identify the node
+          const scrollData = {
+            position: percentPos, // Normalized position (0-1)
+            text: nodeText.substring(0, 50), // First 50 chars of text
+            parentTag: parentTag, // Parent tag name
+            nodeIndex: nodeIndex, // Index in parent's children
+            absolutePosition: absolutePosition // Absolute pixel position
+          };
+          
+          // Log the actual scrollData object being sent
+          console.log('===== [ADMIN PAGE] Final scrollData object being sent:', JSON.stringify(scrollData));
+          
+          // Send WebSocket message with enhanced data using the new dedicated message type
+          sendSearchPosition(scrollData);
+        } catch (posError) {
+          console.error('Error calculating scroll position for WebSocket:', posError);
+        }
+        
+        // Close the search modal after jumping
+        setIsSearchModalOpen(false);
+      } catch (error) {
+        console.error('Error jumping to HTML search result:', error);
+        alert('Error scrolling to search result: ' + error.message);
+      }
+    } else {
+      // For text content, use the original approach with position calculation
+      const lineIndex = result.index;
+      const scriptContent = selectedScript.body || selectedScript.content || '';
+      if (!scriptContent) {
+        console.error('Cannot jump to search result - script has no content');
+        return;
+      }
+      
+      // Calculate position in script
+      const lines = scriptContent.split('\n');
+      let position = 0;
+      
+      // Calculate the exact character position where the line starts
+      for (let i = 0; i < lineIndex; i++) {
+        position += lines[i].length + 1; // +1 for newline character
+      }
+      
+      console.log(`Jumping to line ${lineIndex} at position ${position}`);
+      
+      // Pause playback when jumping
+      if (isPlaying) {
+        setIsPlaying(false);
+        sendControlMessage('PAUSE');
+      }
+      
+      // Highlight the clicked search result in the UI
+      setSearchResults(prev => prev.map((item, idx) => ({
+        ...item,
+        active: item.index === lineIndex
+      })));
+      
+      // If we have a direct reference to the player, use it
+      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
+        scriptPlayerRef.current.jumpToPosition(position);
+      }
+      
+      // Calculate the position as a percentage of the total script length
+      const totalLength = scriptContent.length;
+      const percentPos = Math.max(0, Math.min(1, position / totalLength));
+      
+      // For regular position jumps, we can use the standard position control
+      // This updates the shared state position for all clients
+      sendControlMessage('JUMP_TO_POSITION', percentPos);
+      
+      // Optional: Add visual feedback
+      const previewHeader = document.querySelector('.preview-header h3');
+      if (previewHeader) {
+        const originalText = previewHeader.textContent;
+        previewHeader.textContent = 'Jumping to position...';
+        setTimeout(() => {
+          previewHeader.textContent = originalText;
+        }, 1000);
+      }
+      
+      // Close the search modal after jumping
+      setIsSearchModalOpen(false);
     }
-    
-    // Calculate position in script
-    const lines = scriptContent.split('\n');
-    let position = 0;
-    
-    // Calculate the exact character position where the line starts
-    for (let i = 0; i < lineIndex; i++) {
-      position += lines[i].length + 1; // +1 for newline character
-    }
-    
-    console.log(`Jumping to line ${lineIndex} at position ${position}`);
-    
-    // Pause playback when jumping
-    if (isPlaying) {
-      setIsPlaying(false);
-    }
-    
-    // Highlight the clicked search result in the UI
-    setSearchResults(prev => prev.map((item, idx) => ({
-      ...item,
-      active: item.index === lineIndex
-    })));
-    
-    // If we have a direct reference to the player, use it
-    if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-      scriptPlayerRef.current.jumpToPosition(position);
-      // TODO: Fix scrolling accuracy issue - there appears to be an offset
-      // that causes the text to not be properly centered in the viewport
-    }
-    
-    // Optional: Add visual feedback
-    const previewHeader = document.querySelector('.preview-header h3');
-    if (previewHeader) {
-      const originalText = previewHeader.textContent;
-      previewHeader.textContent = 'Jumping to position...';
-      setTimeout(() => {
-        previewHeader.textContent = originalText;
-      }, 1000);
-    }
-    
-    // Close the search modal after jumping
-    setIsSearchModalOpen(false);
   };
   
   // Clear script selection

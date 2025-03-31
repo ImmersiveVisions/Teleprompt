@@ -59,6 +59,43 @@ function handleMessage(message, sender) {
   console.log('Server received message:', message.type, message.action || '');
   
   switch (message.type) {
+    case 'SEARCH_POSITION':
+      // New dedicated message type for search/scroll operations
+      // Handle search position messages
+      
+      try {
+        if (typeof message.data === 'string') {
+          console.log('Attempting to parse string value as JSON');
+          try {
+            const parsed = JSON.parse(message.data);
+            console.log('Successfully parsed string as JSON:', parsed);
+            // If it's a valid object with position, use it as an enhanced object
+            if (parsed && typeof parsed === 'object' && parsed.position !== undefined) {
+              console.log('String contained valid enhanced data, using parsed object');
+              message.data = parsed;
+            }
+          } catch (parseErr) {
+            console.log('String is not valid JSON, treating as regular value');
+          }
+        }
+      } catch (preprocessErr) {
+        console.error('Error preprocessing message data:', preprocessErr);
+      }
+      
+      // Forward search position to all clients without storing in shared state
+      const searchMessage = JSON.stringify({
+        type: 'SEARCH_POSITION',
+        data: message.data
+      });
+      
+      // Forward to all clients
+      connections.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(searchMessage);
+        }
+      });
+      return; // No need to broadcast state after this
+
     case 'CONTROL':
       // Update shared state based on control message
       switch (message.action) {
@@ -78,7 +115,35 @@ function handleMessage(message, sender) {
           sharedState.fontSize = message.value;
           break;
         case 'JUMP_TO_POSITION':
-          sharedState.currentPosition = message.value;
+          // Handle jump to position command
+          
+          try {
+            if (typeof message.value === 'string') {
+              console.log('Attempting to parse string value as JSON');
+              try {
+                const parsed = JSON.parse(message.value);
+                console.log('Successfully parsed string as JSON:', parsed);
+                // If it's a valid object with position, use it as an enhanced object
+                if (parsed && typeof parsed === 'object' && parsed.position !== undefined) {
+                  console.log('String contained valid enhanced data, using parsed object');
+                  message.value = parsed;
+                }
+              } catch (parseErr) {
+                console.log('String is not valid JSON, treating as regular value');
+              }
+            }
+          } catch (preprocessErr) {
+            console.error('Error preprocessing message value:', preprocessErr);
+          }
+          
+          // Handle both simple number and complex object formats
+          if (typeof message.value === 'object' && message.value !== null) {
+            // Only update the position for compatibility, don't store scrollData
+            sharedState.currentPosition = message.value.position;
+          } else {
+            // Simple numeric value
+            sharedState.currentPosition = message.value;
+          }
           break;
         case 'LOAD_SCRIPT':
           // Handle script loading
@@ -146,9 +211,10 @@ function broadcastState() {
     isPlaying: !!sharedState.isPlaying,
     direction: sharedState.direction || 'forward',
     fontSize: sharedState.fontSize || 24
+    // scrollData removed - now sent via dedicated SEARCH_POSITION messages
   };
   
-  console.log('Broadcasting state update:', safeState);
+  // Broadcast state to all clients
   
   const stateMessage = JSON.stringify({
     type: 'STATE_UPDATE',

@@ -75,11 +75,30 @@ const initWebSocket = (statusCb) => {
     clientWs.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log('WebSocket received message:', message.type);
+        console.log('===== [WS CLIENT] Received message:', message.type);
+        
+        // Check for position data in state updates 
+        if (message.type === 'STATE_UPDATE' && message.data) {
+          // Log detailed position information
+          if (message.data.currentPosition !== undefined) {
+            console.log(`===== [WS CLIENT] Position data received: ${message.data.currentPosition}`);
+          }
+          
+          // Log if enhanced scroll data is available
+          if (message.data.scrollData) {
+            console.log('');
+            console.log('********************************************************************');
+            console.log('********** WS CLIENT RECEIVED ENHANCED SCROLL DATA **********');
+            console.log('********************************************************************');
+            console.log('');
+            console.log('===== [WS CLIENT] Enhanced scroll data:', JSON.stringify(message.data.scrollData));
+          }
+        }
         
         // Add a small delay to prevent browser rendering issues
         // This helps ensure animation frames aren't interrupted by state changes
         setTimeout(() => {
+          console.log(`===== [WS CLIENT] Dispatching message to ${messageHandlers.length} handlers`);
           // Dispatch message to all registered handlers
           messageHandlers.forEach(handler => handler(message));
         }, 5);
@@ -117,22 +136,59 @@ const sendControlMessage = (action, value = null) => {
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
     // Special handling for GET_STATE which is a different message type
     if (action === 'GET_STATE') {
-      console.log('Sending GET_STATE request to server');
+      console.log('===== [WS CLIENT] Sending GET_STATE request to server');
       clientWs.send(JSON.stringify({
         type: 'GET_STATE'
       }));
       return;
     }
     
-    // Normal control message
-    console.log('Sending control message:', action, value);
-    clientWs.send(JSON.stringify({
+    // Log jump position commands specially
+    if (action === 'JUMP_TO_POSITION') {
+      console.log(`===== [WS CLIENT] Sending JUMP_TO_POSITION control message with value: ${value}`);
+    } else {
+      // Normal control message
+      console.log('===== [WS CLIENT] Sending control message:', action, value);
+    }
+    
+    // Create the message
+    const message = JSON.stringify({
       type: 'CONTROL',
       action,
       value
-    }));
+    });
+    
+    // Send the control message
+    
+    // Send and verify
+    clientWs.send(message);
+    console.log(`===== [WS CLIENT] Message sent (${message.length} bytes)`);
   } else {
-    console.warn('WebSocket not connected, cannot send message');
+    console.warn('===== [WS CLIENT] WebSocket not connected, cannot send message. Status:', getWebSocketStatus());
+  }
+};
+
+/**
+ * Send a search position message over WebSocket
+ * @param {object} data - The search position data
+ */
+const sendSearchPosition = (data) => {
+  if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+    console.log('===== [WS CLIENT] Sending SEARCH_POSITION message');
+    
+    // Send search position data
+    
+    // Create the message
+    const message = JSON.stringify({
+      type: 'SEARCH_POSITION',
+      data
+    });
+    
+    // Send and verify
+    clientWs.send(message);
+    // Message sent
+  } else {
+    console.warn('===== [WS CLIENT] WebSocket not connected, cannot send search position. Status:', getWebSocketStatus());
   }
 };
 
@@ -171,7 +227,8 @@ if (typeof window !== 'undefined') {
     console.log('Creating websocketService global object');
     window.websocketService = {
       initWebSocket,
-      sendControlMessage, 
+      sendControlMessage,
+      sendSearchPosition,
       registerMessageHandler,
       getWebSocketStatus
     };
@@ -186,6 +243,7 @@ if (typeof window !== 'undefined') {
 export {
   initWebSocket,
   sendControlMessage,
+  sendSearchPosition,
   registerMessageHandler,
   getWebSocketStatus
 };
