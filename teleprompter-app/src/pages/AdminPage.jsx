@@ -51,21 +51,49 @@ const AdminPage = () => {
   // Load QR code URLs from the server
   const loadQrCodeUrls = async () => {
     try {
-      // Fetch from API status endpoint to get IP address
-      const response = await fetch('/api/status');
-      const data = await response.json();
+      // Read pre-generated URL text files from the server
+      const responses = await Promise.all([
+        fetch('/qr/url-viewer.txt'),
+        fetch('/qr/url-remote.txt')
+      ]);
       
-      if (data && data.primaryIp) {
-        const ip = data.primaryIp;
-        const port = window.location.port ? `:${window.location.port}` : '';
-        
-        setQrUrls({
-          viewer: `${ip}${port}/viewer`,
-          remote: `${ip}${port}/remote`
-        });
-      }
+      const [viewerText, remoteText] = await Promise.all([
+        responses[0].ok ? responses[0].text() : null,
+        responses[1].ok ? responses[1].text() : null
+      ]);
+      
+      setQrUrls({
+        viewer: viewerText || 'http://[server-ip]/viewer',
+        remote: remoteText || 'http://[server-ip]/remote'
+      });
+      
+      console.log('Loaded QR URLs from text files:', { viewerText, remoteText });
     } catch (error) {
       console.error('Error loading QR code URLs:', error);
+      
+      // Fallback: Try the API status endpoint
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        
+        if (data && data.primaryIp) {
+          const ip = data.primaryIp;
+          const port = window.location.port ? `:${window.location.port}` : '';
+          
+          setQrUrls({
+            viewer: `http://${ip}${port}/viewer`,
+            remote: `http://${ip}${port}/remote`
+          });
+          
+          console.log('Used fallback method to get QR URLs:', {
+            ip, port,
+            viewer: `http://${ip}${port}/viewer`,
+            remote: `http://${ip}${port}/remote`
+          });
+        }
+      } catch (fallbackError) {
+        console.error('Error in fallback QR URL loading:', fallbackError);
+      }
     }
   };
   

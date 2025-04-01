@@ -14,13 +14,14 @@
     "electron:build:linux": "npm run build && electron-builder build --linux AppImage"
   },
   "dependencies": {
+    "cheerio": "^1.0.0",
     "concurrently": "^6.5.1",
     "dexie": "^3.2.4",
     "express": "^4.18.2",
     "html-react-parser": "^5.2.2",
     "jquery": "^3.7.1",
     "nodemon": "^3.0.1",
-    "qrcode": "^1.5.3",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -43,7 +44,11 @@
       "node_modules/**/*",
       "main.js",
       "server-utils.js",
-      "src/services/websocket.js"
+      "server.js",
+      "src/services/websocket.js",
+      "convertScripts.js",
+      "intake/**/*",
+      "public/scripts/**/*"
     ],
     "win": {
       "target": "portable"

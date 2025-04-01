@@ -8,6 +8,7 @@ const express = require('express');
 const os = require('os');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow;
@@ -158,7 +159,24 @@ function createWindow() {
 }
 
 // Create window when Electron has finished initialization
-app.on('ready', createWindow);
+app.on('ready', () => {
+  console.log('Electron app ready event triggered');
+  
+  // Process script files first with error handling
+  try {
+    console.log('Starting script conversion process from Electron main process...');
+    processScriptFiles();
+    console.log('Script conversion process completed');
+  } catch (error) {
+    console.error('Error during script conversion in Electron main process:', error);
+    // Continue with application startup even if script conversion fails
+    // The React app will handle conversion as a fallback
+  }
+  
+  // Create the application window
+  console.log('Creating main application window');
+  createWindow();
+});
 
 // Quit when all windows are closed (except on macOS)
 app.on('window-all-closed', () => {
@@ -195,6 +213,67 @@ const ensureDirectoryExists = (directoryPath) => {
   } catch (error) {
     console.error(`Error creating directory ${directoryPath}:`, error);
     return false;
+  }
+};
+
+// Function to run script conversion process
+const processScriptFiles = () => {
+  try {
+    console.log('Checking for new script files to process...');
+    
+    // Define directories
+    const intakeDir = path.join(__dirname, 'intake');
+    const scriptsDir = path.join(__dirname, 'public');
+    
+    // Ensure directories exist
+    ensureDirectoryExists(intakeDir);
+    ensureDirectoryExists(scriptsDir);
+    
+    // Get files from intake directory
+    const intakeFiles = fs.readdirSync(intakeDir)
+      .filter(file => 
+        file.toLowerCase().endsWith('.html') && 
+        file.toLowerCase() !== 'index.html'
+      );
+    
+    if (intakeFiles.length === 0) {
+      console.log('No HTML files found in the intake directory.');
+      return;
+    }
+    
+    // Check each file against the scripts directory
+    let newFilesFound = false;
+    intakeFiles.forEach(file => {
+      const destFile = path.join(scriptsDir, file);
+      
+      // If file doesn't exist in scripts directory, it needs to be processed
+      if (!fs.existsSync(destFile)) {
+        console.log(`New script file found: ${file}`);
+        newFilesFound = true;
+      }
+    });
+    
+    // Run the conversion script if new files were found
+    if (newFilesFound) {
+      console.log('Running script converter for new files...');
+      const scriptPath = path.join(__dirname, 'convertScripts.js');
+      
+      // Execute the conversion script
+      const result = execSync(`node "${scriptPath}"`, { 
+        env: {
+          ...process.env,
+          INTAKE_DIR: path.join(__dirname, 'intake'),
+          SCRIPTS_DIR: path.join(__dirname, 'public')
+        }
+      });
+      
+      console.log('Script conversion completed:');
+      console.log(result.toString());
+    } else {
+      console.log('No new scripts to convert.');
+    }
+  } catch (error) {
+    console.error('Error processing script files:', error);
   }
 };
 
@@ -242,7 +321,7 @@ const isPathValid = (basePath, requestedPath, filename = null) => {
 };
 
 // Store the last validated scripts directory path to use as an allowed base
-let scriptsDirectoryPath = path.join(__dirname, 'scripts');
+let scriptsDirectoryPath = path.join(__dirname, 'public', 'scripts');
 
 // Handle directory selection dialog
 ipcMain.handle('select-directory', async () => {

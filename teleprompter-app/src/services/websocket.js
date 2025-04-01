@@ -176,17 +176,32 @@ const sendSearchPosition = (data) => {
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
     console.log('===== [WS CLIENT] Sending SEARCH_POSITION message');
     
-    // Send search position data
+    // Validate the data before sending - ensure position property exists
+    let messageData = data;
+    
+    if (typeof data !== 'object' || data === null) {
+      console.warn('===== [WS CLIENT] Invalid search position data, converting to object with position');
+      messageData = { position: data || 0 };
+    } else if (data.position === undefined) {
+      console.warn('===== [WS CLIENT] Search position data missing position property, adding default');
+      messageData = { ...data, position: 0 };
+    }
+    
+    console.log('===== [WS CLIENT] Sending search position data:', 
+      typeof messageData === 'object' 
+        ? `position: ${messageData.position}, text: ${messageData.text ? messageData.text.substring(0, 20) + '...' : 'none'}`
+        : messageData
+    );
     
     // Create the message
     const message = JSON.stringify({
       type: 'SEARCH_POSITION',
-      data
+      data: messageData
     });
     
     // Send and verify
     clientWs.send(message);
-    // Message sent
+    console.log('===== [WS CLIENT] SEARCH_POSITION message sent');
   } else {
     console.warn('===== [WS CLIENT] WebSocket not connected, cannot send search position. Status:', getWebSocketStatus());
   }

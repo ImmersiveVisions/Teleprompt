@@ -11,6 +11,8 @@ import './styles.css';
 const App = () => {
   const [wsStatus, setWsStatus] = useState('disconnected');
   const [btStatus, setBtStatus] = useState('disconnected');
+  const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState('Initializing application...');
   
   // Initialize services
   useEffect(() => {
@@ -39,10 +41,35 @@ const App = () => {
           console.error('Error fetching server status:', error);
         }
       };
+      // Function to run the script conversion process
+      const runScriptConversion = async () => {
+        try {
+          setLoadingMessage('Converting scripts...');
+          
+          // Call a special endpoint on the server to run script conversion
+          const response = await fetch('/api/convert-scripts', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          const data = await response.json();
+          console.log('Script conversion result:', data);
+          
+          if (data.error) {
+            console.error('Error converting scripts:', data.error);
+          } else {
+            console.log(`Successfully processed ${data.processedCount} scripts`);
+          }
+        } catch (error) {
+          console.error('Error running script conversion:', error);
+        }
+      };
       
       // Initialize file system repository and services
       const initServices = async () => {
         try {
+          setLoadingMessage('Initializing file system...');
+          
           // Import file system repository
           const fileSystemRepo = await import('./database/fileSystemRepository');
           console.log('File system repository initialized');
@@ -58,11 +85,15 @@ const App = () => {
       
       // First fetch server status to get IP
       fetchServerStatus().then(() => {
+        // Run script conversion
+        return runScriptConversion();
+      }).then(() => {
         // Then init the file system repository
         return initServices();
       }).then(() => {
         // Then initialize WebSocket and Bluetooth
         console.log('Initializing app services...');
+        setLoadingMessage('Connecting to services...');
       
         // Initialize WebSocket connection
         initWebSocket((status) => {
@@ -75,6 +106,9 @@ const App = () => {
           console.log('Bluetooth status updated:', status);
           setBtStatus(status);
         });
+        
+        // Application is now fully loaded
+        setLoading(false);
       });
     } catch (error) {
       console.error('Error initializing services:', error);
@@ -88,38 +122,54 @@ const App = () => {
     };
   }, []);
   
+  // Loading screen component
+  const LoadingScreen = () => (
+    <div className="loading-screen">
+      <div className="loading-content">
+        <h1>Teleprompter App</h1>
+        <div className="loading-spinner"></div>
+        <p className="loading-message">{loadingMessage}</p>
+      </div>
+    </div>
+  );
+  
+  // Main application render
   return (
     <Router>
       <div className="app-container">
-        <Routes>
-          <Route path="/" element={
-            <div className="home-page">
-              <h1>Teleprompter App</h1>
-              <div className="mode-selection">
-                <Link to="/admin" className="mode-button">
-                  Admin Mode
-                </Link>
-                <Link to="/remote" className="mode-button">
-                  Remote Control Mode
-                </Link>
-                <Link to="/viewer" className="mode-button">
-                  Viewer Mode
-                </Link>
-              </div>
-              <div className="connection-status">
-                <div className={`status-indicator ${wsStatus}`}>
-                  WebSocket: {wsStatus}
+        {loading ? (
+          <LoadingScreen />
+        ) : (
+          <Routes>
+            <Route path="/" element={
+              <div className="home-page">
+                <h1>Teleprompter App</h1>
+                <div className="mode-selection">
+                  <Link to="/admin" className="mode-button">
+                    Admin Mode
+                  </Link>
+                  <Link to="/remote" className="mode-button">
+                    Remote Control Mode
+                  </Link>
+                  <Link to="/viewer" className="mode-button">
+                    Viewer Mode
+                  </Link>
                 </div>
-                <div className={`status-indicator ${btStatus}`}>
-                  Bluetooth: {btStatus}
+                <div className="connection-status">
+                  <div className={`status-indicator ${wsStatus}`}>
+                    WebSocket: {wsStatus}
+                  </div>
+                  <div className={`status-indicator ${btStatus}`}>
+                    Bluetooth: {btStatus}
+                  </div>
                 </div>
               </div>
-            </div>
-          } />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/remote" element={<RemotePage />} />
-          <Route path="/viewer" element={<ViewerPage />} />
-        </Routes>
+            } />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/remote" element={<RemotePage />} />
+            <Route path="/viewer" element={<ViewerPage />} />
+          </Routes>
+        )}
       </div>
     </Router>
   );

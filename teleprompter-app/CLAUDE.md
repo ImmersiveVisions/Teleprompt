@@ -24,6 +24,12 @@
 - Log errors with descriptive messages
 - Provide user-friendly fallbacks
 
+### Problem Solving
+- Focus on one problem-solving method at a time
+- Do not write long code blocks with multiple fallbacks or alternative methods
+- Keep solutions focused and straightforward
+- Prefer simple direct approaches over complex multi-stage solutions
+
 ### Naming Conventions
 - React components: PascalCase
 - Functions/variables: camelCase

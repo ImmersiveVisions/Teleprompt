@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Direct HTML Viewer</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      font-family: 'Courier New', monospace;
+      height: 100%;
+    }
+    
+    #controls {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      z-index: 1000;
+    }
+    
+    #viewer {
+      margin-top: 60px;
+      padding: 20px;
+      width: 100%;
+      height: calc(100% - 80px);
+      border: none;
+      background-color: black;
+    }
+    
+    .control-group {
+      margin-right: 20px;
+      display: inline-block;
+    }
+    
+    label {
+      color: white;
+      margin-right: 5px;
+    }
+    
+    button {
+      padding: 5px 10px;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div class="control-group">
+      <label for="fileInput">Load HTML file:</label>
+      <input type="file" id="fileInput" accept=".html">
+    </div>
+    
+    <div class="control-group">
+      <label for="fontSize">Font size:</label>
+      <input type="number" id="fontSize" min="12" max="72" value="24" style="width: 60px;">
+      <button id="increaseFontBtn">+</button>
+      <button id="decreaseFontBtn">-</button>
+    </div>
+    
+    <div class="control-group">
+      <button id="fullscreenBtn">Fullscreen</button>
+    </div>
+  </div>
+  
+  <iframe id="viewer" sandbox="allow-same-origin"></iframe>
+  
+  <script>
+    // Elements
+    const fileInput = document.getElementById('fileInput');
+    const fontSizeInput = document.getElementById('fontSize');
+    const increaseFontBtn = document.getElementById('increaseFontBtn');
+    const decreaseFontBtn = document.getElementById('decreaseFontBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const viewer = document.getElementById('viewer');
+    
+    // Font size control
+    let currentFontSize = parseInt(fontSizeInput.value);
+    
+    function updateFontSize(size) {
+      currentFontSize = size;
+      fontSizeInput.value = size;
+      
+      // Update CSS in iframe
+      if (viewer.contentDocument) {
+        const style = viewer.contentDocument.createElement('style');
+        style.textContent = `
+          body, html { 
+            color: white !important;
+            background-color: black !important;
+            font-size: ${size}px !important;
+          }
+          * { color: white !important; }
+        `;
+        viewer.contentDocument.head.appendChild(style);
+      }
+    }
+    
+    // Font size events
+    increaseFontBtn.addEventListener('click', () => {
+      updateFontSize(currentFontSize + 2);
+    });
+    
+    decreaseFontBtn.addEventListener('click', () => {
+      if (currentFontSize > 12) {
+        updateFontSize(currentFontSize - 2);
+      }
+    });
+    
+    fontSizeInput.addEventListener('change', () => {
+      const size = parseInt(fontSizeInput.value);
+      if (!isNaN(size) && size >= 12 && size <= 72) {
+        updateFontSize(size);
+      } else {
+        fontSizeInput.value = currentFontSize;
+      }
+    });
+    
+    // File loading
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const html = e.target.result;
+          
+          // Set iframe content
+          viewer.srcdoc = html;
+          
+          // Wait for iframe to load, then inject styles
+          viewer.onload = () => {
+            updateFontSize(currentFontSize);
+          };
+        };
+        reader.readAsText(file);
+      }
+    });
+    
+    // Fullscreen
+    fullscreenBtn.addEventListener('click', () => {
+      if (viewer.requestFullscreen) {
+        viewer.requestFullscreen();
+      } else if (viewer.webkitRequestFullscreen) {
+        viewer.webkitRequestFullscreen();
+      } else if (viewer.msRequestFullscreen) {
+        viewer.msRequestFullscreen();
+      }
+    });
+  </script>
+</body>
+</html>

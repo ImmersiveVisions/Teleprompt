@@ -7,6 +7,7 @@ const os = require('os');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const util = require('util');
+const { execSync } = require('child_process');
 // Helper function to convert plain text to HTML
 function convertTextToHtml(text) {
   if (!text || typeof text !== 'string') {
@@ -23,6 +24,10 @@ console.log('Server utils:', typeof serverUtils, 'initWebSocketServer:', typeof 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Parse JSON requests
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'build')));
@@ -77,8 +82,8 @@ app.get('/api/status', (req, res) => {
 });
 
 // Scripts directory - relative to the application root
-const SCRIPTS_DIRECTORY = path.join(__dirname, 'scripts');
-// Public directory for HTML files
+const SCRIPTS_DIRECTORY = path.join(__dirname, 'public');
+// Public directory for HTML files 
 const PUBLIC_DIRECTORY = path.join(__dirname, 'public');
 
 // Create the scripts directory if it doesn't exist
@@ -101,24 +106,27 @@ try {
 // Add a test endpoint to view HTML scripts
 app.get('/api/test-html', async (req, res) => {
   try {
-    // Only check the public directory for HTML files
+    // Only check the scripts directory for HTML files
     let testFiles = [];
     
-    if (fs.existsSync(PUBLIC_DIRECTORY)) {
-      testFiles = fs.readdirSync(PUBLIC_DIRECTORY)
-        .filter(file => file.toLowerCase().endsWith('.html') || file.toLowerCase().endsWith('.htm'));
-      console.log(`Found ${testFiles.length} HTML files in public directory`);
+    if (fs.existsSync(SCRIPTS_DIRECTORY)) {
+      testFiles = fs.readdirSync(SCRIPTS_DIRECTORY)
+        .filter(file => 
+          (file.toLowerCase().endsWith('.html') || file.toLowerCase().endsWith('.htm')) &&
+          file.toLowerCase() !== 'index.html'
+        );
+      console.log(`Found ${testFiles.length} HTML files in scripts directory`);
     }
     
     if (testFiles.length === 0) {
       return res.json({ 
-        message: 'No HTML files found in public directory', 
-        dir: PUBLIC_DIRECTORY 
+        message: 'No HTML files found in scripts directory', 
+        dir: SCRIPTS_DIRECTORY 
       });
     }
     
     const testFile = testFiles[0];
-    const filePath = path.join(PUBLIC_DIRECTORY, testFile);
+    const filePath = path.join(SCRIPTS_DIRECTORY, testFile);
     const htmlContent = fs.readFileSync(filePath, 'utf8');
     
     // Return rendered HTML instead of plain text
@@ -131,25 +139,29 @@ app.get('/api/test-html', async (req, res) => {
 // API endpoint to list all scripts
 app.get('/api/scripts', async (req, res) => {
   try {
-    console.log(`Fetching HTML files from public directory: ${PUBLIC_DIRECTORY}`);
+    console.log(`Fetching HTML files from scripts directory: ${SCRIPTS_DIRECTORY}`);
     
     // Initialize array to store files
     let htmlFiles = [];
     
-    // Get HTML files from public directory
-    if (fs.existsSync(PUBLIC_DIRECTORY)) {
-      htmlFiles = fs.readdirSync(PUBLIC_DIRECTORY)
-        .filter(file => file.endsWith('.html') || file.endsWith('.htm'))
+    // Get HTML files from scripts directory
+    if (fs.existsSync(SCRIPTS_DIRECTORY)) {
+      htmlFiles = fs.readdirSync(SCRIPTS_DIRECTORY)
+        .filter(file => 
+          // Only include .html or .htm files, but exclude index.html
+          (file.endsWith('.html') || file.endsWith('.htm')) && 
+          file.toLowerCase() !== 'index.html'
+        )
         .map(filename => ({
           filename,
-          directory: PUBLIC_DIRECTORY
+          directory: SCRIPTS_DIRECTORY
         }));
-      console.log(`Found ${htmlFiles.length} HTML files in public directory`);
+      console.log(`Found ${htmlFiles.length} HTML files in scripts directory`);
     } else {
-      console.error(`Public directory does not exist: ${PUBLIC_DIRECTORY}`);
+      console.error(`Scripts directory does not exist: ${SCRIPTS_DIRECTORY}`);
     }
     
-    // Use only HTML files from public directory
+    // Use HTML files from scripts directory
     const allFiles = htmlFiles;
     
     // If no files found, respond with empty array but valid JSON
@@ -222,12 +234,12 @@ app.get('/api/scripts/:id', async (req, res) => {
   try {
     const scriptId = req.params.id;
     
-    // Only handle HTML files from public directory
-    const filePath = path.join(PUBLIC_DIRECTORY, scriptId);
-    console.log(`Looking for HTML file in public directory: ${scriptId}`);
+    // Only handle HTML files from public/scripts directory
+    const filePath = path.join(SCRIPTS_DIRECTORY, scriptId);
+    console.log(`Looking for HTML file in scripts directory: ${scriptId}`);
     
     // Add a direct web URL for client-side access
-    const publicUrl = `public/${scriptId}`;
+    const publicUrl = `${scriptId}`;
     console.log(`Public URL for HTML file: ${publicUrl}`);
     
     // If file doesn't exist
@@ -253,6 +265,94 @@ app.get('/api/scripts/:id', async (req, res) => {
   }
 });
 
+// API endpoint to convert scripts from intake to public/scripts directory
+app.post('/api/convert-scripts', async (req, res) => {
+  try {
+    console.log('Running script conversion on demand...');
+    
+    // Define directories
+    const intakeDir = path.join(__dirname, 'intake');
+    const scriptsDir = path.join(__dirname, 'public');
+    
+    // Ensure directories exist
+    if (!fs.existsSync(intakeDir)) {
+      fs.mkdirSync(intakeDir, { recursive: true });
+      console.log(`Created intake directory at: ${intakeDir}`);
+    }
+    
+    if (!fs.existsSync(scriptsDir)) {
+      fs.mkdirSync(scriptsDir, { recursive: true });
+      console.log(`Created scripts directory at: ${scriptsDir}`);
+    }
+    
+    // Get files from intake directory
+    const intakeFiles = fs.readdirSync(intakeDir)
+      .filter(file => 
+        file.toLowerCase().endsWith('.html') && 
+        file.toLowerCase() !== 'index.html'
+      );
+    
+    console.log(`Found ${intakeFiles.length} HTML files in intake directory`);
+    
+    if (intakeFiles.length === 0) {
+      return res.json({ 
+        message: 'No HTML files found in the intake directory.',
+        processedCount: 0
+      });
+    }
+    
+    // Check each file against the scripts directory
+    let newFilesFound = false;
+    let newFilesCount = 0;
+    
+    intakeFiles.forEach(file => {
+      const destFile = path.join(scriptsDir, file);
+      
+      // If file doesn't exist in scripts directory, it needs to be processed
+      if (!fs.existsSync(destFile)) {
+        console.log(`New script file found: ${file}`);
+        newFilesFound = true;
+        newFilesCount++;
+      }
+    });
+    
+    // Run the conversion script if new files were found
+    if (newFilesFound) {
+      console.log('Running script converter for new files...');
+      const scriptPath = path.join(__dirname, 'convertScripts.js');
+      
+      // Execute the conversion script
+      const result = execSync(`node "${scriptPath}"`, { 
+        env: {
+          ...process.env,
+          INTAKE_DIR: intakeDir,
+          SCRIPTS_DIR: scriptsDir
+        }
+      });
+      
+      console.log('Script conversion completed:');
+      console.log(result.toString());
+      
+      return res.json({ 
+        message: 'Script conversion successful',
+        processedCount: newFilesCount,
+        output: result.toString()
+      });
+    } else {
+      return res.json({ 
+        message: 'No new scripts to convert',
+        processedCount: 0
+      });
+    }
+  } catch (error) {
+    console.error('Error processing script files:', error);
+    res.status(500).json({ 
+      error: error.message,
+      processedCount: 0
+    });
+  }
+});
+
 // We're removing the endpoints for adding, updating, and deleting scripts
 // as the application should only read scripts from the directory
 
@@ -271,7 +371,6 @@ console.log('WebSocket server initialized');
 
 // Generate QR codes before starting the server
 console.log('Generating QR codes...');
-const { execSync } = require('child_process');
 try {
   execSync('node generate-qrcodes.js', { stdio: 'inherit' });
   console.log('QR codes generated successfully');

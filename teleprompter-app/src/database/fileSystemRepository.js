@@ -2,7 +2,7 @@
 // File-based repository that replaces the database operations
 
 // Default scripts directory - relative to the application for portability
-let scriptsDirectory = localStorage.getItem('scriptsDirectory') || './scripts';
+let scriptsDirectory = localStorage.getItem('scriptsDirectory') || './public';
 
 console.log(`Initial scripts directory: ${scriptsDirectory}`);
 

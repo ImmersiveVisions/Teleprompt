@@ -14,9 +14,7 @@ const SearchModal = ({ isOpen, onClose, searchResults, onResultSelect, searchTer
   
   const handleResultClick = (result) => {
     setActiveResult(result.index);
-    onResultSelect(result.index);
-    // TODO: Fix scrolling offset issue - currently the position calculation needs adjustment
-    // to ensure the selected line appears in the center of the viewport
+    onResultSelect(result);
   };
   
   if (!isOpen) return null;

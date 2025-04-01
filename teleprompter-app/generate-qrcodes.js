@@ -96,16 +96,17 @@ async function generateAllQrCodes() {
     { path: '/remote', name: 'remote' }
   ];
   
-  for (const { path, name } of paths) {
+  for (const pathInfo of paths) {
     // Generate URL with IP address
-    const url = `http://${primaryIp}:${port}${path}`;
+    const url = `http://${primaryIp}:${port}${pathInfo.path}`;
     
     // Generate QR code
-    await generateQrCode(url, `qr-${name}.png`);
+    await generateQrCode(url, `qr-${pathInfo.name}.png`);
     
     // Also save a text file with the URL
-    fs.writeFileSync(path.join(QR_DIR, `url-${name}.txt`), url);
-    console.log(`Saved URL to ${path.join(QR_DIR, `url-${name}.txt`)}`);
+    const urlFilePath = path.join(QR_DIR, `url-${pathInfo.name}.txt`);
+    fs.writeFileSync(urlFilePath, url);
+    console.log(`Saved URL to ${urlFilePath}`);
   }
   
   console.log('QR code generation complete!');
