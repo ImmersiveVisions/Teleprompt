@@ -9,6 +9,7 @@
 - `npm test -- -t "test name"` - Run specific test
 
 ## Milestones
+- Commit 254542b: Added automatic script conversion and index.html filtering (2025-03-31)
 - Commit 1cdd6f3: Working ScriptPlayer component with scrolling animation (2025-03-30)
 - Commit c942d5f: HTML rendering improvements for script files (2025-03-30)
 
