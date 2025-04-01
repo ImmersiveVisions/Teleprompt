@@ -9,6 +9,7 @@
 - `npm test -- -t "test name"` - Run specific test
 
 ## Milestones
+- Commit 5347064: Fixed position broadcasting from manual scrolling in preview pane (2025-03-31)
 - Commit 254542b: Added automatic script conversion and index.html filtering (2025-03-31)
 - Commit 1cdd6f3: Working ScriptPlayer component with scrolling animation (2025-03-30)
 - Commit c942d5f: HTML rendering improvements for script files (2025-03-30)
@@ -69,3 +70,16 @@
 - Handle scroll operations differently for text vs HTML content
 - Use ContentDocument API for accessing iframe contents
 - For script editing, update both body and content fields
+
+## Position Broadcasting
+- Use enhanced position data objects for both search and manual scrolling
+- Position data includes: normalized position (0-1), text content, HTML tag info
+- Window-level callback for position broadcasting ensures message delivery
+- Multiple fallback mechanisms for position transmission
+- Debounce scrolling events to only broadcast when scrolling has stopped
+- Handle scrollbar drags and various input methods (mouse, touch)
+- Track scrolling state with persistent module-level variables
+
+## Known Issues
+- Rollback button functionality is incomplete - needs to be fixed in future updates
+- Search text may find multiple instances of the same string - needs additional vectors for identification
