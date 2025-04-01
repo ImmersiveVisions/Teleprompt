@@ -32,6 +32,9 @@ const AdminPage = () => {
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
+  const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
+  const [storedPosition, setStoredPosition] = useState(null);
+  const [canRollback, setCanRollback] = useState(false);
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
   
@@ -391,6 +394,63 @@ const AdminPage = () => {
   // Reference to the script player component
   const scriptPlayerRef = React.useRef(null);
   
+  // Set up the position sending functionality
+  useEffect(() => {
+    console.log('⭐ [POSITION DEBUG] AdminPage: Setting up sendPosition function on scriptPlayerRef. Current ref:', scriptPlayerRef);
+    
+    // Create a position handler function and make it available globally
+    const handlePositionUpdate = (positionData) => {
+      console.log('⭐ [POSITION DEBUG] AdminPage: Sending manual scroll position to clients:', 
+        typeof positionData === 'object' ? positionData : { position: positionData });
+      
+      // If we received enhanced position data (object), use sendSearchPosition for better accuracy
+      if (typeof positionData === 'object' && positionData !== null) {
+        console.log('⭐ [POSITION DEBUG] Using enhanced SEARCH_POSITION message with text content:', 
+          positionData.text ? positionData.text.substring(0, 30) + '...' : 'none');
+        sendSearchPosition(positionData);
+      } else {
+        // Fallback to simple position value if we somehow got a number instead of an object
+        console.log('⭐ [POSITION DEBUG] Fallback: Using simple JUMP_TO_POSITION message');
+        sendControlMessage('JUMP_TO_POSITION', positionData);
+      }
+      
+      // Visual feedback to show we're syncing position
+      const previewHeader = document.querySelector('.preview-header h3');
+      if (previewHeader) {
+        const originalText = previewHeader.textContent;
+        previewHeader.textContent = 'Syncing position to viewers...';
+        setTimeout(() => {
+          previewHeader.textContent = originalText;
+        }, 800);
+      }
+    };
+    
+    // Set global callback for direct access from any component
+    window._sendPositionCallback = handlePositionUpdate;
+    
+    // Also set the callback on the ref if it's available
+    if (scriptPlayerRef.current) {
+      console.log('⭐ [POSITION DEBUG] Setting sendPosition on scriptPlayerRef.current');
+      scriptPlayerRef.current.sendPosition = handlePositionUpdate;
+      
+      // Debug current state of the ref
+      console.log('⭐ [POSITION DEBUG] AdminPage: Current ref state:', {
+        hasRef: !!scriptPlayerRef,
+        hasRefCurrent: !!scriptPlayerRef.current,
+        hasSendPosition: !!(scriptPlayerRef.current && scriptPlayerRef.current.sendPosition),
+        refProperties: Object.keys(scriptPlayerRef.current || {})
+      });
+    } else {
+      console.warn('⭐ [POSITION DEBUG] scriptPlayerRef.current is not available, only using global callback');
+    }
+    
+    // Clean up when component unmounts
+    return () => {
+      // Clean up global callback
+      delete window._sendPositionCallback;
+    };
+  }, [selectedScript]);
+  
   // Jump to search result - handles both HTML and text content
   const jumpToSearchResult = (result) => {
     if (!selectedScript) {
@@ -549,6 +609,10 @@ const AdminPage = () => {
     setSelectedScriptId(null);
     setSelectedScript(null);
     
+    // Reset rollback state
+    setStoredPosition(null);
+    setCanRollback(false);
+    
     // Pause if playing
     if (isPlaying) {
       setIsPlaying(false);
@@ -598,6 +662,10 @@ const AdminPage = () => {
         console.log('Script loaded successfully:', script.title);
         setSelectedScriptId(script.id);
         setSelectedScript(script);
+        
+        // Reset rollback state when loading a new script
+        setStoredPosition(null);
+        setCanRollback(false);
         
         // Notify other clients
         sendControlMessage('LOAD_SCRIPT', script.id);
@@ -716,6 +784,18 @@ const AdminPage = () => {
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
+      if (data.aspectRatio) setAspectRatio(data.aspectRatio);
+      
+      // If we are now in a paused state and have a stored position, enable rollback
+      if (!data.isPlaying && storedPosition !== null) {
+        console.log('State update: activating rollback button from paused state');
+        // Small delay to ensure other state updates complete first
+        setTimeout(() => {
+          setCanRollback(true);
+        }, 100);
+      } else if (data.isPlaying) {
+        setCanRollback(false);
+      }
       // Removed currentChapter update
       
       // Handle script selection changes from WebSocket
@@ -732,6 +812,10 @@ const AdminPage = () => {
             console.log('Script found, setting as selected:', script.title);
             setSelectedScriptId(script.id);
             setSelectedScript(script);
+            
+            // Reset rollback state when loading a new script
+            setStoredPosition(null);
+            setCanRollback(false);
           } else {
             console.error('AdminPage: Could not find script with ID:', data.currentScript);
           }
@@ -748,6 +832,10 @@ const AdminPage = () => {
           if (script) {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
+            
+            // Reset rollback state when loading a new script
+            setStoredPosition(null);
+            setCanRollback(false);
           }
         } catch (error) {
           console.error('AdminPage: Error loading new script from state update:', error);
@@ -768,8 +856,55 @@ const AdminPage = () => {
     const newState = !isPlaying;
     console.log('PLAY STATE CHANGE - setting isPlaying to:', newState, 'from:', isPlaying);
     
+    // Store current position when starting playback
+    if (newState === true) {
+      // Get the iframe or content container
+      const iframe = document.querySelector('#html-script-frame');
+      if (iframe && iframe.contentWindow) {
+        try {
+          // Capture the current scroll position
+          const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
+          const scrollHeight = iframe.contentDocument.body.scrollHeight;
+          const viewportHeight = iframe.contentWindow.innerHeight;
+          
+          // Calculate the scroll position as a percentage
+          const percentage = Math.max(0, Math.min(1, scrollTop / (scrollHeight - viewportHeight || 1)));
+          
+          console.log('Storing scroll position for rollback:', {
+            scrollTop,
+            scrollHeight,
+            viewportHeight,
+            percentage
+          });
+          
+          // Store the position
+          setStoredPosition(percentage);
+          
+          // Rollback button will be active when paused
+          setCanRollback(false);
+        } catch (e) {
+          console.error('Error storing scroll position:', e);
+        }
+      }
+    } else {
+      // When pausing, enable the rollback button if we have a stored position
+      if (storedPosition !== null) {
+        console.log('Activating rollback button');
+        // Use a small timeout to ensure the state is updated *after* the pause action is complete
+        setTimeout(() => {
+          setCanRollback(true);
+        }, 100);
+      }
+    }
+    
     // Update local state first
     setIsPlaying(newState);
+    
+    // Inform the ScriptPlayer that auto-scrolling is starting/stopping
+    // This prevents user scroll events from being detected during auto-scroll
+    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
+      scriptPlayerRef.current.setScrollAnimating(newState);
+    }
     
     // Log state after setting for debugging
     setTimeout(() => {
@@ -805,6 +940,59 @@ const AdminPage = () => {
   const changeFontSize = (newSize) => {
     setFontSize(newSize);
     sendControlMessage('SET_FONT_SIZE', newSize);
+  };
+  
+  const changeAspectRatio = (newRatio) => {
+    setAspectRatio(newRatio);
+    sendControlMessage('SET_ASPECT_RATIO', newRatio);
+  };
+  
+  // Handle rollback to stored position
+  const handleRollback = () => {
+    if (!storedPosition || storedPosition === null) {
+      console.error('Cannot rollback - no stored position');
+      return;
+    }
+    
+    // Verify that rollback is allowed
+    if (!canRollback) {
+      console.log('Rollback button clicked but rollback is not active');
+      return;
+    }
+    
+    console.log('Rolling back to stored position:', storedPosition);
+    
+    // Add visual feedback first
+    const previewHeader = document.querySelector('.preview-header h3');
+    let originalText = '';
+    if (previewHeader) {
+      originalText = previewHeader.textContent;
+      previewHeader.textContent = 'Rolling back to previous position...';
+    }
+    
+    // Use a small timeout to ensure the visual feedback is shown before the actual rollback
+    setTimeout(() => {
+      // If we have a direct reference to the player, use it
+      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
+        scriptPlayerRef.current.jumpToPosition(storedPosition);
+      }
+      
+      // Send WebSocket message to update all clients
+      sendControlMessage('JUMP_TO_POSITION', storedPosition);
+      
+      // Reset the visual feedback after a delay
+      if (previewHeader) {
+        setTimeout(() => {
+          previewHeader.textContent = originalText;
+        }, 800);
+      }
+      
+      // Optional: Disable rollback button after use to prevent multiple clicks
+      // Uncomment the following to disable the rollback button after use
+      // setTimeout(() => {
+      //   setCanRollback(false);
+      // }, 1000);
+    }, 200);
   };
   
   // Chapter functionality has been removed
@@ -904,13 +1092,58 @@ const AdminPage = () => {
             <>
               <div className="script-header">
                 <h2>{selectedScript.title}</h2>
-                {/* Removed edit and delete buttons as we're only reading scripts from directory */}
+                <div className="aspect-ratio-selector">
+                  <div className="radio-group">
+                    <label className={aspectRatio === '16/9' ? 'selected' : ''}>
+                      <input 
+                        type="radio" 
+                        name="aspectRatio" 
+                        value="16/9" 
+                        checked={aspectRatio === '16/9'} 
+                        onChange={() => changeAspectRatio('16/9')}
+                      />
+                      <span>16:9</span>
+                    </label>
+                    <label className={aspectRatio === '4/3' ? 'selected' : ''}>
+                      <input 
+                        type="radio" 
+                        name="aspectRatio" 
+                        value="4/3" 
+                        checked={aspectRatio === '4/3'} 
+                        onChange={() => changeAspectRatio('4/3')}
+                      />
+                      <span>4:3</span>
+                    </label>
+                  </div>
+                </div>
               </div>
               
               <div className="teleprompter-controls">
                 <div className="control-group">
                   <button onClick={togglePlay} className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}>
                     {isPlaying ? 'PAUSE' : 'PLAY'}
+                  </button>
+                  
+                  <button 
+                    onClick={handleRollback} 
+                    className={`rollback-btn large-btn ${canRollback ? 'active' : 'disabled'}`}
+                    disabled={!canRollback}
+                    style={{
+                      backgroundColor: canRollback ? '#28a745' : '#6c757d',
+                      color: 'white',
+                      cursor: canRollback ? 'pointer' : 'not-allowed',
+                      opacity: canRollback ? 1 : 0.5,
+                      transition: 'all 0.3s ease',
+                      border: canRollback ? '2px solid #28a745' : '2px solid transparent',
+                      boxShadow: canRollback ? '0 0 5px rgba(40, 167, 69, 0.5)' : 'none',
+                      fontWeight: 'bold'
+                    }}
+                    title={canRollback ? 
+                      "Click to return to the position when playback started" : 
+                      "First press play to set a position, then pause to activate rollback"
+                    }
+                  >
+                    ROLLBACK
                   </button>
                   
                   <button onClick={toggleDirection} className="direction-btn">
@@ -975,6 +1208,7 @@ const AdminPage = () => {
                     16px = small, 32px = medium, 48px = large
                   </div>
                 </div>
+                
               </div>
               
               <div className="search-navigation">
@@ -1020,7 +1254,8 @@ const AdminPage = () => {
                       isPlaying={isPlaying}
                       speed={speed}
                       direction={direction}
-                      fontSize={fontSize}
+                      fontSize={Math.round(fontSize * 0.5)} // Reduce font size to 50% for preview
+                      aspectRatio={aspectRatio}
                       fullScreen={false}
                     />
                   </>

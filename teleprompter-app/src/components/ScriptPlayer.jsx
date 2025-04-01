@@ -1,7 +1,7 @@
 // ScriptPlayer.jsx
 // An ultra-simple script player that just focuses on scrolling
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { parseScript } from '../services/scriptParser';
 import $ from 'jquery'; // Import jQuery for smooth scrolling
 
@@ -11,10 +11,14 @@ const ScriptPlayer = ({
   speed = 1,
   direction = 'forward',
   fontSize = 24,
-  fullScreen = false
+  fullScreen = false,
+  aspectRatio = '16/9'  // Default to 16:9, but can be '4/3' or '16/9'
 }, ref) => {
+  // Calculate aspect ratio value as a number for calculations
+  const aspectRatioValue = aspectRatio === '16/9' ? 16/9 : 4/3;
   const containerRef = useRef(null);
   const animationRef = useRef(null);
+  const [currentTopElement, setCurrentTopElement] = useState(null);
   
   // When we receive a script, ensure the parent knows about it
   useEffect(() => {
@@ -23,6 +27,69 @@ const ScriptPlayer = ({
       window.__currentScript = script;
     }
   }, [script]);
+  
+  // Function to find the element closest to the top of the viewport
+  const findElementAtViewportTop = () => {
+    console.log('📋 [DEBUG] findElementAtViewportTop called');
+    
+    try {
+      const iframe = containerRef.current?.querySelector('iframe');
+      if (!iframe || !iframe.contentDocument || !iframe.contentDocument.body) {
+        console.log('📋 [DEBUG] Cannot find iframe or access its content');
+        return null;
+      }
+      
+      console.log('📋 [DEBUG] iframe found:', iframe.id || 'no-id');
+      
+      // Get all paragraph elements and other text blocks
+      const textElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
+      console.log('📋 [DEBUG] Found', textElements ? textElements.length : 0, 'text elements');
+      
+      if (!textElements || textElements.length === 0) {
+        console.log('📋 [DEBUG] No text elements found, returning null');
+        return null;
+      }
+      
+      // Get current scroll position
+      const scrollTop = iframe.contentWindow.scrollY || 
+        iframe.contentDocument.documentElement.scrollTop || 0;
+      
+      console.log('📋 [DEBUG] Current scroll position:', scrollTop);
+      
+      // Add a small offset from top to find element that's actually visible (not just at the boundary)
+      const viewportTopPosition = scrollTop + 50; // 50px down from the top edge
+      
+      // Find the element whose top edge is closest to the viewport top position
+      let closestElement = null;
+      let closestDistance = Infinity;
+      
+      textElements.forEach(element => {
+        const rect = element.getBoundingClientRect();
+        const elementTop = rect.top + scrollTop;
+        
+        // Calculate distance between element's top and viewport top
+        const distance = Math.abs(elementTop - viewportTopPosition);
+        
+        // If this element is closer to the top of the viewport than any found so far
+        if (distance < closestDistance && element.textContent.trim()) {
+          closestDistance = distance;
+          closestElement = element;
+        }
+      });
+      
+      console.log('📋 [DEBUG] Found closest element:', 
+        closestElement ? {
+          tag: closestElement.tagName,
+          text: closestElement.textContent.substring(0, 30).trim(),
+          distance: closestDistance
+        } : 'none found');
+      
+      return closestElement;
+    } catch (error) {
+      console.error('Error finding element at viewport top:', error);
+      return null;
+    }
+  };
   
 
   // Apply font size to iframe content when it changes
@@ -576,10 +643,357 @@ const ScriptPlayer = ({
     }
   };
   
-  // Expose jump method to parent
-  React.useImperativeHandle(ref, () => ({
-    jumpToPosition
-  }), [script, jumpToPosition]);
+  // Track user interaction with the iframe scrollbar
+  useEffect(() => {
+    if (!script || !containerRef.current) {
+      return;
+    }
+    
+    const iframe = containerRef.current.querySelector('iframe');
+    if (!iframe || !iframe.contentWindow) {
+      return;
+    }
+    
+    // Create a variable in module scope that persists between renders
+    if (!window._scrollState) {
+      window._scrollState = {
+        isUserScrolling: false,
+        userScrollTimeout: null,
+        isScrollAnimating: false
+      };
+    }
+    
+    // Use the persistent state object
+    const scrollState = window._scrollState;
+    
+    // Function to update the current top element
+    const updateTopElement = (isUserInitiated = false) => {
+      console.log('📋 [DEBUG] updateTopElement called with isUserInitiated:', isUserInitiated);
+      
+      const topElement = findElementAtViewportTop();
+      console.log('📋 [DEBUG] findElementAtViewportTop returned:', topElement ? 'Element found' : 'No element found');
+      
+      if (topElement && (topElement !== currentTopElement || isUserInitiated)) {
+        console.log('📋 [DEBUG] Setting currentTopElement and processing position');
+        setCurrentTopElement(topElement);
+        
+        // Only broadcast position if this was from user interaction (not from auto-scrolling)
+        if (isUserInitiated) {
+          console.log('📋 [DEBUG] Processing user-initiated update (preparing to broadcast)');
+          
+          try {
+            // Get the normalized position as percentage
+            const scrollTop = iframe.contentWindow.scrollY || 
+              iframe.contentDocument.documentElement.scrollTop || 0;
+            const scrollHeight = iframe.contentDocument.body.scrollHeight;
+            const viewportHeight = iframe.contentWindow.innerHeight;
+            const maxScroll = Math.max(0, scrollHeight - viewportHeight);
+            const percentage = maxScroll > 0 ? scrollTop / maxScroll : 0;
+            
+            console.log('📋 [DEBUG] Calculated position values:', {
+              scrollTop,
+              scrollHeight,
+              viewportHeight,
+              maxScroll,
+              percentage: percentage.toFixed(4)
+            });
+            
+            // Log the user-initiated position change
+            console.log('User scrolled to position:', {
+              text: topElement.textContent.substring(0, 50).trim(),
+              tag: topElement.tagName,
+              position: percentage.toFixed(4),
+              scrollTop: scrollTop
+            });
+            
+            // Create enhanced position data similar to search functionality
+            const enhancedPositionData = {
+              position: percentage,
+              text: topElement.textContent.trim(),
+              tag: topElement.tagName,
+              parentTag: topElement.parentElement ? topElement.parentElement.tagName : null,
+              absolutePosition: scrollTop
+            };
+            
+            // Send the enhanced position data to other clients
+            console.log('⭐ [POSITION DEBUG] Checking ref for sendPosition function:', { 
+              hasRef: !!ref,
+              hasRefCurrent: !!(ref && ref.current), 
+              hasSendPosition: !!(ref && ref.current && ref.current.sendPosition),
+              refContent: ref ? JSON.stringify(ref.current, (key, value) => {
+                if (typeof value === 'function') return 'Function';
+                return value;
+              }) : 'null'
+            });
+            
+            // CRITICAL FIX: Use direct access to a window-level function
+            // to bypass any potential ref issues
+            if (window._sendPositionCallback) {
+              console.log('⭐ [POSITION DEBUG] Using global position callback');
+              window._sendPositionCallback(enhancedPositionData);
+            } else if (ref.current && ref.current.sendPosition) {
+              console.log('⭐ [POSITION DEBUG] Using ref.sendPosition');
+              ref.current.sendPosition(enhancedPositionData);
+            } else {
+              console.error('⭐ [POSITION DEBUG] No position sending mechanism available! Saving to window._lastPosition');
+              window._lastPosition = enhancedPositionData;
+              
+              // Try to use websocket directly if available
+              try {
+                if (window.sendSearchPosition || window.websocketService?.sendSearchPosition) {
+                  const sendFn = window.sendSearchPosition || window.websocketService.sendSearchPosition;
+                  console.log('⭐ [POSITION DEBUG] Using global sendSearchPosition function');
+                  sendFn(enhancedPositionData);
+                }
+              } catch (e) {
+                console.error('⭐ [POSITION DEBUG] Error using direct websocket access:', e);
+              }
+            }
+          } catch (e) {
+            console.error('Error calculating scroll position:', e);
+          }
+        }
+      }
+    };
+    
+    // Detect when a scroll is due to user interaction vs. animation
+    const handleScrollStart = () => {
+      console.log('📋 [DEBUG] handleScrollStart called, current states:', {
+        isScrollAnimating: scrollState.isScrollAnimating, 
+        isPlaying,
+        isUserScrolling: scrollState.isUserScrolling,
+        hasTimeout: !!scrollState.userScrollTimeout
+      });
+      
+      // If not currently auto-scrolling, mark this as user-initiated
+      if (!scrollState.isScrollAnimating && !isPlaying) {
+        console.log('📋 [DEBUG] Setting isUserScrolling to TRUE');
+        scrollState.isUserScrolling = true;
+        
+        // Clear any existing timeout
+        if (scrollState.userScrollTimeout) {
+          console.log('📋 [DEBUG] Clearing existing timeout in handleScrollStart');
+          clearTimeout(scrollState.userScrollTimeout);
+          scrollState.userScrollTimeout = null;
+        }
+      } else {
+        console.log('📋 [DEBUG] Not treating as user scroll because:', 
+          scrollState.isScrollAnimating ? 'animation is running' : 'playback is active');
+      }
+    };
+    
+    const handleScrollEnd = () => {
+      console.log('📋 [DEBUG] handleScrollEnd called, isUserScrolling:', scrollState.isUserScrolling);
+      
+      if (scrollState.isUserScrolling) {
+        // Clear any existing timeout to prevent multiple calls
+        if (scrollState.userScrollTimeout) {
+          console.log('📋 [DEBUG] Clearing existing timeout');
+          clearTimeout(scrollState.userScrollTimeout);
+        }
+        
+        console.log('📋 [DEBUG] Setting timeout to call updateTopElement');
+        
+        // Update only after scrolling has completely stopped
+        console.log('📋 [DEBUG] Setting new scroll end timeout - current ref state:', { 
+          hasRef: !!ref,
+          hasRefCurrent: !!(ref && ref.current),
+          hasSendPosition: !!(ref && ref.current && ref.current.sendPosition)
+        });
+        
+        scrollState.userScrollTimeout = setTimeout(() => {
+          console.log('📋 [DEBUG] Timeout fired! Scroll has settled, calling updateTopElement(true)');
+          console.log('📋 [DEBUG] Current ref state at timeout firing:', {
+            hasRef: !!ref,
+            hasRefCurrent: !!(ref && ref.current),
+            hasSendPosition: !!(ref && ref.current && ref.current.sendPosition),
+            refKeys: ref && ref.current ? Object.keys(ref.current) : 'none'
+          });
+          
+          updateTopElement(true); // true = user initiated
+          console.log('📋 [DEBUG] updateTopElement(true) completed');
+          scrollState.isUserScrolling = false;
+        }, 500); // Longer delay to ensure scrolling has completely settled
+      } else {
+        console.log('📋 [DEBUG] Not processing scroll end - isUserScrolling is false');
+      }
+    };
+    
+    // Add scroll event listeners to the iframe
+    const addScrollListeners = () => {
+      try {
+        if (iframe.contentWindow) {
+          // ALWAYS set isUserScrolling to true on ANY scroll event if not auto-scrolling
+          const checkAndMarkUserScroll = (e) => {
+            if (!scrollState.isScrollAnimating && !isPlaying) {
+              console.log('📋 [DEBUG] Setting isUserScrolling to TRUE from', e.type);
+              scrollState.isUserScrolling = true;
+              
+              // Clear any previous timeout
+              if (scrollState.userScrollTimeout) {
+                clearTimeout(scrollState.userScrollTimeout);
+                scrollState.userScrollTimeout = null;
+              }
+            }
+          };
+          
+          // Use wheel event to detect user scrolling (mouse wheel)
+          iframe.contentWindow.addEventListener('wheel', (e) => {
+            console.log('📋 [DEBUG] Wheel event detected');
+            checkAndMarkUserScroll(e);
+            handleScrollStart();
+          }, { passive: true });
+          
+          // Detect scrollbar clicks specifically for better drag detection
+          iframe.contentDocument.addEventListener('mousedown', (e) => {
+            // Check if click is near the right edge of the iframe (where scrollbar usually is)
+            const isNearScrollbar = (e.clientX > (iframe.clientWidth - 30));
+            if (isNearScrollbar) {
+              console.log('📋 [DEBUG] Detected scrollbar click');
+            }
+            checkAndMarkUserScroll(e);
+            handleScrollStart();
+          }, { passive: true });
+
+          // Watch for mouseup events to detect end of scrollbar drag
+          iframe.contentDocument.addEventListener('mouseup', (e) => {
+            if (scrollState.isUserScrolling) {
+              console.log('📋 [DEBUG] Mouse up event - will check if scroll needs to be finalized');
+            }
+          }, { passive: true });
+          
+          // Detect touch interactions
+          iframe.contentDocument.addEventListener('touchstart', (e) => {
+            console.log('📋 [DEBUG] Touch event detected');
+            checkAndMarkUserScroll(e);
+            handleScrollStart();
+          }, { passive: true });
+          
+          // Detect ALL scrolling - this is critical for detecting scrollbar drags
+          iframe.contentWindow.addEventListener('scroll', (e) => {
+            console.log('📋 [DEBUG] Scroll event detected');
+            checkAndMarkUserScroll(e);
+            handleScrollEnd();  // Every scroll event can potentially end scrolling
+            
+            // Throttle UI updates during active scrolling
+            const now = Date.now();
+            if (!window._lastUIUpdate || now - window._lastUIUpdate > 100) {
+              window._lastUIUpdate = now;
+              updateTopElement(false); // false = not user initiated (no broadcast)
+            }
+          }, { passive: true });
+          
+          return true;
+        }
+      } catch (e) {
+        console.error('Error adding scroll listeners to iframe:', e);
+      }
+      return false;
+    };
+    
+    // Set flag when animation starts/stops
+    const setScrollAnimating = (animating) => {
+      scrollState.isScrollAnimating = animating;
+      console.log('📋 [DEBUG] Set isScrollAnimating to', animating);
+    };
+    
+    // Expose the function to the ref so we can tell when animations start/end
+    if (ref.current) {
+      ref.current.setScrollAnimating = setScrollAnimating;
+    }
+    
+    // Try to add listeners once the iframe is loaded
+    iframe.addEventListener('load', () => {
+      console.log('📋 [DEBUG] iframe loaded, adding scroll listeners');
+      if (!addScrollListeners()) {
+        // If direct listener fails, try a simpler approach as fallback
+        console.log('📋 [DEBUG] Falling back to interval-based position updates');
+        const intervalId = setInterval(() => updateTopElement(false), 500);
+        return () => clearInterval(intervalId);
+      }
+    });
+    
+    // If iframe is already loaded, add listeners now
+    if (iframe.contentDocument && iframe.contentWindow) {
+      console.log('📋 [DEBUG] iframe already loaded, adding scroll listeners now');
+      addScrollListeners();
+    }
+    
+    // Clean up
+    return () => {
+      try {
+        if (scrollState.userScrollTimeout) {
+          clearTimeout(scrollState.userScrollTimeout);
+        }
+        
+        if (iframe.contentWindow) {
+          try {
+            // We can't properly remove the anonymous function listeners,
+            // but we can try to remove some of them to avoid memory leaks
+            iframe.contentWindow.removeEventListener('wheel', null);
+            iframe.contentDocument.removeEventListener('mousedown', null);
+            iframe.contentDocument.removeEventListener('touchstart', null);
+            iframe.contentDocument.removeEventListener('mouseup', null);
+            iframe.contentWindow.removeEventListener('scroll', null);
+            console.log('📋 [DEBUG] Attempted to clean up event listeners');
+          } catch (error) {
+            console.log('📋 [DEBUG] Could not clean up some event listeners:', error.message);
+          }
+        }
+      } catch (e) {
+        console.error('Clean up error:', e);
+      }
+    };
+  }, [script, currentTopElement, isPlaying]);
+  
+  // Expose methods to parent component
+  React.useImperativeHandle(ref, () => {
+    // Log debug info when the ref methods are created
+    console.log('⭐ [POSITION DEBUG] Creating ref methods in useImperativeHandle');
+    
+    // Create a unique ID for this ref creation to track persistence
+    const refId = Date.now().toString(36);
+    
+    const refObject = {
+      // Jump to a specific position
+      jumpToPosition,
+      
+      // Get the current element at viewport top
+      getCurrentTopElement: () => currentTopElement,
+      
+      // Flag to indicate animation is running (prevents user scroll events)
+      setScrollAnimating: (animating) => {
+        // Direct access to module-scoped state
+        if (window._scrollState) {
+          window._scrollState.isScrollAnimating = animating;
+          console.log('📋 [DEBUG] Set animation state to', animating);
+        }
+      },
+      
+      // This is just a placeholder that will be overwritten by the parent
+      // But we provide a default implementation for safety
+      sendPosition: (data) => {
+        console.log('⭐ [POSITION DEBUG] Default sendPosition called - this should be overridden by parent!', data);
+      },
+      
+      // For debugging - add a ref ID and timestamp
+      _debugInfo: {
+        refId: refId,
+        createdAt: new Date().toISOString(),
+        componentId: containerRef.current ? containerRef.current.id : 'unknown'
+      }
+    };
+    
+    console.log('⭐ [POSITION DEBUG] Created ref object:', {
+      refId: refId,
+      hasJumpToPosition: !!refObject.jumpToPosition,
+      hasGetCurrentTopElement: !!refObject.getCurrentTopElement,
+      hasSetScrollAnimating: !!refObject.setScrollAnimating,
+      hasSendPosition: !!refObject.sendPosition
+    });
+    
+    return refObject;
+  }, [script, jumpToPosition, currentTopElement]);
   
   // Render the script viewer
   if (!script) {
@@ -625,33 +1039,66 @@ const ScriptPlayer = ({
       <div
         style={{
           width: '100%',
+          height: '100%',
           display: 'flex',
+          flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
           flex: 1,
-          padding: '0 2rem'
+          padding: fullScreen ? '0' : '0 2rem',
+          boxSizing: 'border-box'
         }}
       >
+        {!fullScreen && currentTopElement && (
+          <div
+            style={{
+              width: '100%',
+              padding: '5px 10px',
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              color: '#aaffaa',
+              fontSize: '12px',
+              textAlign: 'center',
+              borderRadius: '4px',
+              margin: '0 0 10px 0',
+              maxHeight: '40px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Current: {currentTopElement.textContent.substring(0, 60).trim()}{currentTopElement.textContent.length > 60 ? '...' : ''}
+          </div>
+        )}
         <div
           ref={containerRef}
           style={{
-            width: '100%',
-            maxWidth: '100%',
-            aspectRatio: '16/9',
+            width: fullScreen ? (aspectRatio === '16/9' ? '100%' : 'calc(100vh * ' + aspectRatioValue + ')') : '100%',
+            height: fullScreen ? '100vh' : '100%',
+            minHeight: fullScreen ? 'auto' : '500px',
+            maxWidth: '100vw',
+            maxHeight: fullScreen ? '100vh' : '80vh',
+            aspectRatio: aspectRatio,
             overflow: 'hidden',
             backgroundColor: 'black',
-            border: '1px solid #333',
-            boxShadow: '0 0 10px rgba(0, 0, 0, 0.5)'
+            border: fullScreen ? 'none' : '1px solid #333',
+            boxShadow: fullScreen ? 'none' : '0 0 10px rgba(0, 0, 0, 0.5)',
+            boxSizing: 'border-box',
+            position: 'relative',
+            margin: '0 auto',
+            flex: '1'
           }}
           className="script-content-container"
+          data-aspect-ratio={aspectRatio}
         >
           <iframe 
             src={`/${script.id}`}
             style={{
               width: '100%',
               height: '100%',
+              minHeight: '500px',
               border: 'none',
-              backgroundColor: 'black'
+              backgroundColor: 'black',
+              display: 'block'
             }}
             sandbox="allow-scripts allow-same-origin"
             title={`${script.title} content`}
