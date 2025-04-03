@@ -16,6 +16,7 @@
   - Synchronize video playback with script progression
 
 ## Important Commit References
+- `db9b0d0` - Fixed auto-scrolling and position synchronization issues (4/2/2025)
 - `f3387d4` - Fixed ViewerPage variable reference ordering issue (3/30/2025)
 
 ## Build Commands
