@@ -477,6 +477,9 @@ input, select, textarea {
 .script-viewer-panel {
   flex: 2;
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 600px;
 }
 
 .admin-sidebar {
@@ -581,6 +584,54 @@ input, select, textarea {
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #eee;
+}
+
+/* Aspect Ratio Radio Button Styling */
+.aspect-ratio-selector {
+  display: flex;
+  align-items: center;
+}
+
+.radio-group {
+  display: flex;
+  background-color: #f0f0f0;
+  border-radius: 20px;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.radio-group label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 18px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.radio-group label.selected {
+  background-color: #007bff;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.radio-group input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.radio-group span {
+  font-weight: 500;
+}
+
+.radio-group label:hover:not(.selected) {
+  background-color: #e0e0e0;
 }
 
 .script-actions {
@@ -765,6 +816,10 @@ input, select, textarea {
   flex-direction: column;
   background-color: #000;
   border-radius: 4px;
+  /* Take up all available height in the container */
+  height: 100%;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview-header {
@@ -858,10 +913,57 @@ input, select, textarea {
 }
 
 /* Admin Sidebar */
-.connection-panel, .help-panel, .qr-code-panel {
+.connected-clients-panel, .connection-panel, .help-panel, .qr-code-panel {
   padding: 1rem;
   border-bottom: 1px solid #eee;
   background-color: #fff;
+}
+
+.connected-clients-list {
+  margin-top: 0.5rem;
+}
+
+.client-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  border: 1px solid #e1e4e8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.client-item.active {
+  border-left: 4px solid #28a745;
+  background-color: #f0fff4;
+}
+
+.client-icon {
+  font-size: 1.5rem;
+  margin-right: 0.75rem;
+  min-width: 30px;
+  text-align: center;
+}
+
+.client-info {
+  flex: 1;
+}
+
+.client-name {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.client-status {
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+.client-item.active .client-status {
+  color: #28a745;
+  font-weight: 600;
 }
 
 .bluetooth-control {
@@ -929,6 +1031,14 @@ input, select, textarea {
 /* HTML content styling for script viewer */
 .script-content-container {
   color: white;
+  min-height: 200px; /* Ensure it's always visible */
+}
+
+/* Special styling for 4:3 full screen containers */
+.viewer-page .script-content-container[data-aspect-ratio="4/3"] {
+  margin: 0 auto !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
 }
 
 .html-content {
@@ -1251,11 +1361,16 @@ input, select, textarea {
 /* Viewer Page */
 .viewer-page {
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
   background-color: #000;
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
 }
 
 

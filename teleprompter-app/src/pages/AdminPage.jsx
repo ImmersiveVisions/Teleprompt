@@ -5,7 +5,7 @@ import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
-import ScriptPlayer from '../components/ScriptPlayer';
+import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import SearchModal from '../components/SearchModal';
 import '../styles.css';
@@ -33,8 +33,7 @@ const AdminPage = () => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
-  const [storedPosition, setStoredPosition] = useState(null);
-  const [canRollback, setCanRollback] = useState(false);
+  const [storedNodeData, setStoredNodeData] = useState(null);
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
   
@@ -407,6 +406,23 @@ const AdminPage = () => {
       if (typeof positionData === 'object' && positionData !== null) {
         console.log('⭐ [POSITION DEBUG] Using enhanced SEARCH_POSITION message with text content:', 
           positionData.text ? positionData.text.substring(0, 30) + '...' : 'none');
+        
+        // Update stored node data for rollback functionality
+        // This ensures the rollback button always has current position data
+        if (positionData.text) {
+          console.log('⭐ [POSITION DEBUG] Updating stored node data for rollback');
+          
+          // Enhance with rollback metadata
+          const nodeDataForRollback = {
+            ...positionData,
+            fromRollback: true,
+            timestamp: Date.now()
+          };
+          
+          // Store for rollback
+          setStoredNodeData(nodeDataForRollback);
+        }
+        
         sendSearchPosition(positionData);
       } else {
         // Fallback to simple position value if we somehow got a number instead of an object
@@ -430,8 +446,14 @@ const AdminPage = () => {
     
     // Also set the callback on the ref if it's available
     if (scriptPlayerRef.current) {
-      console.log('⭐ [POSITION DEBUG] Setting sendPosition on scriptPlayerRef.current');
-      scriptPlayerRef.current.sendPosition = handlePositionUpdate;
+      console.log('⭐ [POSITION DEBUG] Setting position handler on scriptPlayerRef.current');
+      // Support both new and legacy APIs
+      if (typeof scriptPlayerRef.current.setPositionHandler === 'function') {
+        scriptPlayerRef.current.setPositionHandler(handlePositionUpdate);
+      } else {
+        // Legacy API - assign method directly
+        scriptPlayerRef.current.sendPosition = handlePositionUpdate;
+      }
       
       // Debug current state of the ref
       console.log('⭐ [POSITION DEBUG] AdminPage: Current ref state:', {
@@ -444,12 +466,96 @@ const AdminPage = () => {
       console.warn('⭐ [POSITION DEBUG] scriptPlayerRef.current is not available, only using global callback');
     }
     
+    // Set up a periodic position capture for rollback during playback
+    let positionCaptureInterval = null;
+    
+    // Start or stop the position capture based on play state
+    if (isPlaying && selectedScript) {
+      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback during playback');
+      
+      // Capture the position every 3 seconds during playback
+      positionCaptureInterval = setInterval(() => {
+        try {
+          // Only capture if still playing
+          if (!isPlaying) return;
+          
+          // Get the iframe
+          const iframe = document.querySelector('#html-script-frame');
+          if (iframe && iframe.contentWindow && iframe.contentDocument) {
+            // Try to find the current visible dialog
+            const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
+            const viewportHeight = iframe.contentWindow.innerHeight;
+            const viewportCenter = scrollTop + (viewportHeight / 2);
+            
+            // Find dialog elements
+            const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+            
+            if (dialogElements.length > 0) {
+              // Find the closest dialog to viewport center
+              let closestElement = null;
+              let closestDistance = Infinity;
+              let closestIndex = -1;
+              
+              dialogElements.forEach((element, index) => {
+                const rect = element.getBoundingClientRect();
+                const elementTop = rect.top + scrollTop;
+                const elementCenter = elementTop + (rect.height / 2);
+                const distance = Math.abs(elementCenter - viewportCenter);
+                
+                if (distance < closestDistance && element.textContent.trim()) {
+                  closestDistance = distance;
+                  closestElement = element;
+                  closestIndex = index;
+                }
+              });
+              
+              // If we found a dialog element close to viewport, store it
+              if (closestElement && closestDistance < 500) {
+                // For rollback, we want to go BACK one dialog if possible
+                let rollbackElement = closestElement;
+                let rollbackIndex = closestIndex;
+                
+                // If we're not at the first dialog, go back one
+                if (closestIndex > 0) {
+                  rollbackElement = dialogElements[closestIndex - 1];
+                  rollbackIndex = closestIndex - 1;
+                }
+                
+                // Create node data for the rollback target
+                const nodeData = {
+                  type: rollbackElement.getAttribute('data-type') || rollbackElement.tagName.toLowerCase(),
+                  text: rollbackElement.textContent.trim().substring(0, 50),
+                  parentTag: rollbackElement.parentElement ? rollbackElement.parentElement.tagName : null,
+                  fromRollback: true,
+                  index: rollbackIndex,
+                  totalDialogs: dialogElements.length,
+                  attributes: {
+                    dataType: rollbackElement.getAttribute('data-type')
+                  }
+                };
+                
+                // Update the stored node data
+                setStoredNodeData(nodeData);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('⭐ [POSITION DEBUG] Error in periodic position capture:', e);
+        }
+      }, 3000); // Every 3 seconds is frequent enough but not too CPU intensive
+    }
+    
     // Clean up when component unmounts
     return () => {
       // Clean up global callback
       delete window._sendPositionCallback;
+      
+      // Clean up interval
+      if (positionCaptureInterval) {
+        clearInterval(positionCaptureInterval);
+      }
     };
-  }, [selectedScript]);
+  }, [selectedScript, isPlaying]);
   
   // Jump to search result - handles both HTML and text content
   const jumpToSearchResult = (result) => {
@@ -574,8 +680,13 @@ const AdminPage = () => {
       })));
       
       // If we have a direct reference to the player, use it
-      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-        scriptPlayerRef.current.jumpToPosition(position);
+      if (scriptPlayerRef.current) {
+        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+        if (scriptPlayerRef.current.scrollToNode) {
+          scriptPlayerRef.current.scrollToNode({ position, text: result.line });
+        } else if (scriptPlayerRef.current.jumpToPosition) {
+          scriptPlayerRef.current.jumpToPosition(position);
+        }
       }
       
       // Calculate the position as a percentage of the total script length
@@ -609,9 +720,8 @@ const AdminPage = () => {
     setSelectedScriptId(null);
     setSelectedScript(null);
     
-    // Reset rollback state
-    setStoredPosition(null);
-    setCanRollback(false);
+    // Reset stored node for rollback
+    setStoredNodeData(null);
     
     // Pause if playing
     if (isPlaying) {
@@ -663,9 +773,8 @@ const AdminPage = () => {
         setSelectedScriptId(script.id);
         setSelectedScript(script);
         
-        // Reset rollback state when loading a new script
-        setStoredPosition(null);
-        setCanRollback(false);
+        // Reset stored node for rollback
+        setStoredNodeData(null);
         
         // Notify other clients
         sendControlMessage('LOAD_SCRIPT', script.id);
@@ -786,16 +895,7 @@ const AdminPage = () => {
       setFontSize(data.fontSize);
       if (data.aspectRatio) setAspectRatio(data.aspectRatio);
       
-      // If we are now in a paused state and have a stored position, enable rollback
-      if (!data.isPlaying && storedPosition !== null) {
-        console.log('State update: activating rollback button from paused state');
-        // Small delay to ensure other state updates complete first
-        setTimeout(() => {
-          setCanRollback(true);
-        }, 100);
-      } else if (data.isPlaying) {
-        setCanRollback(false);
-      }
+      // No need to handle rollback button state anymore
       // Removed currentChapter update
       
       // Handle script selection changes from WebSocket
@@ -813,9 +913,8 @@ const AdminPage = () => {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
             
-            // Reset rollback state when loading a new script
-            setStoredPosition(null);
-            setCanRollback(false);
+            // Reset stored node for rollback
+            setStoredNodeData(null);
           } else {
             console.error('AdminPage: Could not find script with ID:', data.currentScript);
           }
@@ -833,9 +932,8 @@ const AdminPage = () => {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
             
-            // Reset rollback state when loading a new script
-            setStoredPosition(null);
-            setCanRollback(false);
+            // Reset stored node for rollback
+            setStoredNodeData(null);
           }
         } catch (error) {
           console.error('AdminPage: Error loading new script from state update:', error);
@@ -853,68 +951,194 @@ const AdminPage = () => {
       return;
     }
     
+    // Calculate new state before any operations
     const newState = !isPlaying;
     console.log('PLAY STATE CHANGE - setting isPlaying to:', newState, 'from:', isPlaying);
     
-    // Store current position when starting playback
-    if (newState === true) {
+    // Always store the current node for rollback, regardless of play state
+    // This ensures rollback button always works even during playback
+    try {
       // Get the iframe or content container
       const iframe = document.querySelector('#html-script-frame');
-      if (iframe && iframe.contentWindow) {
-        try {
-          // Capture the current scroll position
-          const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
-          const scrollHeight = iframe.contentDocument.body.scrollHeight;
-          const viewportHeight = iframe.contentWindow.innerHeight;
+      if (iframe && iframe.contentWindow && iframe.contentDocument) {
+        console.log('Finding dialog node for rollback storage');
+        
+        // Get current scroll position for viewport calculations
+        const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
+        const viewportTop = scrollTop;
+        const viewportHeight = iframe.contentWindow.innerHeight;
+        const viewportCenter = viewportTop + (viewportHeight / 2);
+        
+        // Capture all dialog elements for context
+        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+        console.log(`Found ${dialogElements.length} dialog elements with data-type attribute`);
+        
+        // If we have dialog elements, find the best one to store
+        if (dialogElements.length > 0) {
+          // Find the currently visible dialog - the one closest to viewport center
+          let currentDialogElement = null;
+          let currentDialogDistance = Infinity;
+          let currentDialogIndex = -1;
           
-          // Calculate the scroll position as a percentage
-          const percentage = Math.max(0, Math.min(1, scrollTop / (scrollHeight - viewportHeight || 1)));
-          
-          console.log('Storing scroll position for rollback:', {
-            scrollTop,
-            scrollHeight,
-            viewportHeight,
-            percentage
+          // Find the current dialog closest to viewport center
+          dialogElements.forEach((element, index) => {
+            const rect = element.getBoundingClientRect();
+            const elementTop = rect.top + scrollTop;
+            const elementCenter = elementTop + (rect.height / 2);
+            
+            // Distance from element center to viewport center
+            const distance = Math.abs(elementCenter - viewportCenter);
+            
+            if (distance < currentDialogDistance && element.textContent.trim()) {
+              currentDialogDistance = distance;
+              currentDialogElement = element;
+              currentDialogIndex = index;
+            }
           });
           
-          // Store the position
-          setStoredPosition(percentage);
-          
-          // Rollback button will be active when paused
-          setCanRollback(false);
-        } catch (e) {
-          console.error('Error storing scroll position:', e);
+          // If we found a dialog element close to viewport, store it
+          if (currentDialogElement && currentDialogDistance < 500) {
+            console.log('[ROLLBACK] Found current dialog element:', {
+              text: currentDialogElement.textContent.substring(0, 30).trim(),
+              type: 'dialog element',
+              distance: currentDialogDistance,
+              index: currentDialogIndex
+            });
+            
+            // For rollback, we want to go BACK one dialog if possible
+            let rollbackElement = currentDialogElement;
+            let rollbackIndex = currentDialogIndex;
+            
+            // If we're not at the first dialog, go back one
+            if (currentDialogIndex > 0) {
+              rollbackElement = dialogElements[currentDialogIndex - 1];
+              rollbackIndex = currentDialogIndex - 1;
+              console.log('[ROLLBACK] Using previous dialog for rollback');
+            } else {
+              // We're at the first dialog, so we'll stay here
+              console.log('[ROLLBACK] Already at first dialog, using it for rollback');
+            }
+            
+            // Create node data for the rollback target
+            const nodeData = {
+              type: rollbackElement.getAttribute('data-type') || rollbackElement.tagName.toLowerCase(),
+              text: rollbackElement.textContent.trim().substring(0, 50),
+              parentTag: rollbackElement.parentElement ? rollbackElement.parentElement.tagName : null,
+              fromRollback: true,
+              index: rollbackIndex, // Store the index of this dialog
+              totalDialogs: dialogElements.length, // Store the total number of dialogs
+              // Add additional attributes to help identify the element
+              attributes: {
+                class: rollbackElement.getAttribute('class'),
+                id: rollbackElement.getAttribute('id'),
+                style: rollbackElement.getAttribute('style'),
+                dataType: rollbackElement.getAttribute('data-type')
+              }
+            };
+            
+            console.log('[ROLLBACK] Stored node data for rollback:', nodeData);
+            setStoredNodeData(nodeData);
+          } else {
+            // If we couldn't find a dialog close to viewport, use the first dialog
+            console.log('[ROLLBACK] No dialog close to viewport, using first dialog for rollback');
+            const firstDialog = dialogElements[0];
+            
+            const nodeData = {
+              type: firstDialog.getAttribute('data-type') || firstDialog.tagName.toLowerCase(),
+              text: firstDialog.textContent.trim().substring(0, 50),
+              parentTag: firstDialog.parentElement ? firstDialog.parentElement.tagName : null,
+              fromRollback: true,
+              index: 0, // First dialog
+              totalDialogs: dialogElements.length,
+              attributes: {
+                class: firstDialog.getAttribute('class'),
+                id: firstDialog.getAttribute('id'),
+                style: firstDialog.getAttribute('style'),
+                dataType: firstDialog.getAttribute('data-type')
+              }
+            };
+            
+            console.log('[ROLLBACK] Using first dialog for rollback:', nodeData);
+            setStoredNodeData(nodeData);
+          }
+        } else {
+          console.warn('[ROLLBACK] No dialog elements found, cannot create reliable rollback data');
+          setStoredNodeData(null);
+        }
+        
+        // If starting playback, explicitly store the current position
+        if (newState === true) {
+          try {
+            console.log("[PLAYBACK] Attempting to store starting position for playback");
+            // Find all dialog elements in the current view
+            const allDialogs = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+            if (allDialogs.length > 0) {
+              // Get the current scroll position
+              const scrollY = iframe.contentWindow.scrollY || 0;
+              
+              // Find which dialog is closest to the current view
+              let closestDialog = null;
+              let closestDistance = Infinity;
+              let dialogIndex = -1;
+              
+              allDialogs.forEach((dialog, idx) => {
+                const rect = dialog.getBoundingClientRect();
+                // Calculate absolute position
+                const dialogTop = rect.top + scrollY;
+                // Find distance to current scroll position
+                const distance = Math.abs(dialogTop - scrollY - 100); // 100px buffer from top
+                
+                if (distance < closestDistance) {
+                  closestDistance = distance;
+                  closestDialog = dialog;
+                  dialogIndex = idx;
+                }
+              });
+              
+              if (closestDialog) {
+                console.log("[PLAYBACK] Explicitly storing position at playback start, dialog:", 
+                  closestDialog.textContent.substring(0, 30));
+                
+                // Store the exact starting position data including the dialog index
+                const startPositionData = {
+                  type: 'dialog',
+                  text: closestDialog.textContent.trim().substring(0, 50),
+                  index: dialogIndex,
+                  totalDialogs: allDialogs.length,
+                  fromRollback: true,
+                  attributes: {
+                    dataType: 'dialog'
+                  }
+                };
+                
+                // Store it for rollback
+                setStoredNodeData(startPositionData);
+                console.log("[PLAYBACK] Stored starting position at index:", dialogIndex);
+              }
+            }
+          } catch (posError) {
+            console.error("[PLAYBACK] Error storing starting position:", posError);
+          }
         }
       }
-    } else {
-      // When pausing, enable the rollback button if we have a stored position
-      if (storedPosition !== null) {
-        console.log('Activating rollback button');
-        // Use a small timeout to ensure the state is updated *after* the pause action is complete
-        setTimeout(() => {
-          setCanRollback(true);
-        }, 100);
+    } catch (e) {
+      console.error('Error in rollback handling:', e);
+      setStoredNodeData(null);
+    }
+    
+    // Update local state next
+    setIsPlaying(newState);
+    
+    // Inform the player that auto-scrolling is starting/stopping
+    // This prevents user scroll events from being detected during auto-scroll
+    if (scriptPlayerRef.current) {
+      if (scriptPlayerRef.current.setScrollAnimating) {
+        console.log('[ANIMATION] Notifying ScriptPlayer about animation state:', newState);
+        scriptPlayerRef.current.setScrollAnimating(newState);
       }
     }
     
-    // Update local state first
-    setIsPlaying(newState);
-    
-    // Inform the ScriptPlayer that auto-scrolling is starting/stopping
-    // This prevents user scroll events from being detected during auto-scroll
-    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
-      scriptPlayerRef.current.setScrollAnimating(newState);
-    }
-    
-    // Log state after setting for debugging
-    setTimeout(() => {
-      console.log('Play state check after 100ms:', {
-        isPlayingStateNow: isPlaying,
-        shouldBe: newState
-      });
-    }, 100);
-    
-    // Then send message to all clients
+    // Send WebSocket message IMMEDIATELY after state update
     console.log('Sending control message:', newState ? 'PLAY' : 'PAUSE');
     sendControlMessage(newState ? 'PLAY' : 'PAUSE');
     
@@ -922,7 +1146,7 @@ const AdminPage = () => {
     console.log('Play state after toggle:', {
       isPlaying: newState,
       scriptId: selectedScriptId,
-      scriptTitle: selectedScript.title
+      scriptTitle: selectedScript ? selectedScript.title : 'unknown'
     });
   };
   
@@ -947,52 +1171,151 @@ const AdminPage = () => {
     sendControlMessage('SET_ASPECT_RATIO', newRatio);
   };
   
-  // Handle rollback to stored position
+  // Handle rollback to stored node
   const handleRollback = () => {
-    if (!storedPosition || storedPosition === null) {
-      console.error('Cannot rollback - no stored position');
-      return;
+    // If we're playing, pause playback first
+    if (isPlaying) {
+      console.log('[ROLLBACK] Pausing playback before rollback');
+      setIsPlaying(false);
+      sendControlMessage('PAUSE');
     }
-    
-    // Verify that rollback is allowed
-    if (!canRollback) {
-      console.log('Rollback button clicked but rollback is not active');
-      return;
-    }
-    
-    console.log('Rolling back to stored position:', storedPosition);
     
     // Add visual feedback first
     const previewHeader = document.querySelector('.preview-header h3');
     let originalText = '';
     if (previewHeader) {
       originalText = previewHeader.textContent;
-      previewHeader.textContent = 'Rolling back to previous position...';
+      previewHeader.textContent = 'Rolling back to previous dialog...';
     }
     
-    // Use a small timeout to ensure the visual feedback is shown before the actual rollback
-    setTimeout(() => {
-      // If we have a direct reference to the player, use it
-      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-        scriptPlayerRef.current.jumpToPosition(storedPosition);
+    // Check if we have stored data to use for rollback
+    if (storedNodeData) {
+      console.log('[ROLLBACK] Using stored position data:', storedNodeData);
+      
+      // Create the rollback data with the rollback flag
+      const rollbackData = {
+        ...storedNodeData,
+        fromRollback: true,
+        timestamp: Date.now() // Add timestamp to ensure uniqueness 
+      };
+      
+      // Apply to local preview first
+      if (scriptPlayerRef.current) {
+        console.log('[ROLLBACK] Applying to local preview via scriptPlayerRef');
+        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+        if (scriptPlayerRef.current.scrollToNode) {
+          scriptPlayerRef.current.scrollToNode(rollbackData);
+        } else if (scriptPlayerRef.current.jumpToPosition) {
+          scriptPlayerRef.current.jumpToPosition(rollbackData);
+        }
       }
       
-      // Send WebSocket message to update all clients
-      sendControlMessage('JUMP_TO_POSITION', storedPosition);
+      // Send to all clients
+      sendSearchPosition(rollbackData);
       
-      // Reset the visual feedback after a delay
+      // Reset visual feedback
       if (previewHeader) {
         setTimeout(() => {
           previewHeader.textContent = originalText;
         }, 800);
       }
       
-      // Optional: Disable rollback button after use to prevent multiple clicks
-      // Uncomment the following to disable the rollback button after use
-      // setTimeout(() => {
-      //   setCanRollback(false);
-      // }, 1000);
-    }, 200);
+      return;
+    }
+    
+    // If no stored data is available, try to find the current dialog
+    console.log('[ROLLBACK] No stored node data, finding first dialog');
+    
+    // Find the iframe
+    const iframe = document.querySelector('#html-script-frame');
+    if (iframe && iframe.contentDocument) {
+      try {
+        // Get all dialog elements
+        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+        console.log(`[ROLLBACK] Found ${dialogElements.length} dialog elements`);
+        
+        if (dialogElements.length > 0) {
+          // Use the first dialog as a default
+          const firstDialog = dialogElements[0];
+          
+          // Create node data
+          const defaultData = {
+            type: 'dialog',
+            text: firstDialog.textContent.trim().substring(0, 50),
+            index: 0,
+            totalDialogs: dialogElements.length,
+            fromRollback: true,
+            attributes: {
+              dataType: 'dialog'
+            }
+          };
+          
+          console.log('[ROLLBACK] Using first dialog:', defaultData);
+          
+          // Apply to local preview
+          if (scriptPlayerRef.current) {
+            // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+            if (scriptPlayerRef.current.scrollToNode) {
+              scriptPlayerRef.current.scrollToNode(defaultData);
+            } else if (scriptPlayerRef.current.jumpToPosition) {
+              scriptPlayerRef.current.jumpToPosition(defaultData);
+            }
+          } else {
+            // Scroll directly if needed
+            firstDialog.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }
+          
+          // Send to all clients
+          sendSearchPosition(defaultData);
+          
+          // Store for future use
+          setStoredNodeData(defaultData);
+          
+          // Reset visual feedback
+          if (previewHeader) {
+            setTimeout(() => {
+              previewHeader.textContent = originalText;
+            }, 800);
+          }
+          
+          return;
+        }
+      } catch (error) {
+        console.error('[ROLLBACK] Error finding dialogs:', error);
+      }
+    }
+    
+    // Absolute last resort - go to beginning
+    console.log('[ROLLBACK] No dialogs found, going to beginning of script');
+    
+    const defaultData = {
+      position: 0,
+      fromRollback: true,
+      text: "Beginning of script"
+    };
+    
+    // Apply to local preview
+    if (scriptPlayerRef.current) {
+      // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+      if (scriptPlayerRef.current.scrollToNode) {
+        scriptPlayerRef.current.scrollToNode(defaultData);
+      } else if (scriptPlayerRef.current.jumpToPosition) {
+        scriptPlayerRef.current.jumpToPosition(defaultData);
+      }
+    }
+    
+    // Send to all clients
+    sendSearchPosition(defaultData);
+    
+    // Reset visual feedback
+    if (previewHeader) {
+      setTimeout(() => {
+        previewHeader.textContent = originalText;
+      }, 800);
+    }
   };
   
   // Chapter functionality has been removed
@@ -1126,22 +1449,19 @@ const AdminPage = () => {
                   
                   <button 
                     onClick={handleRollback} 
-                    className={`rollback-btn large-btn ${canRollback ? 'active' : 'disabled'}`}
-                    disabled={!canRollback}
+                    className="rollback-btn large-btn active"
+                    disabled={false}
                     style={{
-                      backgroundColor: canRollback ? '#28a745' : '#6c757d',
+                      backgroundColor: '#28a745',
                       color: 'white',
-                      cursor: canRollback ? 'pointer' : 'not-allowed',
-                      opacity: canRollback ? 1 : 0.5,
+                      cursor: 'pointer',
+                      opacity: 1,
                       transition: 'all 0.3s ease',
-                      border: canRollback ? '2px solid #28a745' : '2px solid transparent',
-                      boxShadow: canRollback ? '0 0 5px rgba(40, 167, 69, 0.5)' : 'none',
+                      border: '2px solid #28a745',
+                      boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
                       fontWeight: 'bold'
                     }}
-                    title={canRollback ? 
-                      "Click to return to the position when playback started" : 
-                      "First press play to set a position, then pause to activate rollback"
-                    }
+                    title="Click to return to a previous position"
                   >
                     ROLLBACK
                   </button>
@@ -1272,29 +1592,31 @@ const AdminPage = () => {
         </div>
         
         <div className="admin-sidebar">
-          <div className="script-selector-panel">
-            <h3>Script Selection</h3>
-            <div className="script-dropdown-container">
-              <select 
-                className="admin-script-dropdown"
-                value={selectedScriptId || ''}
-                onChange={(e) => {
-                  // Convert to number if it looks like a number
-                  const val = e.target.value;
-                  const numVal = !isNaN(Number(val)) && val !== 'none' ? Number(val) : val;
-                  handleScriptSelect(numVal);
-                }}
-              >
-                <option value="" disabled>Select a script...</option>
-                <option value="none">No script (clear selection)</option>
-                {scripts.map(script => (
-                  <option key={script.id} value={script.id}>
-                    {script.title}
-                  </option>
-                ))}
-              </select>
+          <div className="connected-clients-panel">
+            <h3>Connected Clients</h3>
+            <div className="connected-clients-list">
+              <div className="client-item active">
+                <div className="client-icon">💻</div>
+                <div className="client-info">
+                  <div className="client-name">Admin Panel (You)</div>
+                  <div className="client-status">Connected</div>
+                </div>
+              </div>
+              <div className="client-item">
+                <div className="client-icon">📱</div>
+                <div className="client-info">
+                  <div className="client-name">Viewer Display</div>
+                  <div className="client-status">Waiting for connection...</div>
+                </div>
+              </div>
+              <div className="client-item">
+                <div className="client-icon">🎮</div>
+                <div className="client-info">
+                  <div className="client-name">Remote Control</div>
+                  <div className="client-status">Waiting for connection...</div>
+                </div>
+              </div>
             </div>
-            
           </div>
           
           <div className="connection-panel">
