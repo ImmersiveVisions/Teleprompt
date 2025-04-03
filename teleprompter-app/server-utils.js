@@ -37,7 +37,28 @@ function initWebSocketServer(server) {
     console.log('New client connected to path /ws - WebSocket server is working!');
     
     // Parse URL to get client type
-    const clientType = new URL(req.url, 'http://localhost').searchParams.get('clientType') || 'unknown';
+    console.log("Raw request URL:", req.url);
+    let clientType = 'unknown';
+    try {
+      // Handle URL parsing for the request
+      // Sometimes req.url might only have path and not the full URL, so we create one
+      if (req.url.startsWith('/?')) {
+        // Fix the URL format - this is a common case
+        const searchParams = new URLSearchParams(req.url.substring(2));
+        clientType = searchParams.get('clientType') || 'unknown';
+      } else {
+        // Try standard URL parsing
+        const url = new URL(req.url, 'http://localhost');
+        clientType = url.searchParams.get('clientType') || 'unknown';
+      }
+    } catch (err) {
+      console.error('Error parsing URL for client type:', err);
+      // Fallback parsing - just extract the clientType parameter directly
+      const match = req.url.match(/clientType=([^&]*)/);
+      if (match && match[1]) {
+        clientType = match[1];
+      }
+    }
     console.log(`Client identified as type: ${clientType}`);
     
     // Store client type with the connection
@@ -280,7 +301,13 @@ function broadcastState() {
     isPlaying: !!sharedState.isPlaying,
     direction: sharedState.direction || 'forward',
     fontSize: sharedState.fontSize || 24,
-    aspectRatio: sharedState.aspectRatio || '16/9'
+    aspectRatio: sharedState.aspectRatio || '16/9',
+    // Include connected clients information
+    connectedClients: {
+      admin: clientTypes.admin ? clientTypes.admin.length : 0,
+      viewer: clientTypes.viewer ? clientTypes.viewer.length : 0,
+      remote: clientTypes.remote ? clientTypes.remote.length : 0
+    }
     // No scrollData - that's handled by explicit SEARCH_POSITION messages now
   };
   
