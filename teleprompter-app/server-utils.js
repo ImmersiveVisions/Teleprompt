@@ -6,13 +6,24 @@ console.log('Loading server-utils.js');
 
 // Store connections and state
 let connections = [];
+let clientTypes = {
+  admin: [],
+  viewer: [],
+  remote: []
+};
 let sharedState = {
   currentScript: null,
   currentPosition: 0,
   speed: 1.0, // Keep at 1.0 as default for moderate speed
   isPlaying: false,
   direction: 'forward',
-  fontSize: 24
+  fontSize: 24,
+  aspectRatio: '16/9', // Default to 16:9 widescreen
+  connectedClients: {
+    admin: 0,
+    viewer: 0, 
+    remote: 0
+  }
 };
 
 // Initialize WebSocket server for Electron main process
@@ -22,9 +33,27 @@ function initWebSocketServer(server) {
     path: '/ws'  // Define the WebSocket path to match client connection
   });
   
-  wsServer.on('connection', (ws) => {
+  wsServer.on('connection', (ws, req) => {
     console.log('New client connected to path /ws - WebSocket server is working!');
+    
+    // Parse URL to get client type
+    const clientType = new URL(req.url, 'http://localhost').searchParams.get('clientType') || 'unknown';
+    console.log(`Client identified as type: ${clientType}`);
+    
+    // Store client type with the connection
+    ws.clientType = clientType;
+    ws.clientId = Date.now().toString();
     connections.push(ws);
+    
+    // Register in the client types collection
+    if (clientTypes[clientType]) {
+      clientTypes[clientType].push(ws);
+      // Update connected clients count
+      sharedState.connectedClients[clientType] = clientTypes[clientType].length;
+    }
+    
+    // Log the updated client counts
+    console.log('Updated client counts:', sharedState.connectedClients);
     
     // Give a small delay before sending the initial state
     // This helps ensure the client is ready to receive the state
@@ -34,6 +63,9 @@ function initWebSocketServer(server) {
         type: 'STATE_UPDATE',
         data: sharedState
       }));
+      
+      // Broadcast client connection update to all admin clients
+      broadcastState();
     }, 500);
     
     ws.on('message', (message) => {
@@ -46,8 +78,22 @@ function initWebSocketServer(server) {
     });
     
     ws.on('close', () => {
-      console.log('Client disconnected');
+      console.log(`Client of type ${ws.clientType} disconnected`);
+      
+      // Remove from connections array
       connections = connections.filter(conn => conn !== ws);
+      
+      // Remove from type-specific array
+      if (clientTypes[ws.clientType]) {
+        clientTypes[ws.clientType] = clientTypes[ws.clientType].filter(conn => conn !== ws);
+        // Update the count in shared state
+        sharedState.connectedClients[ws.clientType] = clientTypes[ws.clientType].length;
+      }
+      
+      console.log('Updated client counts after disconnect:', sharedState.connectedClients);
+      
+      // Broadcast updated connection state
+      broadcastState();
     });
   });
   
@@ -131,6 +177,9 @@ function handleMessage(message, sender) {
           break;
         case 'SET_FONT_SIZE':
           sharedState.fontSize = message.value;
+          break;
+        case 'SET_ASPECT_RATIO':
+          sharedState.aspectRatio = message.value;
           break;
         case 'JUMP_TO_POSITION':
           // Handle jump to position command
@@ -230,7 +279,8 @@ function broadcastState() {
     speed: sharedState.speed || 1,
     isPlaying: !!sharedState.isPlaying,
     direction: sharedState.direction || 'forward',
-    fontSize: sharedState.fontSize || 24
+    fontSize: sharedState.fontSize || 24,
+    aspectRatio: sharedState.aspectRatio || '16/9'
     // No scrollData - that's handled by explicit SEARCH_POSITION messages now
   };
   

@@ -41,10 +41,22 @@ const initWebSocket = (statusCb) => {
       clientWs = null;
     }
     
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    // Determine client type based on the current page
+    let clientType = 'unknown';
+    if (window.location.pathname.includes('/admin')) {
+      clientType = 'admin';
+    } else if (window.location.pathname.includes('/viewer')) {
+      clientType = 'viewer';
+    } else if (window.location.pathname.includes('/remote')) {
+      clientType = 'remote';
+    } else if (window.location.pathname === '/' || window.location.pathname === '') {
+      clientType = 'admin'; // Default home page is admin
+    }
     
-    console.log('Initializing WebSocket connection to:', wsUrl);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?clientType=${clientType}`;
+    
+    console.log(`Initializing WebSocket connection to: ${wsUrl} as client type: ${clientType}`);
     
     try {
       // Use native browser WebSocket
@@ -76,6 +88,11 @@ const initWebSocket = (statusCb) => {
       try {
         const message = JSON.parse(event.data);
         console.log('===== [WS CLIENT] Received message:', message.type);
+        
+        // Critical: Log PLAY/PAUSE state changes
+        if (message.type === 'STATE_UPDATE' && message.data && message.data.isPlaying !== undefined) {
+          console.log(`===== [WS CLIENT] PLAY STATE UPDATE: ${message.data.isPlaying}`);
+        }
         
         // Check for position data in state updates 
         if (message.type === 'STATE_UPDATE' && message.data) {
@@ -131,16 +148,27 @@ const initWebSocket = (statusCb) => {
  * Send a control message over WebSocket
  * @param {string} action - Control action to perform
  * @param {*} value - Optional value for the action
+ * @returns {boolean} - Whether the message was sent successfully
  */
 const sendControlMessage = (action, value = null) => {
+  // Special handling for play/pause commands
+  if (action === 'PLAY' || action === 'PAUSE') {
+    console.log(`!!!!! [WS CLIENT] IMPORTANT: Sending ${action} command`);
+  }
+
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
     // Special handling for GET_STATE which is a different message type
     if (action === 'GET_STATE') {
       console.log('===== [WS CLIENT] Sending GET_STATE request to server');
-      clientWs.send(JSON.stringify({
-        type: 'GET_STATE'
-      }));
-      return;
+      try {
+        clientWs.send(JSON.stringify({
+          type: 'GET_STATE'
+        }));
+        return true;
+      } catch (err) {
+        console.error('===== [WS CLIENT] Error sending GET_STATE message:', err);
+        return false;
+      }
     }
     
     // Log jump position commands specially
@@ -148,7 +176,7 @@ const sendControlMessage = (action, value = null) => {
       console.log(`===== [WS CLIENT] Sending JUMP_TO_POSITION control message with value: ${value}`);
     } else {
       // Normal control message
-      console.log('===== [WS CLIENT] Sending control message:', action, value);
+      console.log('===== [WS CLIENT] Sending control message:', action, value !== null ? value : 'no value');
     }
     
     // Create the message
@@ -159,12 +187,32 @@ const sendControlMessage = (action, value = null) => {
     });
     
     // Send the control message
-    
-    // Send and verify
-    clientWs.send(message);
-    console.log(`===== [WS CLIENT] Message sent (${message.length} bytes)`);
+    try {
+      // Send and verify
+      clientWs.send(message);
+      console.log(`===== [WS CLIENT] Message sent (${message.length} bytes)`);
+      
+      // For play/pause commands, send additional log for debugging
+      if (action === 'PLAY' || action === 'PAUSE') {
+        console.log(`!!!!! [WS CLIENT] ${action} command sent successfully at ${new Date().toISOString()}`);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error(`===== [WS CLIENT] Error sending message: ${err.message}`);
+      return false;
+    }
   } else {
-    console.warn('===== [WS CLIENT] WebSocket not connected, cannot send message. Status:', getWebSocketStatus());
+    const status = getWebSocketStatus();
+    console.warn(`===== [WS CLIENT] WebSocket not connected, cannot send ${action} message. Status: ${status}`);
+    
+    // Attempt to reconnect if disconnected
+    if (status === 'disconnected' || status === 'connecting') {
+      console.log('===== [WS CLIENT] Attempting to reconnect WebSocket...');
+      initWebSocket(statusCallback);
+    }
+    
+    return false;
   }
 };
 

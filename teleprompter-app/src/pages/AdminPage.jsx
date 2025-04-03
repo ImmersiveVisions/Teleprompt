@@ -37,6 +37,13 @@ const AdminPage = () => {
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
   
+  // State for tracking connected clients
+  const [connectedClients, setConnectedClients] = useState({
+    admin: 0,
+    viewer: 0,
+    remote: 0
+  });
+  
   // Load scripts and QR code URLs on component mount
   useEffect(() => {
     loadScripts();
@@ -895,6 +902,12 @@ const AdminPage = () => {
       setFontSize(data.fontSize);
       if (data.aspectRatio) setAspectRatio(data.aspectRatio);
       
+      // Update connected clients state if it exists in the data
+      if (data.connectedClients) {
+        console.log('AdminPage: Updating connected clients:', data.connectedClients);
+        setConnectedClients(data.connectedClients);
+      }
+      
       // No need to handle rollback button state anymore
       // Removed currentChapter update
       
@@ -1598,22 +1611,26 @@ const AdminPage = () => {
               <div className="client-item active">
                 <div className="client-icon">💻</div>
                 <div className="client-info">
-                  <div className="client-name">Admin Panel (You)</div>
+                  <div className="client-name">Admin Panel{connectedClients.admin > 1 ? ` (${connectedClients.admin})` : ''}</div>
                   <div className="client-status">Connected</div>
                 </div>
               </div>
-              <div className="client-item">
+              <div className={`client-item ${connectedClients.viewer > 0 ? 'active' : ''}`}>
                 <div className="client-icon">📱</div>
                 <div className="client-info">
-                  <div className="client-name">Viewer Display</div>
-                  <div className="client-status">Waiting for connection...</div>
+                  <div className="client-name">Viewer Display{connectedClients.viewer > 1 ? ` (${connectedClients.viewer})` : ''}</div>
+                  <div className="client-status">
+                    {connectedClients.viewer > 0 ? 'Connected' : 'Waiting for connection...'}
+                  </div>
                 </div>
               </div>
-              <div className="client-item">
+              <div className={`client-item ${connectedClients.remote > 0 ? 'active' : ''}`}>
                 <div className="client-icon">🎮</div>
                 <div className="client-info">
-                  <div className="client-name">Remote Control</div>
-                  <div className="client-status">Waiting for connection...</div>
+                  <div className="client-name">Remote Control{connectedClients.remote > 1 ? ` (${connectedClients.remote})` : ''}</div>
+                  <div className="client-status">
+                    {connectedClients.remote > 0 ? 'Connected' : 'Waiting for connection...'}
+                  </div>
                 </div>
               </div>
             </div>
