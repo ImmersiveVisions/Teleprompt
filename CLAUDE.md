@@ -1,5 +1,20 @@
 # Claude Code Guidelines for Teleprompter App
 
+## Known Bugs
+- Rollback feature not working correctly:
+  - When script is paused, player stops but admin panel button doesn't activate
+  - Viewer component scrolls to top without user interaction
+- Position synchronization issue:
+  - When scroll is initiated in admin preview panel, viewer sometimes selects wrong text
+  - Search starts from top instead of using the passed position value
+
+## Planned Features
+- Video clip integration:
+  - Automatic playback of video clips noted in script
+  - Parse special notation in script (format TBD)
+  - Play video clips associated with script annotations when reached
+  - Synchronize video playback with script progression
+
 ## Important Commit References
 - `f3387d4` - Fixed ViewerPage variable reference ordering issue (3/30/2025)
 
