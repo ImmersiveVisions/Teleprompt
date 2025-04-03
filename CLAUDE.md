@@ -4,9 +4,17 @@
 - Rollback feature not working correctly:
   - When script is paused, player stops but admin panel button doesn't activate
   - Viewer component scrolls to top without user interaction
-- Position synchronization issue:
-  - When scroll is initiated in admin preview panel, viewer sometimes selects wrong text
-  - Search starts from top instead of using the passed position value
+
+## Fixed Issues
+- Position synchronization issues fixed (commit `db9b0d0`):
+  - Auto-scrolling now works correctly after play button is pressed
+  - Search position commands now correctly highlight the text in the viewer
+- UI improvements (commit `a12875a`):
+  - Removed duplicate script selection dropdown
+  - Added connected clients panel with status indicators
+- Client connection tracking (commit `140c2dd`):
+  - WebSocket connections now identify client type (admin/viewer/remote)
+  - Admin panel shows number of connected clients by type
 
 ## Planned Features
 - Video clip integration:
@@ -15,7 +23,21 @@
   - Play video clips associated with script annotations when reached
   - Synchronize video playback with script progression
 
+## Implemented Features
+- Visual highlighting (commit `2dcfb2e`):
+  - Yellow highlight for text-based search results
+  - Green highlight for index-based navigation
+  - Cyan highlight for position-based scrolling
+  - Animations fade out after 2 seconds
+- Client identification and tracking:
+  - WebSocket clients identify their type (admin, viewer, remote)
+  - Connection counts displayed in admin panel
+  - Visual indicators for connected/disconnected clients
+
 ## Important Commit References
+- `140c2dd` - Fix remote client detection and connection tracking (4/2/2025)
+- `a12875a` - Clean up UI by removing duplicate script selection (4/2/2025)
+- `2dcfb2e` - Add highlight effect for search position commands (4/2/2025)
 - `db9b0d0` - Fixed auto-scrolling and position synchronization issues (4/2/2025)
 - `f3387d4` - Fixed ViewerPage variable reference ordering issue (3/30/2025)
 
@@ -51,8 +73,10 @@
 - Keep components focused on single responsibility
 
 ### WebSocket Protocol
-- Use proper message types (CONTROL, STATE_UPDATE)
+- Use proper message types (CONTROL, STATE_UPDATE, SEARCH_POSITION)
 - Follow existing error handling patterns for WebSocket connections
+- Each client identifies its type as admin, viewer, or remote
+- Connected client statuses are tracked in shared state
 
 ### Code Formatting
 - Use consistent indentation (2 spaces)
