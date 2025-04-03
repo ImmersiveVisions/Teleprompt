@@ -459,10 +459,59 @@ export default React.forwardRef((props, ref) => {
         if (typeof nodeData.index === 'number') {
           const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
           if (dialogElements.length > 0 && nodeData.index < dialogElements.length) {
-            dialogElements[nodeData.index].scrollIntoView({
+            const targetElement = dialogElements[nodeData.index];
+            
+            // Create highlight effect for index-based navigation
+            const highlightElement = iframe.contentDocument.createElement('div');
+            highlightElement.className = 'teleprompter-highlight';
+            highlightElement.style.cssText = `
+              position: absolute;
+              background-color: rgba(0, 255, 0, 0.3);
+              border: 2px solid rgba(0, 255, 0, 0.7);
+              box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+              z-index: 1000;
+              pointer-events: none;
+              animation: pulse-highlight 2s ease-in-out;
+            `;
+            
+            // Create animation if it doesn't exist
+            if (!iframe.contentDocument.getElementById('highlight-keyframes')) {
+              const keyframes = iframe.contentDocument.createElement('style');
+              keyframes.id = 'highlight-keyframes';
+              keyframes.textContent = `
+                @keyframes pulse-highlight {
+                  0% { opacity: 0; }
+                  25% { opacity: 1; }
+                  75% { opacity: 1; }
+                  100% { opacity: 0; }
+                }
+              `;
+              iframe.contentDocument.head.appendChild(keyframes);
+            }
+            
+            // Position the highlight based on the element
+            const rect = targetElement.getBoundingClientRect();
+            highlightElement.style.left = '0';
+            highlightElement.style.width = '100%';
+            highlightElement.style.top = `${rect.top + iframe.contentWindow.scrollY}px`;
+            highlightElement.style.height = `${rect.height}px`;
+            
+            // Add to body
+            iframe.contentDocument.body.appendChild(highlightElement);
+            
+            // Scroll element into view
+            targetElement.scrollIntoView({
               behavior: 'smooth',
               block: 'center'
             });
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+              if (highlightElement.parentNode) {
+                highlightElement.parentNode.removeChild(highlightElement);
+              }
+            }, 2000);
+            
             return true;
           }
         }
@@ -503,10 +552,57 @@ export default React.forwardRef((props, ref) => {
             }
             
             if (targetElement) {
+              // Create highlight effect
+              const highlightElement = iframe.contentDocument.createElement('div');
+              highlightElement.className = 'teleprompter-highlight';
+              highlightElement.style.cssText = `
+                position: absolute;
+                background-color: rgba(255, 255, 0, 0.3);
+                border: 2px solid rgba(255, 215, 0, 0.7);
+                box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+                z-index: 1000;
+                pointer-events: none;
+                animation: pulse-highlight 2s ease-in-out;
+              `;
+              
+              // Create animation if it doesn't exist
+              if (!iframe.contentDocument.getElementById('highlight-keyframes')) {
+                const keyframes = iframe.contentDocument.createElement('style');
+                keyframes.id = 'highlight-keyframes';
+                keyframes.textContent = `
+                  @keyframes pulse-highlight {
+                    0% { opacity: 0; }
+                    25% { opacity: 1; }
+                    75% { opacity: 1; }
+                    100% { opacity: 0; }
+                  }
+                `;
+                iframe.contentDocument.head.appendChild(keyframes);
+              }
+              
+              // Position the highlight based on the element
+              const rect = targetElement.getBoundingClientRect();
+              highlightElement.style.left = '0';
+              highlightElement.style.width = '100%';
+              highlightElement.style.top = `${rect.top + iframe.contentWindow.scrollY}px`;
+              highlightElement.style.height = `${rect.height}px`;
+              
+              // Add to body
+              iframe.contentDocument.body.appendChild(highlightElement);
+              
+              // Scroll element into view
               targetElement.scrollIntoView({
                 behavior: 'smooth',
                 block: 'center'
               });
+              
+              // Remove highlight after animation
+              setTimeout(() => {
+                if (highlightElement.parentNode) {
+                  highlightElement.parentNode.removeChild(highlightElement);
+                }
+              }, 2000);
+              
               return true;
             }
           }
@@ -533,10 +629,57 @@ export default React.forwardRef((props, ref) => {
               // Use first match for simplicity
               const firstMatch = textMatches[0];
               if (firstMatch.parentElement) {
+                // Create highlight effect for text node match
+                const highlightElement = iframe.contentDocument.createElement('div');
+                highlightElement.className = 'teleprompter-highlight';
+                highlightElement.style.cssText = `
+                  position: absolute;
+                  background-color: rgba(255, 255, 0, 0.3);
+                  border: 2px solid rgba(255, 215, 0, 0.7);
+                  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+                  z-index: 1000;
+                  pointer-events: none;
+                  animation: pulse-highlight 2s ease-in-out;
+                `;
+                
+                // Create animation if it doesn't exist
+                if (!iframe.contentDocument.getElementById('highlight-keyframes')) {
+                  const keyframes = iframe.contentDocument.createElement('style');
+                  keyframes.id = 'highlight-keyframes';
+                  keyframes.textContent = `
+                    @keyframes pulse-highlight {
+                      0% { opacity: 0; }
+                      25% { opacity: 1; }
+                      75% { opacity: 1; }
+                      100% { opacity: 0; }
+                    }
+                  `;
+                  iframe.contentDocument.head.appendChild(keyframes);
+                }
+                
+                // Position the highlight based on the element
+                const rect = firstMatch.parentElement.getBoundingClientRect();
+                highlightElement.style.left = '0';
+                highlightElement.style.width = '100%';
+                highlightElement.style.top = `${rect.top + iframe.contentWindow.scrollY}px`;
+                highlightElement.style.height = `${rect.height}px`;
+                
+                // Add to body
+                iframe.contentDocument.body.appendChild(highlightElement);
+                
+                // Scroll element into view
                 firstMatch.parentElement.scrollIntoView({
                   behavior: 'smooth',
                   block: 'center'
                 });
+                
+                // Remove highlight after animation
+                setTimeout(() => {
+                  if (highlightElement.parentNode) {
+                    highlightElement.parentNode.removeChild(highlightElement);
+                  }
+                }, 2000);
+                
                 return true;
               }
             }
@@ -552,10 +695,57 @@ export default React.forwardRef((props, ref) => {
           const maxScroll = Math.max(1, scrollHeight - clientHeight);
           const targetPosition = Math.floor(nodeData.position * maxScroll);
           
+          // Create a highlight for position-based navigation
+          const highlightElement = iframe.contentDocument.createElement('div');
+          highlightElement.className = 'teleprompter-position-highlight';
+          highlightElement.style.cssText = `
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            background-color: rgba(0, 255, 255, 0.2);
+            border-top: 2px solid rgba(0, 255, 255, 0.7);
+            border-bottom: 2px solid rgba(0, 255, 255, 0.7);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+            z-index: 1000;
+            pointer-events: none;
+            animation: pulse-position-highlight 2s ease-in-out;
+          `;
+          
+          // Create animation if it doesn't exist
+          if (!iframe.contentDocument.getElementById('position-highlight-keyframes')) {
+            const keyframes = iframe.contentDocument.createElement('style');
+            keyframes.id = 'position-highlight-keyframes';
+            keyframes.textContent = `
+              @keyframes pulse-position-highlight {
+                0% { opacity: 0; }
+                25% { opacity: 1; }
+                75% { opacity: 1; }
+                100% { opacity: 0; }
+              }
+            `;
+            iframe.contentDocument.head.appendChild(keyframes);
+          }
+          
+          // Position the highlight at the target position
+          highlightElement.style.top = `${targetPosition + iframe.contentWindow.innerHeight/2 - 25}px`;
+          
+          // Add to body
+          iframe.contentDocument.body.appendChild(highlightElement);
+          
+          // Scroll to the position
           iframe.contentWindow.scrollTo({
             top: targetPosition,
             behavior: 'smooth'
           });
+          
+          // Remove highlight after animation
+          setTimeout(() => {
+            if (highlightElement.parentNode) {
+              highlightElement.parentNode.removeChild(highlightElement);
+            }
+          }, 2000);
+          
           return true;
         }
         
