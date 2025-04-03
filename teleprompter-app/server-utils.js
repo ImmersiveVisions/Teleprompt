@@ -59,6 +59,25 @@ function initWebSocketServer(server) {
         clientType = match[1];
       }
     }
+    
+    // Normalize client type to ensure it matches our expected values
+    if (!['admin', 'viewer', 'remote'].includes(clientType)) {
+      console.log(`Non-standard client type detected: "${clientType}". Headers:`, req.headers);
+      // Try to infer client type from headers or other information
+      const origin = req.headers.origin || '';
+      if (origin.includes('/remote')) {
+        console.log('Detected remote client from origin');
+        clientType = 'remote';
+      } else if (origin.includes('/viewer')) {
+        console.log('Detected viewer client from origin');
+        clientType = 'viewer';
+      } else if (origin.includes('/admin')) {
+        console.log('Detected admin client from origin');
+        clientType = 'admin';
+      } else {
+        console.log('Could not detect client type from information, defaulting to unknown');
+      }
+    }
     console.log(`Client identified as type: ${clientType}`);
     
     // Store client type with the connection
@@ -67,10 +86,19 @@ function initWebSocketServer(server) {
     connections.push(ws);
     
     // Register in the client types collection
-    if (clientTypes[clientType]) {
+    if (clientType in clientTypes) {
+      // Make sure we clean up any stale connections with the same ID (if reconnecting)
+      clientTypes[clientType] = clientTypes[clientType].filter(conn => !conn.clientId || conn.clientId !== ws.clientId);
+      
+      // Add this connection to the appropriate type collection
       clientTypes[clientType].push(ws);
+      
       // Update connected clients count
       sharedState.connectedClients[clientType] = clientTypes[clientType].length;
+      
+      console.log(`Updated ${clientType} count to ${clientTypes[clientType].length}`);
+    } else {
+      console.warn(`Unknown client type: ${clientType}, not tracking in typed collections`);
     }
     
     // Log the updated client counts
