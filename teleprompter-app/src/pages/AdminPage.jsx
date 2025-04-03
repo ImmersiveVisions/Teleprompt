@@ -1611,25 +1611,25 @@ const AdminPage = () => {
               <div className="client-item active">
                 <div className="client-icon">💻</div>
                 <div className="client-info">
-                  <div className="client-name">Admin Panel{connectedClients.admin > 1 ? ` (${connectedClients.admin})` : ''}</div>
-                  <div className="client-status">Connected</div>
+                  <div className="client-name">Admin Panel</div>
+                  <div className="client-status">Connected{connectedClients.admin > 0 ? ` (${connectedClients.admin})` : ''}</div>
                 </div>
               </div>
               <div className={`client-item ${connectedClients.viewer > 0 ? 'active' : ''}`}>
                 <div className="client-icon">📱</div>
                 <div className="client-info">
-                  <div className="client-name">Viewer Display{connectedClients.viewer > 1 ? ` (${connectedClients.viewer})` : ''}</div>
+                  <div className="client-name">Viewer Display</div>
                   <div className="client-status">
-                    {connectedClients.viewer > 0 ? 'Connected' : 'Waiting for connection...'}
+                    {connectedClients.viewer > 0 ? `Connected (${connectedClients.viewer})` : 'Waiting for connection...'}
                   </div>
                 </div>
               </div>
               <div className={`client-item ${connectedClients.remote > 0 ? 'active' : ''}`}>
                 <div className="client-icon">🎮</div>
                 <div className="client-info">
-                  <div className="client-name">Remote Control{connectedClients.remote > 1 ? ` (${connectedClients.remote})` : ''}</div>
+                  <div className="client-name">Remote Control</div>
                   <div className="client-status">
-                    {connectedClients.remote > 0 ? 'Connected' : 'Waiting for connection...'}
+                    {connectedClients.remote > 0 ? `Connected (${connectedClients.remote})` : 'Waiting for connection...'}
                   </div>
                 </div>
               </div>
