@@ -83,3 +83,10 @@
 ## Known Issues
 - Rollback button functionality is incomplete - needs to be fixed in future updates
 - Search text may find multiple instances of the same string - needs additional vectors for identification
+
+## HIGH PRIORITY Features
+- Implement way for users to add scripts at runtime:
+  - File upload interface in admin panel
+  - Drag-and-drop script support
+  - Direct script entry in browser
+  - Script format conversion utilities
