@@ -7,6 +7,7 @@ import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDevice
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
 import ScriptEntryModal from '../components/ScriptEntryModal';
+import ScriptUploadModal from '../components/ScriptUploadModal';
 import SearchModal from '../components/SearchModal';
 import '../styles.css';
 
@@ -15,6 +16,7 @@ const AdminPage = () => {
   const [selectedScriptId, setSelectedScriptId] = useState(null);
   const [selectedScript, setSelectedScript] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
@@ -802,6 +804,32 @@ const AdminPage = () => {
     setIsModalOpen(true);
   };
   
+  // Handle uploading a script file
+  const handleUploadScript = () => {
+    setIsUploadModalOpen(true);
+  };
+  
+  // Handle script file upload submission
+  const handleFileUpload = async (file) => {
+    try {
+      console.log("Uploading script file:", file.name);
+      const uploadedScript = await fileSystemRepository.uploadScript(file);
+      
+      // Reload scripts to refresh the list
+      await loadScripts();
+      
+      // Select the newly uploaded script
+      if (uploadedScript && uploadedScript.id) {
+        handleScriptSelect(uploadedScript.id);
+      }
+      
+      return uploadedScript;
+    } catch (error) {
+      console.error("Error uploading script:", error);
+      throw error;
+    }
+  };
+  
   // Handle editing an existing script
   const handleEditScript = () => {
     if (selectedScript) {
@@ -1373,11 +1401,21 @@ const AdminPage = () => {
         initialBody={selectedScript ? (selectedScript.body || selectedScript.content || '') : ''}
       />
       
+      {/* Script Upload Modal */}
+      <ScriptUploadModal 
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUpload={handleFileUpload}
+      />
+      
       <div className="admin-content">
         <div className="scripts-panel">
           <div className="scripts-header">
             <h2>Scripts</h2>
-            {/* Removed Add New Script button as we're only reading scripts from directory */}
+            <div>
+              <button onClick={handleAddScript} className="add-script-btn">New Script</button>
+              <button onClick={handleUploadScript} className="add-script-btn" style={{marginLeft: "8px"}}>Add Script</button>
+            </div>
           </div>
           
           <div className="scripts-list">

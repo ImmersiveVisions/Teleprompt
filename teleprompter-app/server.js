@@ -29,6 +29,20 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Add middleware for file uploads
+const multer = require('multer');
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'public'));
+  },
+  filename: function (req, file, cb) {
+    // Preserve original filename but ensure it's safe
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9\-_.]/g, '_');
+    cb(null, safeName);
+  }
+});
+const upload = multer({ storage: storage });
+
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'build')));
 
@@ -353,8 +367,42 @@ app.post('/api/convert-scripts', async (req, res) => {
   }
 });
 
-// We're removing the endpoints for adding, updating, and deleting scripts
-// as the application should only read scripts from the directory
+// Endpoint for file uploads - accepts script files
+app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    console.log('Script file uploaded successfully:', req.file.originalname);
+    
+    // Return script information
+    const stats = fs.statSync(req.file.path);
+    const script = {
+      id: req.file.filename,
+      title: req.file.filename.replace(/\.\w+$/, ''), // Remove file extension
+      isHtml: req.file.filename.toLowerCase().endsWith('.html') || req.file.filename.toLowerCase().endsWith('.htm'),
+      publicUrl: req.file.filename,
+      lastModified: stats.mtime,
+      dateCreated: stats.ctime
+    };
+    
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      script: script
+    });
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // For any request that doesn't match one above, send back React's index.html file
 app.get('*', (req, res) => {

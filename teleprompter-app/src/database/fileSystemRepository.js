@@ -420,6 +420,53 @@ const normalizeScript = (script) => {
   return normalizedScript;
 };
 
+// Upload a script file
+const uploadScript = (file) => {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('Uploading script file:', file.name);
+      
+      if (!file) {
+        return reject(new Error('No file provided'));
+      }
+      
+      // Create a FormData object
+      const formData = new FormData();
+      formData.append('scriptFile', file);
+      
+      // Use the backend API to upload the file
+      fetch('/api/upload-script', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.error) {
+          console.error('Error from server:', data.error);
+          reject(new Error(data.error));
+        } else if (data.success && data.script) {
+          console.log(`Script file ${data.script.id} uploaded successfully`);
+          resolve(data.script);
+        } else {
+          reject(new Error('Unexpected response from server'));
+        }
+      })
+      .catch(error => {
+        console.error('Error uploading script file:', error);
+        reject(error);
+      });
+    } catch (error) {
+      console.error('Error in uploadScript:', error);
+      reject(error);
+    }
+  });
+};
+
 // Export the file-based repository functions
 export default {
   setScriptsDirectory,
@@ -429,6 +476,7 @@ export default {
   addScript,
   updateScript,
   deleteScript,
+  uploadScript,
   // Removed getChaptersForScript
   normalizeScript
 };
