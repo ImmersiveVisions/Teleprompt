@@ -45,7 +45,7 @@ The Admin Panel is the control center for the teleprompter system.
 
 ### Interface Overview
 
-![Admin Panel](../images/admin-panel.png)
+![Admin Panel](./images/admin-panel.png)
 
 1. **Script List**: Shows available scripts
 2. **Preview Pane**: Displays selected script
@@ -98,7 +98,7 @@ The Viewer Page displays the script to the presenter/talent.
 
 ### Interface
 
-![Viewer Page](../images/viewer-page.png)
+![Viewer Page](./images/viewer-page.png)
 
 - Clean, minimal interface
 - Full-screen display
@@ -125,7 +125,7 @@ The Remote Control provides a simplified interface for controlling the telepromp
 
 ### Interface
 
-![Remote Control](../images/remote-control.png)
+![Remote Control](./images/remote-control.png)
 
 - Large, touch-friendly controls
 - Essential playback functions
@@ -158,25 +158,35 @@ HTML scripts provide rich formatting capabilities:
 - CSS styling options
 - Support for embedded images and formatting
 - Must have `.html` or `.htm` extensions
+- Automatically enhanced with data attributes for script elements
+
+When scripts are processed:
+- Character names are highlighted in gold 
+- Dialog text is centered and clearly visible
+- Parentheticals (stage directions) are shown in gray italics
+- Element types are marked with data-type attributes for improved search and positioning
 
 Example:
 ```html
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <style>
-        body { color: white; background-color: black; }
-        .character { font-weight: bold; color: #ff9900; }
-        .stage-direction { font-style: italic; color: #aaaaaa; }
+      body { color: white; background-color: black; }
+      .character { font-weight: bold; color: #ff9900; }
+      .stage-direction { font-style: italic; color: #aaaaaa; }
     </style>
-</head>
-<body>
-    <p><span class="character">NARRATOR:</span> Welcome to the presentation.</p>
-    <p><span class="stage-direction">(Pauses dramatically)</span></p>
-    <p>This is the main content of our script.</p>
-</body>
+  </head>
+  <body>
+    <p style="padding-left: 166pt;" data-type="character">NARRATOR:</p>
+    <p style="padding-left: 94pt;" data-type="dialog">Welcome to the presentation.</p>
+    <p style="padding-left: 123pt;" data-type="parenthetical">(Pauses dramatically)</p>
+    <p style="padding-left: 94pt;" data-type="dialog">This is the main content of our script.</p>
+  </body>
 </html>
 ```
+
+The script conversion process automatically adds these data attributes and styling based on the padding-left values that identify different script element types.
 
 ### Text Scripts
 

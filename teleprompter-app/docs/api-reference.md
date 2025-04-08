@@ -202,7 +202,7 @@ Sent for direct control of playback settings.
 ```
 
 | Action | Value Type | Example | Description |
-|--------|------------|---------|-------------|
+|:--------|:------------|:---------|:-------------|
 | `play` | Boolean | `true` | Start/stop scrolling |
 | `speed` | Number | `1.5` | Set scroll speed |
 | `direction` | String | `"forward"` | Set scroll direction |
