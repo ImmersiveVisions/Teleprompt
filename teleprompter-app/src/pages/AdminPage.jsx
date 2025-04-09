@@ -923,8 +923,18 @@ const AdminPage = () => {
       const { data } = message;
       console.log('AdminPage: Received state update:', data);
       
-      // Update local control states
-      setIsPlaying(data.isPlaying);
+      // Check source metadata to avoid loops with play/pause
+      const isFromOurDirectCommands = data._sourceMetadata && 
+                                      data._sourceMetadata.sourceId && 
+                                      data._sourceMetadata.sourceId.startsWith('admin_direct_');
+      
+      // Only apply play/pause state if not from our direct commands
+      if (data.isPlaying !== undefined && !isFromOurDirectCommands) {
+        console.log('AdminPage: Applying play state from network:', data.isPlaying);
+        setIsPlaying(data.isPlaying);
+      } else if (data.isPlaying !== undefined) {
+        console.log('AdminPage: Ignoring play state from our own direct command');
+      }
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
@@ -983,21 +993,68 @@ const AdminPage = () => {
     }
   };
   
-  // Teleprompter control functions
-  const togglePlay = () => {
-    // Only toggle play if we have a script selected
-    if (!selectedScript) {
-      console.error('Cannot play - no script selected');
-      alert('Please select a script first');
+  // Explicit play function
+  const handlePlay = () => {
+    // Only play if not already playing and we have a script
+    if (isPlaying || !selectedScript) {
+      console.error('Cannot play - already playing or no script selected');
+      if (!selectedScript) alert('Please select a script first');
       return;
     }
     
-    // Calculate new state before any operations
-    const newState = !isPlaying;
-    console.log('PLAY STATE CHANGE - setting isPlaying to:', newState, 'from:', isPlaying);
+    console.log('DIRECT PLAY COMMAND - NO MESSAGE LOOPS');
     
-    // Always store the current node for rollback, regardless of play state
-    // This ensures rollback button always works even during playback
+    // Set local state first
+    setIsPlaying(true);
+    
+    // Inform the player that auto-scrolling is starting
+    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
+      console.log("[ANIMATION] Notifying ScriptPlayer that animation is starting");
+      scriptPlayerRef.current.setScrollAnimating(true);
+    }
+    
+    // Send WebSocket message with special metadata
+    sendControlMessage('PLAY', {
+      sourceId: "admin_direct_" + Date.now(),
+      initiatingSender: true,
+      noLoop: true
+    });
+    
+    // Store current position for rollback when play is pressed
+    storeCurrentPositionForRollback();
+  };
+  
+  // Explicit pause function
+  const handlePause = () => {
+    // Only pause if currently playing
+    if (!isPlaying) {
+      console.error('Cannot pause - already paused');
+      return;
+    }
+    
+    console.log('DIRECT PAUSE COMMAND - NO MESSAGE LOOPS');
+    
+    // Set local state first
+    setIsPlaying(false);
+    
+    // Inform the player that auto-scrolling is stopping
+    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
+      console.log("[ANIMATION] Notifying ScriptPlayer that animation is stopping");
+      scriptPlayerRef.current.setScrollAnimating(false);
+    }
+    
+    // Send WebSocket message with special metadata 
+    sendControlMessage('PAUSE', {
+      sourceId: "admin_direct_" + Date.now(), 
+      initiatingSender: true,
+      noLoop: true
+    });
+  };
+  
+  // Removed togglePlay - only using explicit play/pause functions
+  
+  // Store current position for rollback
+  const storeCurrentPositionForRollback = () => {
     try {
       // Get the iframe or content container
       const iframe = document.querySelector('#html-script-frame');
@@ -1494,9 +1551,15 @@ const AdminPage = () => {
               
               <div className="teleprompter-controls">
                 <div className="control-group">
-                  <button onClick={togglePlay} className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}>
-                    {isPlaying ? 'PAUSE' : 'PLAY'}
-                  </button>
+                  {isPlaying ? (
+                    <button onClick={handlePause} className="pause-btn large-btn active">
+                      PAUSE
+                    </button>
+                  ) : (
+                    <button onClick={handlePlay} className="play-btn large-btn">
+                      PLAY
+                    </button>
+                  )}
                   
                   <button 
                     onClick={handleRollback} 
