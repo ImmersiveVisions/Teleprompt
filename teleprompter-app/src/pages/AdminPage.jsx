@@ -560,10 +560,23 @@ const AdminPage = () => {
     return () => {
       // Clean up global callback
       delete window._sendPositionCallback;
+      delete window._teleprompterPositionHandler;
       
       // Clean up interval
       if (positionCaptureInterval) {
         clearInterval(positionCaptureInterval);
+        positionCaptureInterval = null;
+      }
+      
+      // Clean up any highlight animations
+      try {
+        const iframe = document.querySelector('#teleprompter-frame');
+        if (iframe && iframe.contentDocument) {
+          const highlights = iframe.contentDocument.querySelectorAll('.teleprompter-highlight');
+          highlights.forEach(el => el.parentNode?.removeChild(el));
+        }
+      } catch (e) {
+        console.error('Error cleaning up highlights:', e);
       }
     };
   }, [selectedScript, isPlaying]);
@@ -1060,6 +1073,15 @@ const AdminPage = () => {
         const viewportTop = scrollTop;
         const viewportHeight = iframe.contentWindow.innerHeight;
         const viewportCenter = viewportTop + (viewportHeight / 2);
+        
+        // Update preview header to show position being captured
+        const previewHeader = document.querySelector('.preview-header h3');
+        if (previewHeader && !isPlaying) {
+          previewHeader.style.transition = 'color 0.3s ease';
+          previewHeader.style.color = '#4CAF50';  // Green to indicate capture
+          setTimeout(() => {
+            previewHeader.style.color = '';  // Reset color
+          }, 500);
         
         // Capture all dialog elements for context
         const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
@@ -1646,7 +1668,24 @@ const AdminPage = () => {
               
               <div className="preview-container">
                 <div className="preview-header">
-                  <h3>Preview: {selectedScript?.title}</h3>
+                  <h3>
+                    {isPlaying 
+                      ? `Preview: ${selectedScript?.title}` 
+                      : `Current Script Position: ${storedNodeData?.text?.substring(0, 30)}${storedNodeData?.text?.length > 30 ? '...' : ''}`
+                    }
+                  </h3>
+                  {!isPlaying && storedNodeData && (
+                    <div className="position-indicator" style={{ 
+                      fontSize: '12px', 
+                      color: '#aaa', 
+                      marginTop: '4px',
+                      backgroundColor: 'rgba(0,0,0,0.1)',
+                      padding: '4px 8px',
+                      borderRadius: '4px'
+                    }}>
+                      {storedNodeData.index !== undefined && `Position: ${storedNodeData.index + 1}/${storedNodeData.totalDialogs || '?'}`}
+                    </div>
+                  )}
                 </div>
                 {selectedScript ? (
                   <>
