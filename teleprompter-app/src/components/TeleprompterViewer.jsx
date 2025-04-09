@@ -72,10 +72,50 @@ export default React.forwardRef((props, ref) => {
       jumpToPosition,
       
       // Add getCurrentTopElement method - returns default data since we don't track it
-      getCurrentTopElement: () => ({ 
-        textContent: 'Current position in teleprompter', 
-        type: 'teleprompter-position' 
-      }),
+      getCurrentTopElement: () => {
+        try {
+          // Try to get the actual current element in view
+          const iframe = document.getElementById('teleprompter-frame');
+          if (iframe && iframe.contentDocument && iframe.contentWindow) {
+            const scrollY = iframe.contentWindow.scrollY || 0;
+            const viewportHeight = iframe.contentWindow.innerHeight;
+            const viewportCenter = scrollY + (viewportHeight / 2);
+            
+            // Find all possible text elements
+            const textElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div, span');
+            let closestElement = null;
+            let closestDistance = Infinity;
+            
+            textElements.forEach(element => {
+              const rect = element.getBoundingClientRect();
+              const elementTop = rect.top + scrollY;
+              const elementCenter = elementTop + (rect.height / 2);
+              const distance = Math.abs(elementCenter - viewportCenter);
+              
+              if (distance < closestDistance && element.textContent.trim()) {
+                closestDistance = distance;
+                closestElement = element;
+              }
+            });
+            
+            if (closestElement) {
+              return {
+                textContent: closestElement.textContent.trim(),
+                type: closestElement.tagName.toLowerCase(),
+                element: closestElement
+              };
+            }
+          }
+        } catch (e) {
+          console.error('Error getting current element:', e);
+        }
+        
+        // Default fallback
+        return { 
+          textContent: 'Current position in teleprompter', 
+          type: 'teleprompter-position' 
+        };
+      },
       
       // Store position handler for compatibility with AdminPage
       setPositionHandler(handler) {

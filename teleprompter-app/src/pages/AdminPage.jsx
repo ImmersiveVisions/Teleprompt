@@ -479,15 +479,16 @@ const AdminPage = () => {
     // Set up a periodic position capture for rollback during playback
     let positionCaptureInterval = null;
     
-    // Start or stop the position capture based on play state
-    if (!isPlaying && selectedScript) {
-      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback during playback');
+    // Start position capture when a script is selected
+    if (selectedScript) {
+      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback and position tracking');
       
-      // Capture the position every 3 seconds during playback
+      // Capture the position every 3 seconds
       positionCaptureInterval = setInterval(() => {
         try {
-          // Only capture if still playing
-          if (isPlaying) return;
+          // Capture regardless of play state to ensure position is always tracked
+          // when debugging check play state
+          console.log('⭐ [POSITION DEBUG] Capturing position, play state:', isPlaying);
           
           // Get the iframe
           const iframe = document.querySelector('#teleprompter-frame');

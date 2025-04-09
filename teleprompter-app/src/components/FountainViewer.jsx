@@ -268,7 +268,7 @@ const FountainViewer = ({ scriptId, width = '100%', height = '100%', onLoad }) =
         });
       }
       
-      // Set the iframe ID for external referencing
+      // Set the iframe ID for external referencing - maintain consistency with teleprompter-frame
       iframe.id = 'teleprompter-frame';
       
       console.log('FountainViewer: Content written to iframe');
@@ -384,7 +384,7 @@ const FountainViewer = ({ scriptId, width = '100%', height = '100%', onLoad }) =
         style={{ width: '100%', height: '100%', border: 'none', backgroundColor: 'black' }}
         sandbox="allow-same-origin allow-scripts allow-downloads allow-popups"
         title="Fountain Script Viewer"
-        id="fountain-script-frame"
+        id="teleprompter-frame"
         frameBorder="0"
         allowFullScreen={true}
         allow="fullscreen"

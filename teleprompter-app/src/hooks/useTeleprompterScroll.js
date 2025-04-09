@@ -92,6 +92,20 @@ const useTeleprompterScroll = (containerRef, isPlaying, speed, direction, script
             // Set scroll position
             iframe.contentWindow.scrollTo(0, currentPos);
             
+            // Notify position handler of the current position (if available)
+            try {
+              if (window._teleprompterPositionHandler) {
+                const position = progress; // Normalized position (0-1)
+                window._teleprompterPositionHandler({
+                  position: position,
+                  source: 'teleprompter-scroll',
+                  timestamp: Date.now()
+                });
+              }
+            } catch (positionError) {
+              console.error('Error reporting position:', positionError);
+            }
+            
             // Continue if not done and still playing
             if (progress < 1 && isPlaying) {
               animationRef.current = requestAnimationFrame(animateScroll);
