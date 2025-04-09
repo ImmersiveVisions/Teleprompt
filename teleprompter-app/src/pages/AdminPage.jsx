@@ -1,5 +1,5 @@
 // src/pages/AdminPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
@@ -400,7 +400,7 @@ const AdminPage = () => {
   };
   
   // Reference to the script player component
-  const scriptPlayerRef = React.useRef(null);
+  const scriptPlayerRef = useRef(null);
   
   // Set up the position sending functionality
   useEffect(() => {

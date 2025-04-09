@@ -5,7 +5,7 @@ import fileSystemRepository from '../database/fileSystemRepository';
 import TeleprompterViewer from '../components/TeleprompterViewer';
 import '../styles.css';
 
-const ViewerPage = () => {
+const ViewerPage = ({ directScriptId }) => {
   const [connected, setConnected] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [currentScript, setCurrentScript] = useState(null);
@@ -30,7 +30,42 @@ const ViewerPage = () => {
         isHtml: latestScriptRef.current.id.toLowerCase().endsWith('.html')
       });
     }
-  }, [latestScriptRef.current]);
+  }, [currentScript]); // Safe dependency that changes when script changes
+  
+  // Effect to handle direct script loading if a script ID is provided
+  useEffect(() => {
+    if (directScriptId) {
+      console.log('ViewerPage: Loading direct script from ID:', directScriptId);
+      
+      const loadDirectScript = async () => {
+        try {
+          // Fetch the script from the API
+          const response = await fetch(`/api/scripts/${encodeURIComponent(directScriptId)}`);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to load script: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (!data.success || !data.script) {
+            throw new Error('Invalid script data returned from server');
+          }
+          
+          console.log('ViewerPage: Direct script loaded successfully:', 
+            data.script.title || data.script.id);
+          
+          // Set the script in our state and mark it as loaded
+          setCurrentScript(data.script);
+          setScriptLoaded(true);
+        } catch (error) {
+          console.error('ViewerPage: Error loading direct script:', error);
+        }
+      };
+      
+      loadDirectScript();
+    }
+  }, [directScriptId]);
   
   useEffect(() => {
     // Register for state updates
@@ -148,26 +183,33 @@ const ViewerPage = () => {
           scriptUpdated = true;
           
           try {
-            // Check if it's an HTML file that we can load directly
+            // Check if it's an HTML or Fountain file that we can load directly
             if (typeof data.currentScript === 'string' && 
                 (data.currentScript.toLowerCase().endsWith('.html') || 
-                 data.currentScript.toLowerCase().endsWith('.htm'))) {
-              console.log('ViewerPage: HTML file detected, creating script object');
+                 data.currentScript.toLowerCase().endsWith('.htm') ||
+                 data.currentScript.toLowerCase().endsWith('.fountain'))) {
+              console.log('ViewerPage: HTML or Fountain file detected, creating script object');
               
-              // Create a simple script object that points to the HTML file
-              const htmlScript = {
+              // Check if it's a fountain file
+              const isFountain = data.currentScript.toLowerCase().endsWith('.fountain');
+              
+              // Create a simple script object that points to the appropriate file
+              const scriptObj = {
                 id: data.currentScript,
-                title: data.currentScript.replace(/\.(html|htm)$/i, ''),
-                isHtml: true,
+                title: data.currentScript.replace(/\.(html|htm|fountain)$/i, ''),
+                isHtml: !isFountain && (data.currentScript.toLowerCase().endsWith('.html') || 
+                          data.currentScript.toLowerCase().endsWith('.htm')),
+                isFountain: isFountain,
+                fileExtension: data.currentScript.split('.').pop().toLowerCase(),
                 lastModified: new Date()
               };
               
               // CRITICAL: Update the reference FIRST, then the state
-              latestScriptRef.current = htmlScript;
-              console.log('ViewerPage: Updated latestScriptRef with new HTML script');
+              latestScriptRef.current = scriptObj;
+              console.log('ViewerPage: Updated latestScriptRef with new script object');
               
               // The React state update
-              setCurrentScript(htmlScript);
+              setCurrentScript(scriptObj);
             } else {
               // Get the script using the file system repository
               console.log('ViewerPage: Loading script from file system repository');
@@ -205,7 +247,13 @@ const ViewerPage = () => {
       // Update other control states AFTER script has been processed
       
       // Process playback state change with a small delay if we just updated the script
+      // The viewer should always apply play state changes, regardless of source
       if (data.isPlaying !== undefined) {
+        // Check if this is from the admin - we want to prioritize admin control
+        const isFromAdmin = data._sourceMetadata && 
+                           data._sourceMetadata.sourceId && 
+                           data._sourceMetadata.sourceId.startsWith('admin_');
+                           
         if (scriptUpdated && data.isPlaying) {
           // If we just updated the script AND we're supposed to start playing,
           // add a small delay to ensure script is loaded and rendered first
@@ -216,7 +264,7 @@ const ViewerPage = () => {
           }, 200);
         } else {
           // Otherwise, update immediately
-          console.log(`ViewerPage: Setting playback state to: ${data.isPlaying}`);
+          console.log(`ViewerPage: Setting playback state to: ${data.isPlaying}, from admin: ${isFromAdmin}`);
           setIsPlaying(data.isPlaying);
         }
       }
