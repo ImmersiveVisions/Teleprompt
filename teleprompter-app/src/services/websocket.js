@@ -87,38 +87,22 @@ const initWebSocket = (statusCb) => {
     clientWs.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log('===== [WS CLIENT] Received message:', message.type);
+        // Minimal logging to reduce console spam
+        if (message.type !== 'STATE_UPDATE') {
+          console.log('===== [WS CLIENT] Received message:', message.type);
+        }
         
-        // Critical: Log PLAY/PAUSE state changes
+        // Only log significant state changes, not routine updates
         if (message.type === 'STATE_UPDATE' && message.data && message.data.isPlaying !== undefined) {
-          console.log(`===== [WS CLIENT] PLAY STATE UPDATE: ${message.data.isPlaying}`);
-        }
-        
-        // Check for position data in state updates 
-        if (message.type === 'STATE_UPDATE' && message.data) {
-          // Log detailed position information
-          if (message.data.currentPosition !== undefined) {
-            console.log(`===== [WS CLIENT] Position data received: ${message.data.currentPosition}`);
-          }
-          
-          // Log if enhanced scroll data is available
-          if (message.data.scrollData) {
-            console.log('');
-            console.log('********************************************************************');
-            console.log('********** WS CLIENT RECEIVED ENHANCED SCROLL DATA **********');
-            console.log('********************************************************************');
-            console.log('');
-            console.log('===== [WS CLIENT] Enhanced scroll data:', JSON.stringify(message.data.scrollData));
+          // Only log play state changes, not regular status updates
+          if (message.data.isPlaying === true || message.data.isPlaying === false) {
+            console.log(`===== [WS CLIENT] PLAY STATE CHANGE TO: ${message.data.isPlaying}`);
           }
         }
         
-        // Add a small delay to prevent browser rendering issues
-        // This helps ensure animation frames aren't interrupted by state changes
-        setTimeout(() => {
-          console.log(`===== [WS CLIENT] Dispatching message to ${messageHandlers.length} handlers`);
-          // Dispatch message to all registered handlers
-          messageHandlers.forEach(handler => handler(message));
-        }, 5);
+        // Dispatch message to all registered handlers without delay
+        // Removing the setTimeout to avoid potential timing issues
+        messageHandlers.forEach(handler => handler(message));
       } catch (error) {
         console.error('Error handling message:', error);
       }
@@ -150,16 +134,35 @@ const initWebSocket = (statusCb) => {
  * @param {*} value - Optional value for the action
  * @returns {boolean} - Whether the message was sent successfully
  */
+// Maintain a simple rate limiter for control messages
+const lastMessageTimestamp = {};
+const MESSAGE_THROTTLE_MS = 200; // Minimum time between identical messages
+
 const sendControlMessage = (action, value = null) => {
-  // Special handling for play/pause commands
+  // Rate limiting for frequent state updates (like font size during slider drag)
+  const now = Date.now();
+  const messageKey = `${action}:${JSON.stringify(value)}`;
+  
+  // Skip duplicate frequent messages except for play/pause/jump commands
+  if (['PLAY', 'PAUSE', 'JUMP_TO_POSITION', 'GET_STATE'].indexOf(action) === -1) {
+    if (lastMessageTimestamp[messageKey] && 
+        now - lastMessageTimestamp[messageKey] < MESSAGE_THROTTLE_MS) {
+      // Skip this message - it's too soon after an identical one
+      return true;
+    }
+  }
+  
+  // Update timestamp for rate limiting
+  lastMessageTimestamp[messageKey] = now;
+  
+  // Special handling for play/pause commands - only these get fully logged
   if (action === 'PLAY' || action === 'PAUSE') {
     console.log(`!!!!! [WS CLIENT] IMPORTANT: Sending ${action} command`);
   }
 
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-    // Special handling for GET_STATE which is a different message type
+    // Special handling for GET_STATE
     if (action === 'GET_STATE') {
-      console.log('===== [WS CLIENT] Sending GET_STATE request to server');
       try {
         clientWs.send(JSON.stringify({
           type: 'GET_STATE'
@@ -171,14 +174,6 @@ const sendControlMessage = (action, value = null) => {
       }
     }
     
-    // Log jump position commands specially
-    if (action === 'JUMP_TO_POSITION') {
-      console.log(`===== [WS CLIENT] Sending JUMP_TO_POSITION control message with value: ${value}`);
-    } else {
-      // Normal control message
-      console.log('===== [WS CLIENT] Sending control message:', action, value !== null ? value : 'no value');
-    }
-    
     // Create the message
     const message = JSON.stringify({
       type: 'CONTROL',
@@ -188,15 +183,7 @@ const sendControlMessage = (action, value = null) => {
     
     // Send the control message
     try {
-      // Send and verify
       clientWs.send(message);
-      console.log(`===== [WS CLIENT] Message sent (${message.length} bytes)`);
-      
-      // For play/pause commands, send additional log for debugging
-      if (action === 'PLAY' || action === 'PAUSE') {
-        console.log(`!!!!! [WS CLIENT] ${action} command sent successfully at ${new Date().toISOString()}`);
-      }
-      
       return true;
     } catch (err) {
       console.error(`===== [WS CLIENT] Error sending message: ${err.message}`);

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fountain Script Test Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #222;
+      color: #fff;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #7dd3fc;
+    }
+    button {
+      background-color: #0284c7;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #0369a1;
+    }
+    .viewer-container {
+      border: 1px solid #444;
+      background-color: #000;
+      height: 600px;
+      overflow: hidden;
+      border-radius: 4px;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    pre {
+      background-color: #111;
+      padding: 10px;
+      border-radius: 4px;
+      overflow: auto;
+      white-space: pre-wrap;
+      margin-top: 20px;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #333;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Fountain Script Test Page</h1>
+    
+    <button id="load-script">Load Sample Fountain Script</button>
+    
+    <div class="status" id="status">Status: Waiting to load script...</div>
+    
+    <div class="viewer-container">
+      <iframe id="script-viewer" src="about:blank" title="Script Viewer"></iframe>
+    </div>
+    
+    <h3>Script Content:</h3>
+    <pre id="content-display">Load a script to see its content here...</pre>
+  </div>
+
+  <script>
+    document.getElementById('load-script').addEventListener('click', async () => {
+      const statusEl = document.getElementById('status');
+      const viewerEl = document.getElementById('script-viewer');
+      const contentEl = document.getElementById('content-display');
+      
+      statusEl.textContent = 'Status: Loading script...';
+      
+      try {
+        // Fetch the test fountain script
+        const response = await fetch('/api/test/fountain');
+        
+        if (!response.ok) {
+          throw new Error(`Server returned error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success || !data.script) {
+          throw new Error('Failed to load script: ' + (data.error || 'Unknown error'));
+        }
+        
+        // Display the script content
+        contentEl.textContent = data.script.body;
+        
+        // Create HTML content for the iframe
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Fountain Preview</title>
+            <style>
+              body {
+                font-family: Courier, monospace;
+                background-color: black;
+                color: white;
+                margin: 0;
+                padding: 20px;
+                line-height: 1.5;
+              }
+              .title-page {
+                text-align: center;
+                margin-bottom: 50px;
+              }
+              .title {
+                font-size: 24px;
+                font-weight: bold;
+                margin-bottom: 20px;
+              }
+              .author {
+                font-size: 18px;
+                margin-bottom: 10px;
+              }
+              .scene-heading {
+                font-weight: bold;
+                margin-top: 30px;
+                margin-bottom: 10px;
+                color: #ADD8E6; /* Light blue */
+                text-transform: uppercase;
+              }
+              .action {
+                margin-bottom: 10px;
+              }
+              .character {
+                margin-left: 200px;
+                margin-top: 20px;
+                font-weight: bold;
+                color: #FFD700; /* Gold */
+              }
+              .dialogue {
+                margin-left: 100px;
+                margin-right: 100px;
+                margin-bottom: 20px;
+              }
+              .parenthetical {
+                margin-left: 150px;
+                font-style: italic;
+                color: #BBBBBB; /* Light gray */
+              }
+              .transition {
+                text-align: right;
+                font-weight: bold;
+                margin: 20px 0;
+                color: #FFA07A; /* Light salmon */
+              }
+              .centered {
+                text-align: center;
+                margin: 20px 0;
+              }
+            </style>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/fountain/0.1.10/fountain.min.js"><\/script>
+          </head>
+          <body>
+            <div id="content"></div>
+            
+            <script>
+              const content = ${JSON.stringify(data.script.body)};
+              const parsed = fountain.parse(content);
+              
+              let html = '<div class="title-page">';
+              html += '<div class="title">' + (parsed.title || 'Untitled Script') + '</div>';
+              html += '<div class="author">by ' + (parsed.author || 'Unknown Author') + '</div>';
+              html += '</div>';
+              
+              if (parsed.html && parsed.html.script) {
+                html += parsed.html.script;
+              } else if (parsed.tokens) {
+                html += '<div class="script">';
+                parsed.tokens.forEach(token => {
+                  const text = token.text || '';
+                  
+                  if (text.includes('[[FILM CLIP]]')) {
+                    const clipText = text.replace('[[FILM CLIP]]', '');
+                    html += '<div style="background-color: #007bff; color: white; padding: 8px 16px; margin: 24px auto; font-weight: bold; border-radius: 4px; display: inline-block; text-align: center;">FILM CLIP' + clipText + '</div>';
+                    return;
+                  }
+                  
+                  switch (token.type) {
+                    case 'scene_heading':
+                      html += '<div class="scene-heading">' + text + '</div>';
+                      break;
+                    case 'action':
+                      html += '<div class="action">' + text + '</div>';
+                      break;
+                    case 'character':
+                      html += '<div class="character">' + text + '</div>';
+                      break;
+                    case 'dialogue':
+                      html += '<div class="dialogue">' + text + '</div>';
+                      break;
+                    case 'parenthetical':
+                      html += '<div class="parenthetical">' + text + '</div>';
+                      break;
+                    case 'transition':
+                      html += '<div class="transition">' + text + '</div>';
+                      break;
+                    case 'centered':
+                      html += '<div class="centered">' + text + '</div>';
+                      break;
+                    case 'page_break':
+                      html += '<hr>';
+                      break;
+                    default:
+                      html += '<div>' + text + '</div>';
+                  }
+                });
+                html += '</div>';
+              } else {
+                html += '<pre>' + content + '</pre>';
+              }
+              
+              document.getElementById('content').innerHTML = html;
+            <\/script>
+          </body>
+          </html>
+        `;
+        
+        // Set the iframe content
+        const iframe = document.getElementById('script-viewer');
+        iframe.onload = () => {
+          statusEl.textContent = 'Status: Script loaded successfully';
+        };
+        
+        const iframeDoc = iframe.contentWindow.document;
+        iframeDoc.open();
+        iframeDoc.write(html);
+        iframeDoc.close();
+        
+      } catch (error) {
+        console.error('Error loading fountain script:', error);
+        statusEl.textContent = 'Status: Error loading script - ' + error.message;
+        contentEl.textContent = 'Error: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>

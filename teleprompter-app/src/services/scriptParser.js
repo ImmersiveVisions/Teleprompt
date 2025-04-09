@@ -1,4 +1,5 @@
 // src/services/scriptParser.js
+import { Fountain } from 'fountain-js';
 
 /**
  * Parses script content based on its file extension
@@ -14,6 +15,8 @@ export function parseScript(content, fileExtension) {
       return parseRTF(content);
     case 'html':
       return parseHTML(content);
+    case 'fountain':
+      return parseFountain(content);
     default:
       // For unknown types, return plain text
       return content;
@@ -227,8 +230,8 @@ export const highlightFilmClips = (content) => {
   const lines = content.split('\n');
   
   return lines.map((line, index) => {
-    // Check if line contains 'FILM CLIP'
-    if (line.includes('FILM CLIP')) {
+    // Check if line contains 'FILM CLIP' or Fountain format marker [[FILM CLIP]]
+    if (line.includes('FILM CLIP') || line.includes('[[FILM CLIP]]')) {
       return {
         type: 'film-clip',
         content: line,
@@ -244,8 +247,240 @@ export const highlightFilmClips = (content) => {
   });
 };
 
+/**
+ * Extract tokens from a Fountain script
+ * @param {string} content - The fountain script content
+ * @returns {Array} - Array of tokens from the script
+ */
+export const extractFountainTokens = (content) => {
+  if (!content) return [];
+  
+  // Create a new instance of the Fountain parser
+  const fountainParser = new Fountain();
+  
+  // Parse the fountain content with getTokens=true to include tokens in output
+  const output = fountainParser.parse(content, true);
+  
+  // Return the tokens array which has detailed information about each element
+  return output.tokens || [];
+};
+
+/**
+ * Parse a Fountain-formatted screenplay
+ * @param {string} fountainContent - Raw fountain screenplay content
+ * @returns {string} HTML content styled for teleprompter
+ */
+function parseFountain(fountainContent) {
+  if (!fountainContent) return '';
+  
+  try {
+    // Try to use the proper Fountain parser
+    const fountainParser = new Fountain();
+    const parsed = fountainParser.parse(fountainContent, true);
+    
+    // Generate styled HTML with proper formatting for screenplay elements
+    const css = `
+      <style>
+        .fountain-container {
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: black;
+          color: white;
+          font-family: 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+        
+        /* Title page */
+        .title { 
+          text-align: center;
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 20px;
+          color: white;
+        }
+        
+        .author, .date {
+          text-align: center;
+          color: #999;
+          margin-bottom: 10px;
+          font-size: 18px;
+        }
+        
+        /* Scene elements */
+        .scene-heading {
+          color: #ADD8E6; /* Light blue */
+          font-weight: bold;
+          margin-top: 30px;
+          margin-bottom: 10px;
+          text-transform: uppercase;
+        }
+        
+        .character {
+          color: #FFD700; /* Gold */
+          font-weight: bold;
+          margin-top: 20px;
+          margin-bottom: 0;
+          margin-left: 200px;
+        }
+        
+        .dialogue {
+          margin-top: 0;
+          margin-bottom: 20px;
+          margin-left: 100px;
+          margin-right: 100px;
+        }
+        
+        .parenthetical {
+          color: #BBBBBB; /* Light gray */
+          font-style: italic;
+          margin-left: 150px;
+        }
+        
+        .transition {
+          color: #FFA07A; /* Light salmon */
+          text-align: right;
+          font-weight: bold;
+          margin: 20px 0;
+          text-transform: uppercase;
+        }
+        
+        .action {
+          margin-bottom: 10px;
+        }
+        
+        .centered {
+          text-align: center;
+          margin: 20px 0;
+        }
+        
+        .film-clip {
+          background-color: #007bff;
+          color: white;
+          padding: 8px 16px;
+          margin: 24px auto;
+          font-weight: bold;
+          border-radius: 4px;
+          text-align: center;
+          display: inline-block;
+        }
+        
+        /* General formatting */
+        pre {
+          white-space: pre-wrap;
+          font-family: 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+        
+        hr {
+          border: none;
+          border-top: 1px solid #333;
+          margin: 24px 0;
+        }
+      </style>
+    `;
+    
+    // Build HTML content
+    let html = `
+      <div class="fountain-container">
+        ${css}
+        <div class="title-page">
+          <div class="title">${parsed.title || 'Untitled Script'}</div>
+          <div class="author">by ${parsed.author || 'Unknown Author'}</div>
+        </div>
+        <div class="script">
+    `;
+    
+    // Process each token in the script
+    if (parsed.tokens && parsed.tokens.length > 0) {
+      parsed.tokens.forEach(token => {
+        let text = token.text || '';
+        
+        // Special handling for film clip markers
+        if (text.includes('[[FILM CLIP]]')) {
+          text = text.replace('[[FILM CLIP]]', '');
+          html += `<div class="film-clip">FILM CLIP${text}</div>`;
+          return;
+        }
+        
+        switch (token.type) {
+          case 'scene_heading':
+            html += `<div class="scene-heading">${text}</div>`;
+            break;
+          case 'action':
+            html += `<div class="action">${text}</div>`;
+            break;
+          case 'character':
+            html += `<div class="character">${text}</div>`;
+            break;
+          case 'dialogue':
+            html += `<div class="dialogue">${text}</div>`;
+            break;
+          case 'parenthetical':
+            html += `<div class="parenthetical">${text}</div>`;
+            break;
+          case 'transition':
+            html += `<div class="transition">${text}</div>`;
+            break;
+          case 'centered':
+            html += `<div class="centered">${text}</div>`;
+            break;
+          case 'page_break':
+            html += `<div class="page-break"></div>`;
+            break;
+          default:
+            html += `<div>${text}</div>`;
+        }
+      });
+    } else {
+      console.warn('No tokens found in parsed fountain content');
+    }
+    
+    html += `
+        </div>
+      </div>
+    `;
+    
+    return html;
+  } catch (error) {
+    console.error('Error parsing fountain content:', error);
+    
+    // Fallback to simple pre-formatted display if parsing fails
+    const css = `
+      <style>
+        .fountain-container {
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: black;
+          color: white;
+          font-family: 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+        pre {
+          white-space: pre-wrap;
+          font-family: 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+      </style>
+    `;
+    
+    return `
+      <div class="fountain-container">
+        ${css}
+        <pre>${fountainContent}</pre>
+      </div>
+    `;
+  }
+}
+
 export default {
   parseScript,
   // Removed parseChapters reference
-  highlightFilmClips
+  highlightFilmClips,
+  extractFountainTokens
 };

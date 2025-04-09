@@ -1,8 +1,8 @@
 // src/components/ScriptViewer.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import FountainViewer from './FountainViewer';
 
 const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
-  const [html, setHtml] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -11,19 +11,35 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
   useEffect(() => {
     if (!currentScript || !currentScript.id) {
       console.log('No script selected or script ID missing');
-      setHtml(null);
       setLoading(false);
       return;
     }
     
-    console.log(`Script ready to display: ${currentScript.id}`);
+    console.log(`Script ready to display: ${currentScript.id}`, {
+      isFountain: currentScript.isFountain,
+      fileExtension: currentScript.fileExtension,
+      hasBody: !!currentScript.body,
+      bodyLength: currentScript.body?.length || 0
+    });
+    
+    // Extra debugging to see the actual content
+    if (currentScript.body && currentScript.body.length > 0) {
+      console.log('CONTENT PREVIEW:', currentScript.body.substring(0, 200) + '...');
+    } else {
+      console.log('WARNING: Script has no body content!');
+    }
+    
+    // Verify this is a fountain file
+    const fileExt = currentScript.fileExtension?.toLowerCase();
+    const isFountainFile = currentScript.isFountain || fileExt === 'fountain';
+    
+    if (!isFountainFile) {
+      console.warn('Non-fountain file detected. This application only supports fountain files.');
+      setError('Only fountain files are supported.');
+    }
+    
     setLoading(false);
   }, [currentScript]);
-
-  // Debugging output whenever html content changes
-  useEffect(() => {
-    console.log(`HTML content ${html ? 'loaded' : 'not available'}, length: ${html?.length || 0}`);
-  }, [html]);
 
   if (loading) {
     return (
@@ -41,7 +57,6 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
     );
   }
 
-  // All files are HTML files loaded from the public directory
   if (!currentScript) {
     return (
       <div className="script-viewer empty">
@@ -65,6 +80,7 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
     >
       <div className="script-title" style={{ width: '100%' }}>
         {!fullScreen ? `Preview: ${currentScript.title}` : currentScript.title}
+        {currentScript.isFountain && " (Fountain)"}
       </div>
       <div
         style={{
@@ -89,18 +105,10 @@ const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
             overflow: 'hidden'
           }}
         >
-          <iframe
-            src={`/${currentScript.id}`}
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              backgroundColor: 'black'
-            }}
-            sandbox="allow-scripts allow-same-origin"
-            title={`${currentScript.title} preview`}
-            loading="eager"
-            onLoad={() => console.log('HTML iframe loaded in ScriptViewer')}
+          <FountainViewer 
+            scriptId={currentScript.id}
+            width="100%"
+            height="100%"
           />
         </div>
       </div>

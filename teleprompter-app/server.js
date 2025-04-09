@@ -8,6 +8,9 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const util = require('util');
 const { execSync } = require('child_process');
+
+// Scripts directory for serving files
+const scriptsDir = path.join(__dirname, 'public');
 // Helper function to convert plain text to HTML
 function convertTextToHtml(text) {
   if (!text || typeof text !== 'string') {
@@ -41,13 +44,168 @@ const storage = multer.diskStorage({
     cb(null, safeName);
   }
 });
-const upload = multer({ storage: storage });
+// Configure multer to only accept fountain files
+const upload = multer({ 
+  storage: storage,
+  fileFilter: function(req, file, cb) {
+    // Accept only .fountain extension files
+    if (!file.originalname.toLowerCase().endsWith('.fountain')) {
+      return cb(new Error('Only fountain files are allowed!'), false);
+    }
+    cb(null, true);
+  }
+});
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'build')));
 
 // Serve files from the public directory at the root path
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Simple endpoint for testing fountain files - returns the raw fountain content
+app.get('/api/test/fountain', (req, res) => {
+  try {
+    const samplePath = path.join(__dirname, 'public', 'sample_script.fountain');
+    
+    // Check if the file exists
+    if (!fs.existsSync(samplePath)) {
+      return res.status(404).send('Sample fountain script not found');
+    }
+    
+    const content = fs.readFileSync(samplePath, 'utf8');
+    
+    console.log('Fountain test endpoint accessed', {
+      fileSize: content.length,
+      preview: content.substring(0, 100) + '...'
+    });
+    
+    // Send the raw content as plain text
+    res.type('text/plain').send(content);
+  } catch (error) {
+    console.error('Error serving test fountain file:', error);
+    res.status(500).send('Error loading fountain file: ' + error.message);
+  }
+});
+
+// Endpoint to serve the fountain.js module directly
+app.get('/api/fountain-js-module', (req, res) => {
+  try {
+    const modulePath = path.join(__dirname, 'node_modules', 'fountain-js', 'dist', 'fountain.js');
+    
+    if (!fs.existsSync(modulePath)) {
+      return res.status(404).send('Fountain.js module not found');
+    }
+    
+    const moduleContent = fs.readFileSync(modulePath, 'utf8');
+    
+    // Serve as JavaScript
+    res.type('application/javascript').send(moduleContent);
+  } catch (error) {
+    console.error('Error serving fountain.js module:', error);
+    res.status(500).send('Error loading fountain.js module: ' + error.message);
+  }
+});
+
+// Get a specific script by ID (filename) - note the available route
+// comes before this route to avoid conflict
+app.get('/api/scripts/:id', (req, res) => {
+  try {
+    const scriptId = req.params.id;
+    
+    // Validate the filename to prevent directory traversal
+    if (!scriptId || scriptId.includes('..') || scriptId.includes('/') || scriptId.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid script ID'
+      });
+    }
+    
+    const scriptPath = path.join(__dirname, 'public', scriptId);
+    
+    // Check if file exists
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Script not found'
+      });
+    }
+    
+    // Read the file content
+    const content = fs.readFileSync(scriptPath, 'utf8');
+    const stats = fs.statSync(scriptPath);
+    const ext = path.extname(scriptId).toLowerCase();
+    
+    // Create script object
+    const script = {
+      id: scriptId,
+      title: path.basename(scriptId, ext),
+      body: content,
+      content: content, // For backward compatibility
+      lastModified: stats.mtime,
+      dateCreated: stats.ctime,
+      fileExtension: ext.substring(1), // Remove the dot
+      isFountain: ext === '.fountain',
+      isHtml: ext === '.html' || ext === '.htm'
+    };
+    
+    res.json({
+      success: true,
+      script
+    });
+  } catch (error) {
+    console.error(`Error loading script: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Add an API route to list available scripts
+app.get('/api/scripts/available', (req, res) => {
+  try {
+    // Directory where scripts are stored
+    const scriptsDir = path.join(__dirname, 'public');
+    
+    // Read all files in the directory
+    const files = fs.readdirSync(scriptsDir);
+    
+    // Filter for script files (.fountain, .html, .txt)
+    const scriptFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.fountain', '.html', '.htm', '.txt'].includes(ext);
+    });
+    
+    // Convert to script objects
+    const scripts = scriptFiles.map(filename => {
+      const filePath = path.join(scriptsDir, filename);
+      const stats = fs.statSync(filePath);
+      const ext = path.extname(filename).toLowerCase();
+      
+      return {
+        id: filename,
+        title: path.basename(filename, ext),
+        lastModified: stats.mtime,
+        dateCreated: stats.ctime,
+        fileExtension: ext.substring(1), // Remove the dot
+        isFountain: ext === '.fountain',
+        isHtml: ext === '.html' || ext === '.htm',
+        size: stats.size
+      };
+    });
+    
+    res.json({
+      success: true,
+      scripts
+    });
+  } catch (error) {
+    console.error('Error listing available scripts:', error);
+    res.status(500).json({
+      success: false, 
+      error: error.message
+    });
+  }
+});
 
 // Add a diagnostic endpoint to check for server health and get server IP
 app.get('/api/status', (req, res) => {
@@ -150,6 +308,33 @@ app.get('/api/test-html', async (req, res) => {
   }
 });
 
+// Helper function to detect fountain files
+function _isFountainFile(filename) {
+  try {
+    const filePath = path.join(scriptsDir, filename);
+    if (!fs.existsSync(filePath)) return false;
+    
+    // Check file extension first
+    if (filename.endsWith('.fountain')) return true;
+    
+    // If no obvious extension, read a small part of the content to check
+    const content = fs.readFileSync(filePath, { encoding: 'utf8', flag: 'r' }).substring(0, 500);
+    const firstLines = content.split('\n').slice(0, 10).join('\n');
+    
+    // Look for typical fountain markers
+    if (firstLines.includes('Title:') && 
+        (firstLines.includes('Author:') || firstLines.includes('by')) &&
+        /INT\.|EXT\./.test(content)) {
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking if file is fountain format:', error);
+    return false;
+  }
+}
+
 // API endpoint to list all scripts
 app.get('/api/scripts', async (req, res) => {
   try {
@@ -158,19 +343,18 @@ app.get('/api/scripts', async (req, res) => {
     // Initialize array to store files
     let htmlFiles = [];
     
-    // Get HTML files from scripts directory
+    // Get only Fountain files from scripts directory
     if (fs.existsSync(SCRIPTS_DIRECTORY)) {
       htmlFiles = fs.readdirSync(SCRIPTS_DIRECTORY)
         .filter(file => 
-          // Only include .html or .htm files, but exclude index.html
-          (file.endsWith('.html') || file.endsWith('.htm')) && 
-          file.toLowerCase() !== 'index.html'
+          // Include only .fountain files
+          (file.endsWith('.fountain') || _isFountainFile(file))
         )
         .map(filename => ({
           filename,
           directory: SCRIPTS_DIRECTORY
         }));
-      console.log(`Found ${htmlFiles.length} HTML files in scripts directory`);
+      console.log(`Found ${htmlFiles.length} script files in scripts directory`);
     } else {
       console.error(`Scripts directory does not exist: ${SCRIPTS_DIRECTORY}`);
     }
@@ -193,19 +377,19 @@ app.get('/api/scripts', async (req, res) => {
         const rawContent = fs.readFileSync(filePath, 'utf8');
         const stats = fs.statSync(filePath);
         
-        // Process the content based on file type
-        let processedContent;
-        let isHtml = false;
+        // We only process fountain files now
+        let processedContent = rawContent;
         
-        if (filename.toLowerCase().endsWith('.html') || filename.toLowerCase().endsWith('.htm')) {
-          // For HTML files, use content directly
-          processedContent = rawContent;
-          isHtml = true;
-          console.log(`Using HTML file directly: ${filename} from ${directory}`);
+        if (filename.toLowerCase().endsWith('.fountain')) {
+          // For Fountain files, store raw content - actual parsing will happen client-side
+          console.log(`Reading Fountain file: ${filename} from ${directory}`);
+        } else if (_isFountainFile(filename)) {
+          // If the file is detected as fountain format without the extension
+          console.log(`Reading detected Fountain file: ${filename} from ${directory}`);
         } else {
-          // For text files, wrap in div with line breaks
-          processedContent = `<div>${rawContent.replace(/\n/g, '<br>')}</div>`;
-          isHtml = true;
+          // Skip non-fountain files
+          console.log(`Skipping non-fountain file: ${filename} from ${directory}`);
+          return null;
         }
         
         return {
@@ -213,28 +397,24 @@ app.get('/api/scripts', async (req, res) => {
           title: filename.replace(/\.\w+$/, ''), // Remove file extension
           body: processedContent,
           content: processedContent, // For backward compatibility
-          isHtml: isHtml, // Flag to indicate HTML content
+          isHtml: false, // Not HTML content
+          isFountain: true, // Flag for Fountain files
+          fileExtension: filename.split('.').pop().toLowerCase(), // Store file extension
           lastModified: stats.mtime,
           dateCreated: stats.ctime,
           sourceDirectory: directory // Add source directory information
         };
       } catch (readError) {
         console.error(`Error reading file ${filename} from ${directory}:`, readError);
-        return {
-          id: filename,
-          title: `Error: ${filename}`,
-          body: `Could not read file: ${readError.message}`,
-          content: `Could not read file: ${readError.message}`,
-          isHtml: false,
-          lastModified: new Date(),
-          dateCreated: new Date(),
-          sourceDirectory: directory
-        };
+        return null; // Skip files with errors
       }
     });
     
     // Wait for all script conversions to complete
-    const scripts = await Promise.all(scriptPromises);
+    let scripts = await Promise.all(scriptPromises);
+    
+    // Filter out null values (non-fountain files or error files)
+    scripts = scripts.filter(script => script !== null);
     
     res.json({ scripts });
   } catch (error) {
@@ -266,7 +446,9 @@ app.get('/api/scripts/:id', async (req, res) => {
     const script = {
       id: scriptId,
       title: scriptId.replace(/\.\w+$/, ''), // Remove file extension
-      isHtml: true, // Flag to indicate HTML content
+      isHtml: scriptId.toLowerCase().endsWith('.html') || scriptId.toLowerCase().endsWith('.htm'),
+      isFountain: scriptId.toLowerCase().endsWith('.fountain'),
+      fileExtension: scriptId.split('.').pop().toLowerCase(),
       publicUrl: publicUrl, // Direct URL for HTML files
       lastModified: stats.mtime,
       dateCreated: stats.ctime
@@ -302,7 +484,7 @@ app.post('/api/convert-scripts', async (req, res) => {
     // Get files from intake directory
     const intakeFiles = fs.readdirSync(intakeDir)
       .filter(file => 
-        file.toLowerCase().endsWith('.html') && 
+        (file.toLowerCase().endsWith('.html') || file.toLowerCase().endsWith('.fountain')) && 
         file.toLowerCase() !== 'index.html'
       );
     
@@ -367,7 +549,7 @@ app.post('/api/convert-scripts', async (req, res) => {
   }
 });
 
-// Endpoint for file uploads - accepts script files
+// Endpoint for file uploads - accepts only fountain script files
 app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
   try {
     if (!req.file) {
@@ -377,14 +559,28 @@ app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
       });
     }
 
-    console.log('Script file uploaded successfully:', req.file.originalname);
+    // Check if file is a fountain file
+    const isFountain = req.file.filename.toLowerCase().endsWith('.fountain') || _isFountainFile(req.file.filename);
+    
+    if (!isFountain) {
+      // Delete the non-fountain file
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        error: 'Only fountain screenplay files (.fountain) are supported'
+      });
+    }
+
+    console.log('Fountain script file uploaded successfully:', req.file.originalname);
     
     // Return script information
     const stats = fs.statSync(req.file.path);
     const script = {
       id: req.file.filename,
       title: req.file.filename.replace(/\.\w+$/, ''), // Remove file extension
-      isHtml: req.file.filename.toLowerCase().endsWith('.html') || req.file.filename.toLowerCase().endsWith('.htm'),
+      isHtml: false,
+      isFountain: true,
+      fileExtension: req.file.filename.split('.').pop().toLowerCase(),
       publicUrl: req.file.filename,
       lastModified: stats.mtime,
       dateCreated: stats.ctime
@@ -392,7 +588,7 @@ app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
     
     res.json({
       success: true,
-      message: 'File uploaded successfully',
+      message: 'Fountain script uploaded successfully',
       script: script
     });
   } catch (error) {
@@ -401,6 +597,243 @@ app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Serve script files with proper formatting
+app.get('/:script', (req, res) => {
+  // Get the script filename from the request params
+  const scriptName = req.params.script;
+  
+  // Check if this is a script file we should handle
+  const scriptPath = path.join(scriptsDir, scriptName);
+  if (!fs.existsSync(scriptPath)) {
+    // Not a script file, let the React app handle it
+    return res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  }
+  
+  console.log(`Serving script: ${scriptName}`);
+  
+  // Only handle fountain files
+  if (scriptName.endsWith('.fountain') || _isFountainFile(scriptName)) {
+    // For fountain files, serve the content rendered with fountain-browser.js
+    console.log('Serving fountain script with special formatting');
+    
+    try {
+      const content = fs.readFileSync(scriptPath, 'utf8');
+      
+      // Send the fountain content to be parsed on the client side
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${scriptName}</title>
+          <script src="/teleprompter-font.js"></script>
+          <script src="/fountain-browser.js"></script>
+          <style>
+            body {
+              background-color: black;
+              color: white;
+              font-family: 'Courier New', monospace;
+              margin: 0;
+              padding: 20px;
+              line-height: 1.5;
+            }
+            .fountain-container {
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .title-page {
+              text-align: center;
+              margin-bottom: 50px;
+            }
+            .title {
+              font-size: 24px;
+              font-weight: bold;
+              margin-bottom: 20px;
+            }
+            .author {
+              font-size: 18px;
+              margin-bottom: 10px;
+            }
+            .scene-heading {
+              font-weight: bold;
+              margin-top: 30px;
+              margin-bottom: 10px;
+              color: #ADD8E6; /* Light blue */
+            }
+            .action {
+              margin-bottom: 10px;
+            }
+            .character {
+              margin-left: 200px;
+              margin-top: 20px;
+              font-weight: bold;
+              color: #FFD700; /* Gold */
+            }
+            .dialogue {
+              margin-left: 100px;
+              margin-right: 100px;
+              margin-bottom: 20px;
+            }
+            .parenthetical {
+              margin-left: 150px;
+              font-style: italic;
+              color: #BBBBBB; /* Light gray */
+            }
+            .transition {
+              text-align: right;
+              font-weight: bold;
+              margin: 20px 0;
+              color: #FFA07A; /* Light salmon */
+            }
+            .centered {
+              text-align: center;
+              margin: 20px 0;
+            }
+            .film-clip {
+              background-color: #007bff;
+              color: white;
+              padding: 8px 16px;
+              margin: 24px auto;
+              font-weight: bold;
+              border-radius: 4px;
+              display: inline-block;
+              text-align: center;
+            }
+            /* Add data-type attribute for dialog elements */
+            .dialogue, .character, .parenthetical {
+              data-type: "dialog";
+            }
+          </style>
+        </head>
+        <body>
+          <div id="fountain-output" class="fountain-container">Loading fountain script...</div>
+          
+          <script>
+            // Script content as a string
+            const fountainContent = ${JSON.stringify(content)};
+            
+            // Parse the fountain content when the page loads
+            document.addEventListener('DOMContentLoaded', function() {
+              try {
+                // Create a parser instance
+                const parser = new FountainParser();
+                // Parse the fountain content
+                const result = parser.parse(fountainContent);
+                
+                // Get the output container
+                const container = document.getElementById('fountain-output');
+                
+                // Create title page
+                const titlePage = document.createElement('div');
+                titlePage.className = 'title-page';
+                
+                const titleElem = document.createElement('div');
+                titleElem.className = 'title';
+                titleElem.textContent = result.title || 'Untitled Script';
+                
+                const authorElem = document.createElement('div');
+                authorElem.className = 'author';
+                authorElem.textContent = 'by ' + (result.author || 'Unknown Author');
+                
+                titlePage.appendChild(titleElem);
+                titlePage.appendChild(authorElem);
+                
+                // Clear the container and add the title page
+                container.innerHTML = '';
+                container.appendChild(titlePage);
+                
+                // Add the script content from the parser
+                const scriptDiv = document.createElement('div');
+                scriptDiv.className = 'script-content';
+                scriptDiv.innerHTML = result.html.script;
+                container.appendChild(scriptDiv);
+                
+                // Mark each dialog element with data-type attribute
+                const dialogElements = document.querySelectorAll('.dialogue, .character, .parenthetical');
+                dialogElements.forEach(element => {
+                  element.setAttribute('data-type', 'dialog');
+                });
+                
+                console.log('Fountain script parsed and rendered successfully');
+              } catch (error) {
+                console.error('Error parsing fountain script:', error);
+                document.getElementById('fountain-output').innerHTML = '<pre>' + fountainContent + '</pre>';
+              }
+              
+              // Function that allows external control of font size
+              window.setTeleprompterFontSize = function(size) {
+                const fontSize = parseInt(size, 10) || 16;
+                document.body.style.fontSize = fontSize + 'px';
+                
+                // Also set font sizes for specific elements
+                const elements = {
+                  '.title': Math.round(fontSize * 1.5),
+                  '.author': Math.round(fontSize * 1.1),
+                  '.scene-heading, .action, .character, .dialogue, .parenthetical, .transition, .centered, .film-clip': fontSize
+                };
+                
+                let styleElement = document.getElementById('teleprompter-font-styles');
+                if (!styleElement) {
+                  styleElement = document.createElement('style');
+                  styleElement.id = 'teleprompter-font-styles';
+                  document.head.appendChild(styleElement);
+                }
+                
+                let styleContent = '';
+                for (const selector in elements) {
+                  styleContent += selector + ' { font-size: ' + elements[selector] + 'px !important; }\n';
+                }
+                
+                styleElement.textContent = styleContent;
+              };
+            });
+          </script>
+        </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error(`Error serving fountain script ${scriptName}:`, error);
+      res.status(500).send('Error reading fountain script file');
+    }
+  } else {
+    // For non-fountain files, return an error
+    console.log('Non-fountain file requested:', scriptName);
+    res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Unsupported File Type</title>
+        <style>
+          body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.6;
+          }
+          .error-container {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+          }
+          h1 {
+            color: #ff5555;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="error-container">
+          <h1>Unsupported File Type</h1>
+          <p>This teleprompter application only supports Fountain screenplay files (.fountain).</p>
+          <p>The requested file "${scriptName}" is not a supported format.</p>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 

@@ -107,14 +107,27 @@ function initWebSocketServer(server) {
     // Give a small delay before sending the initial state
     // This helps ensure the client is ready to receive the state
     setTimeout(() => {
-      console.log('Sending initial state to new client:', sharedState);
+      console.log('Sending initial state to new client - clientId:', ws.clientId);
+      
+      // Only send the actual state to this specific client, not everyone
       ws.send(JSON.stringify({
         type: 'STATE_UPDATE',
         data: sharedState
       }));
       
-      // Broadcast client connection update to all admin clients
-      broadcastState();
+      // Only broadcast the client count changes to admin clients
+      const adminMessage = JSON.stringify({
+        type: 'CLIENT_COUNT_UPDATE',
+        data: {
+          connectedClients: sharedState.connectedClients
+        }
+      });
+      
+      clientTypes['admin'].forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client !== ws) {
+          client.send(adminMessage);
+        }
+      });
     }, 500);
     
     ws.on('message', (message) => {
@@ -210,6 +223,19 @@ function handleMessage(message, sender) {
       return; // No need to broadcast state after this
 
     case 'CONTROL':
+      // Save the source metadata if present for tracking who initiated changes
+      if (message.value && typeof message.value === 'object' && message.value.sourceId) {
+        // Store metadata about the source to prevent loops
+        sharedState._sourceMetadata = {
+          sourceId: message.value.sourceId,
+          initiatingSender: !!message.value.initiatingSender,
+          timestamp: Date.now()
+        };
+      } else {
+        // Clear metadata if not present
+        sharedState._sourceMetadata = null;
+      }
+      
       // Update shared state based on control message
       switch (message.action) {
         case 'PLAY':
@@ -318,6 +344,9 @@ function handleMessage(message, sender) {
   }
 }
 
+// Last broadcast state tracking to prevent unnecessary broadcasts
+let lastBroadcastState = null;
+
 // Broadcast state to all connected clients
 function broadcastState() {
   // Create a safe copy of state to broadcast
@@ -335,18 +364,31 @@ function broadcastState() {
       admin: clientTypes.admin ? clientTypes.admin.length : 0,
       viewer: clientTypes.viewer ? clientTypes.viewer.length : 0,
       remote: clientTypes.remote ? clientTypes.remote.length : 0
-    }
+    },
+    // Include metadata about the source of this update to prevent loops
+    _sourceMetadata: sharedState._sourceMetadata || null
     // No scrollData - that's handled by explicit SEARCH_POSITION messages now
   };
   
-  // Broadcast state to all clients
+  // Check if the state has actually changed
+  const stateJson = JSON.stringify(safeState);
+  if (lastBroadcastState === stateJson) {
+    // The state hasn't changed, don't broadcast again
+    return;
+  }
   
+  // Update the last broadcast state
+  lastBroadcastState = stateJson;
+  
+  // Broadcast state to all clients
   const stateMessage = JSON.stringify({
     type: 'STATE_UPDATE',
     data: safeState
   });
   
+  // Send to clients, limiting the frequency of updates
   connections.forEach(client => {
+    // Only send if connection is open
     if (client.readyState === WebSocket.OPEN) {
       client.send(stateMessage);
     }

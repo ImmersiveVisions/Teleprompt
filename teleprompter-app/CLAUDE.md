@@ -1,5 +1,9 @@
 # Claude Code Guidelines for Teleprompter App
 
+## IMPORTANT RULES
+- DO NOT, UNDER ANY CIRCUMSTANCES, START THE SERVER.
+- The user will handle all server operations manually.
+
 ## Build Commands
 - `npm install` - Install dependencies
 - `npm run build` - Build the application
@@ -9,10 +13,10 @@
 - `npm test -- -t "test name"` - Run specific test
 
 ## Milestones
+- Commit [NEW]: Dropped HTML support, focusing exclusively on Fountain screenplay format (2025-04-08)
 - Commit 5347064: Fixed position broadcasting from manual scrolling in preview pane (2025-03-31)
 - Commit 254542b: Added automatic script conversion and index.html filtering (2025-03-31)
 - Commit 1cdd6f3: Working ScriptPlayer component with scrolling animation (2025-03-30)
-- Commit c942d5f: HTML rendering improvements for script files (2025-03-30)
 
 ## Code Style
 
@@ -53,22 +57,20 @@
 - Single quotes for strings
 - Semicolons required
 
-## HTML Rendering
-- HTML files are rendered in iframes using srcDoc attribute
-- Use script.isHtml flag to identify HTML content
-- Always ensure proper DOCTYPE is included
-- Use sandbox="allow-same-origin" for security
-- Apply styles by injecting directly into iframe head and body
+## Fountain Script Rendering
+- Fountain files are rendered in iframes using proper formatting
+- Use script.isFountain flag to identify fountain content
+- Use sandbox="allow-same-origin allow-scripts" for security
+- Add data-type="dialog" attributes for dialog elements
 - Add extensive logging for iframe-related operations
-- Use loading="eager" to prioritize iframe loading
 
 ## Script Handling
-- Support multiple file types: .txt, .html, .htm, .rtf
+- Support only .fountain file type
 - Normalize script object with both body and content fields
-- HTML content detection via script.isHtml flag or filename extension
+- Content type detection via script.isFountain flag or filename extension
 - Use ViewerPage's mutation observer to handle dynamic iframe creation
-- Handle scroll operations differently for text vs HTML content
 - Use ContentDocument API for accessing iframe contents
+- Fountain screenplay format rendered with proper formatting
 - For script editing, update both body and content fields
 
 ## Position Broadcasting
@@ -84,9 +86,16 @@
 - Rollback button functionality is incomplete - needs to be fixed in future updates
 - Search text may find multiple instances of the same string - needs additional vectors for identification
 
+## Implemented Features
+- File upload interface in admin panel (supports fountain files only)
+- Fountain screenplay format support with proper styling
+- Character/dialogue highlighting in fountain files
+- Client identification and connection tracking
+- Visual highlighting for search results and navigation
+- Complete fountain-only implementation
+
 ## HIGH PRIORITY Features
-- Implement way for users to add scripts at runtime:
-  - File upload interface in admin panel
+- Implement additional ways for users to add scripts at runtime:
   - Drag-and-drop script support
   - Direct script entry in browser
-  - Script format conversion utilities
+- Video clip integration with script markers

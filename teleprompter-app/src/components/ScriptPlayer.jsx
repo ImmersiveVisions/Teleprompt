@@ -1,7 +1,7 @@
 // ScriptPlayer.jsx
 // An ultra-simple script player that just focuses on scrolling
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import useFontSizeHandler from '../hooks/useFontSizeHandler';
 import useScrollAnimation from '../hooks/useScrollAnimation';
 import usePositionTracking from '../hooks/usePositionTracking';
@@ -18,6 +18,30 @@ const ScriptPlayer = ({
   fullScreen = false,
   aspectRatio = '16/9'  // Default to 16:9, but can be '4/3' or '16/9'
 }, ref) => {
+  // Use useMemo to prevent infinite re-renders
+  const enhancedScript = useMemo(() => {
+    if (!script) return null;
+    
+    const enhanced = {
+      ...script,
+      isFountain: script.isFountain || 
+                  script.id.toLowerCase().endsWith('.fountain') ||
+                  (script.fileExtension && 
+                   script.fileExtension.toLowerCase() === 'fountain')
+    };
+    
+    // Log only once inside useMemo to avoid excessive logging
+    console.log("ScriptPlayer: Rendering with enhanced script:", { 
+      id: enhanced.id, 
+      title: enhanced.title, 
+      isFountain: enhanced.isFountain,
+      fileExtension: enhanced.fileExtension,
+      originalIsFountain: script.isFountain
+    });
+    
+    return enhanced;
+  }, [script]);
+    
   const containerRef = useRef(null);
   const animationRef = useRef(null);
   
@@ -27,11 +51,11 @@ const ScriptPlayer = ({
   }
 
   // Custom hooks to handle different aspects of the player
-  useFontSizeHandler(containerRef, fontSize, script);
-  const { cleanupAnimation } = useScrollAnimation(containerRef, isPlaying, speed, direction, script, animationRef);
-  const { currentTopElement, findElementAtViewportTop } = usePositionTracking(containerRef, isPlaying, script, ref);
-  const { jumpToPosition } = usePositionJump(containerRef, script);
-  const { handleIframeLoad } = useIframeHandlers(containerRef, script, ref);
+  useFontSizeHandler(containerRef, fontSize, enhancedScript);
+  const { cleanupAnimation } = useScrollAnimation(containerRef, isPlaying, speed, direction, enhancedScript, animationRef);
+  const { currentTopElement, findElementAtViewportTop } = usePositionTracking(containerRef, isPlaying, enhancedScript, ref);
+  const { jumpToPosition } = usePositionJump(containerRef, enhancedScript);
+  const { handleIframeLoad } = useIframeHandlers(containerRef, enhancedScript, ref);
   
   // Expose methods to parent component
   React.useImperativeHandle(ref, () => {
@@ -80,10 +104,10 @@ const ScriptPlayer = ({
     });
     
     return refObject;
-  }, [script, jumpToPosition, currentTopElement]);
+  }, [enhancedScript, jumpToPosition, currentTopElement]);
   
   // If no script, render an empty message
-  if (!script) {
+  if (!enhancedScript) {
     return <div className="no-script-message">No script selected</div>;
   }
   
@@ -112,12 +136,12 @@ const ScriptPlayer = ({
             width: '100%'
           }}
         >
-          {script.title}
+          {enhancedScript.title}
         </div>
       )}
       
       <ScriptFrame
-        script={script}
+        script={enhancedScript}
         containerRef={containerRef}
         aspectRatio={aspectRatio}
         fullScreen={fullScreen}

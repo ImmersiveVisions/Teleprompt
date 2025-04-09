@@ -174,6 +174,22 @@ const scriptRepository = {
     if (!script.lastModified) {
       script.lastModified = now;
     }
+    
+    // Ensure file extension and format flags are set
+    if (script.id && !script.fileExtension) {
+      const parts = script.id.split('.');
+      if (parts.length > 1) {
+        script.fileExtension = parts.pop().toLowerCase();
+        
+        // Set format flags based on extension
+        script.isHtml = ['html', 'htm'].includes(script.fileExtension);
+        script.isFountain = script.fileExtension === 'fountain';
+      } else {
+        script.fileExtension = 'txt';
+        script.isHtml = false;
+        script.isFountain = false;
+      }
+    }
   }
 };
 

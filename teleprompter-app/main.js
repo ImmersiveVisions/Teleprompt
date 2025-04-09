@@ -305,11 +305,16 @@ const isPathValid = (basePath, requestedPath, filename = null) => {
       }
       
       // Only allow specific file extensions
-      const validExtensions = ['.txt', '.html', '.htm', '.rtf'];
+      const validExtensions = ['.txt', '.html', '.htm', '.rtf', '.fountain'];
       const hasValidExt = validExtensions.some(ext => filename.toLowerCase().endsWith(ext));
       if (!hasValidExt) {
         console.error(`Security violation: Invalid file extension for ${filename}`);
         return false;
+      }
+      
+      // Log fountain files for debugging
+      if (filename.toLowerCase().endsWith('.fountain')) {
+        console.log(`Fountain file detected for validation: ${filename}`);
       }
     }
     
@@ -369,7 +374,7 @@ ipcMain.handle('list-scripts', async (event, directoryPath) => {
     const files = fs.readdirSync(directoryPath);
     
     // Filter for allowed script files and get their stats
-    const validExtensions = ['.txt', '.html', '.htm', '.rtf'];
+    const validExtensions = ['.txt', '.html', '.htm', '.rtf', '.fountain'];
     const scriptFiles = files
       .filter(file => validExtensions.some(ext => file.toLowerCase().endsWith(ext)))
       .map(file => {
@@ -379,6 +384,7 @@ ipcMain.handle('list-scripts', async (event, directoryPath) => {
         // Read file content for preview (first 1000 chars only for safety)
         let content = '';
         let isHtml = file.toLowerCase().endsWith('.html') || file.toLowerCase().endsWith('.htm');
+        let isFountain = file.toLowerCase().endsWith('.fountain');
         try {
           // Read file content with appropriate handling
           const buffer = fs.readFileSync(filePath, { encoding: 'utf8', flag: 'r' });
@@ -386,6 +392,9 @@ ipcMain.handle('list-scripts', async (event, directoryPath) => {
           if (isHtml) {
             // For HTML files, provide a preview note
             content = buffer.toString().substring(0, 300) + '... [HTML content truncated for preview]';
+          } else if (isFountain) {
+            // For Fountain files, provide a preview note
+            content = buffer.toString().substring(0, 300) + '... [Fountain content truncated for preview]';
           } else {
             // For text files, get a reasonable preview
             content = buffer.toString().substring(0, 1000); // Limit preview size
@@ -401,7 +410,8 @@ ipcMain.handle('list-scripts', async (event, directoryPath) => {
           mtime: stats.mtime,
           ctime: stats.ctime,
           content: content,
-          isHtml: isHtml
+          isHtml: isHtml,
+          isFountain: isFountain
         };
       });
     

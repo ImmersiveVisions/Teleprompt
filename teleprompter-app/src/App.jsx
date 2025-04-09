@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AdminPage from './pages/AdminPage';
 import RemotePage from './pages/RemotePage';
 import ViewerPage from './pages/ViewerPage';
+import FountainTest from './components/FountainTest';
 import { initWebSocket } from './services/websocket';
 import { initBluetoothService } from './services/bluetoothService';
 import './styles.css';
@@ -13,6 +14,23 @@ const App = () => {
   const [btStatus, setBtStatus] = useState('disconnected');
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Initializing application...');
+  
+  // Check for script in URL parameters
+  const [directScriptId, setDirectScriptId] = useState(null);
+  
+  useEffect(() => {
+    // Parse URL query parameters
+    const queryParams = new URLSearchParams(window.location.search);
+    const scriptId = queryParams.get('script');
+    
+    if (scriptId) {
+      console.log('Script ID found in URL:', scriptId);
+      setDirectScriptId(scriptId);
+      
+      // Add the script ID to the window object so other components can access it
+      window.directScriptId = scriptId;
+    }
+  }, []);
   
   // Initialize services
   useEffect(() => {
@@ -142,32 +160,39 @@ const App = () => {
         ) : (
           <Routes>
             <Route path="/" element={
-              <div className="home-page">
-                <h1>Teleprompter App</h1>
-                <div className="mode-selection">
-                  <Link to="/admin" className="mode-button">
-                    Admin Mode
-                  </Link>
-                  <Link to="/remote" className="mode-button">
-                    Remote Control Mode
-                  </Link>
-                  <Link to="/viewer" className="mode-button">
-                    Viewer Mode
-                  </Link>
-                </div>
-                <div className="connection-status">
-                  <div className={`status-indicator ${wsStatus}`}>
-                    WebSocket: {wsStatus}
+              directScriptId ? (
+                // If a script ID is present in the URL, go straight to the viewer
+                <ViewerPage directScriptId={directScriptId} />
+              ) : (
+                // Regular home page
+                <div className="home-page">
+                  <h1>Teleprompter App</h1>
+                  <div className="mode-selection">
+                    <Link to="/admin" className="mode-button">
+                      Admin Mode
+                    </Link>
+                    <Link to="/remote" className="mode-button">
+                      Remote Control Mode
+                    </Link>
+                    <Link to="/viewer" className="mode-button">
+                      Viewer Mode
+                    </Link>
                   </div>
-                  <div className={`status-indicator ${btStatus}`}>
-                    Bluetooth: {btStatus}
+                  <div className="connection-status">
+                    <div className={`status-indicator ${wsStatus}`}>
+                      WebSocket: {wsStatus}
+                    </div>
+                    <div className={`status-indicator ${btStatus}`}>
+                      Bluetooth: {btStatus}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             } />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/remote" element={<RemotePage />} />
-            <Route path="/viewer" element={<ViewerPage />} />
+            <Route path="/viewer" element={<ViewerPage directScriptId={directScriptId} />} />
+            <Route path="/fountain-test" element={<FountainTest />} />
           </Routes>
         )}
       </div>

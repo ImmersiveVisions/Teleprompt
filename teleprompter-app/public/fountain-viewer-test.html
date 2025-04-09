@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Fountain Viewer Test</title>
+  <style>
+    body {
+      background-color: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      margin: 0;
+    }
+    #container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    button {
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    #fountain-display {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #333;
+      background-color: #000;
+      margin-top: 20px;
+    }
+    #status {
+      background-color: #333;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+  </style>
+  <!-- Load our simplified browser-friendly fountain parser -->
+  <script src="/fountain-browser.js"></script>
+</head>
+<body>
+  <div id="container">
+    <h1>Fountain Viewer Test</h1>
+    <button id="loadButton">Load and Parse Fountain Script</button>
+    <div id="status">Ready to load</div>
+    <iframe id="fountain-display" frameborder="0"></iframe>
+  </div>
+
+  <script>
+    document.getElementById('loadButton').addEventListener('click', async () => {
+      const statusElement = document.getElementById('status');
+      const iframe = document.getElementById('fountain-display');
+      
+      statusElement.textContent = 'Loading fountain script...';
+      
+      try {
+        // Fetch the fountain file content
+        const response = await fetch('/api/test/fountain');
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load script: ${response.status}`);
+        }
+        
+        const fountainContent = await response.text();
+        statusElement.textContent = `Loaded script (${fountainContent.length} bytes). Parsing...`;
+        
+        // Parse the fountain content with our browser-friendly parser
+        const parser = new FountainParser();
+        const parsed = parser.parse(fountainContent)
+        statusElement.textContent = 'Script parsed. Rendering...';
+        
+        // Generate HTML
+        const html = generateHtml(parsed);
+        
+        // Write to iframe
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        iframeDoc.open();
+        iframeDoc.write(html);
+        iframeDoc.close();
+        
+        statusElement.textContent = 'Script rendered successfully';
+      } catch (error) {
+        console.error('Error:', error);
+        statusElement.textContent = `Error: ${error.message}`;
+      }
+    });
+    
+    function generateHtml(parsed) {
+      const title = parsed.title || 'Untitled Script';
+      const author = parsed.author || 'Unknown Author';
+      
+      let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Courier, monospace;
+              background-color: black;
+              color: white;
+              padding: 20px;
+              line-height: 1.5;
+            }
+            .title-page {
+              text-align: center;
+              margin-bottom: 50px;
+            }
+            .title {
+              font-size: 24px;
+              font-weight: bold;
+              margin-bottom: 20px;
+            }
+            .author {
+              font-size: 18px;
+              margin-bottom: 10px;
+            }
+            .scene-heading {
+              font-weight: bold;
+              margin-top: 30px;
+              margin-bottom: 10px;
+              color: #ADD8E6; /* Light blue */
+            }
+            .action {
+              margin-bottom: 10px;
+            }
+            .character {
+              margin-left: 200px;
+              margin-top: 20px;
+              font-weight: bold;
+              color: #FFD700; /* Gold */
+            }
+            .dialogue {
+              margin-left: 100px;
+              margin-right: 100px;
+              margin-bottom: 20px;
+            }
+            .parenthetical {
+              margin-left: 150px;
+              font-style: italic;
+              color: #BBBBBB; /* Light gray */
+            }
+            .transition {
+              text-align: right;
+              font-weight: bold;
+              margin: 20px 0;
+              color: #FFA07A; /* Light salmon */
+            }
+            .centered {
+              text-align: center;
+              margin: 20px 0;
+            }
+            .film-clip {
+              background-color: #007bff;
+              color: white;
+              padding: 8px 16px;
+              margin: 24px auto;
+              font-weight: bold;
+              border-radius: 4px;
+              display: inline-block;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="title-page">
+            <div class="title">${title}</div>
+            <div class="author">by ${author}</div>
+          </div>
+      `;
+      
+      // Process each token in the script
+      if (parsed.html && parsed.html.script) {
+        html += parsed.html.script;
+      } else if (parsed.tokens) {
+        html += '<div class="script">';
+        parsed.tokens.forEach((token) => {
+          let text = token.text || '';
+          
+          // Special handling for film clip markers
+          if (text.includes('[[FILM CLIP]]')) {
+            text = text.replace('[[FILM CLIP]]', '');
+            html += `<div class="film-clip">FILM CLIP${text}</div>`;
+            return;
+          }
+          
+          switch (token.type) {
+            case 'scene_heading':
+              html += `<div class="scene-heading">${text}</div>`;
+              break;
+            case 'action':
+              html += `<div class="action">${text}</div>`;
+              break;
+            case 'character':
+              html += `<div class="character">${text}</div>`;
+              break;
+            case 'dialogue':
+              html += `<div class="dialogue">${text}</div>`;
+              break;
+            case 'parenthetical':
+              html += `<div class="parenthetical">${text}</div>`;
+              break;
+            case 'transition':
+              html += `<div class="transition">${text}</div>`;
+              break;
+            case 'centered':
+              html += `<div class="centered">${text}</div>`;
+              break;
+            case 'page_break':
+              html += `<hr>`;
+              break;
+            default:
+              html += `<div>${text}</div>`;
+          }
+        });
+        html += '</div>';
+      }
+      
+      html += `
+        </body>
+        </html>
+      `;
+      
+      return html;
+    }
+  </script>
+</body>
+</html>

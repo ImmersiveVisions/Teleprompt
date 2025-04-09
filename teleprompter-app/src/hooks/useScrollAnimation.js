@@ -52,8 +52,11 @@ const useScrollAnimation = (containerRef, isPlaying, speed, direction, script, a
     
     // If not playing, do nothing more
     if (!isPlaying) {
-      return;
+      console.log('ScrollAnimation: Not playing, skipping animation setup');
+      return cleanupAnimation; // return cleanup function
     }
+    
+    console.log('ScrollAnimation: Setting up animation for', script.id);
     
     // DETERMINE SCROLL TARGET AND CONTAINER
     

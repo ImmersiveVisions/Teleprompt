@@ -33,11 +33,11 @@ const ScriptUploadModal = ({ isOpen, onClose, onUpload }) => {
       return;
     }
 
-    // Check file type (allow .html, .htm files)
-    const isHtml = file.name.toLowerCase().endsWith('.html') || file.name.toLowerCase().endsWith('.htm');
+    // Check file type (only allow .fountain files)
+    const isFountain = file.name.toLowerCase().endsWith('.fountain');
     
-    if (!isHtml) {
-      setError('Only HTML files are accepted (.html, .htm)');
+    if (!isFountain) {
+      setError('Only Fountain screenplay files are accepted (.fountain)');
       return;
     }
 
@@ -78,12 +78,12 @@ const ScriptUploadModal = ({ isOpen, onClose, onUpload }) => {
         
         <form onSubmit={handleSubmit} className="script-form">
           <div className="form-group">
-            <label htmlFor="script-file">Select HTML Script File:</label>
+            <label htmlFor="script-file">Select Fountain Script File:</label>
             <input 
               type="file" 
               id="script-file"
               onChange={handleFileSelect}
-              accept=".html,.htm"
+              accept=".fountain"
               className="form-control"
               ref={fileInputRef}
             />
@@ -103,7 +103,7 @@ const ScriptUploadModal = ({ isOpen, onClose, onUpload }) => {
           
           <div className="form-help">
             <p>
-              <strong>Note:</strong> Only HTML script files are accepted (.html, .htm).
+              <strong>Note:</strong> Only Fountain screenplay files are accepted (.fountain).
               The file will be stored in the application's public directory.
             </p>
           </div>

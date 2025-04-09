@@ -70,15 +70,23 @@ const getAllScripts = () => {
           console.log(`Found ${scriptFiles.length} script files in ${scriptsDirectory}`);
           
           // Map file information to script objects
-          const scripts = scriptFiles.map(file => ({
-            id: file.name,
-            title: file.name.replace(/\.\w+$/, ''), // Remove file extension for title
-            body: file.content || '',
-            content: file.content || '', // For backward compatibility
-            lastModified: new Date(file.mtime),
-            dateCreated: new Date(file.ctime),
-            isHtml: file.name.toLowerCase().endsWith('.html') || file.name.toLowerCase().endsWith('.htm')
-          }));
+          const scripts = scriptFiles.map(file => {
+            const script = {
+              id: file.name,
+              title: file.name.replace(/\.\w+$/, ''), // Remove file extension for title
+              body: file.content || '',
+              content: file.content || '', // For backward compatibility
+              lastModified: new Date(file.mtime),
+              dateCreated: new Date(file.ctime),
+              fileExtension: file.name.split('.').pop().toLowerCase()
+            };
+            
+            // Set format flags based on file content and extension
+            script.isHtml = _isHtmlFile(file.name, script.body);
+            script.isFountain = _isFountainFile(file.name, script.body);
+            
+            return script;
+          });
           
           // Debug output
           scripts.forEach((script, i) => {
@@ -170,8 +178,12 @@ const getScriptById = (id) => {
             content: scriptData.content || '', // For backward compatibility
             lastModified: new Date(scriptData.mtime),
             dateCreated: new Date(scriptData.ctime),
-            isHtml: scriptId.toLowerCase().endsWith('.html') || scriptId.toLowerCase().endsWith('.htm')
+            fileExtension: scriptId.split('.').pop().toLowerCase()
           };
+          
+          // Set format flags based on file content and extension
+          script.isHtml = _isHtmlFile(scriptId, script.body);
+          script.isFountain = _isFountainFile(scriptId, script.body);
           
           console.log(`Successfully loaded script with ID ${scriptId}, title: ${script.title}`);
           resolve(script);
@@ -421,6 +433,53 @@ const normalizeScript = (script) => {
 };
 
 // Upload a script file
+// Helper functions for file type detection
+const _getFileExtension = (filename) => {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts.pop() : '';
+};
+
+// Check if the file is an HTML document
+const _isHtmlFile = (filename, content) => {
+  // Check file extension first
+  const extension = _getFileExtension(filename).toLowerCase();
+  if (['html', 'htm'].includes(extension)) {
+    return true;
+  }
+  
+  // If no obvious extension, check content
+  if (content && content.trim().startsWith('<!DOCTYPE html>') || 
+      content && content.trim().startsWith('<html')) {
+    return true;
+  }
+  
+  return false;
+};
+
+// Check if the file is a Fountain screenplay
+const _isFountainFile = (filename, content) => {
+  // Check file extension first
+  const extension = _getFileExtension(filename).toLowerCase();
+  if (extension === 'fountain') {
+    return true;
+  }
+  
+  // If no obvious extension, check for some fountain markers
+  // Title: and Scene Heading patterns (INT./EXT.) are good indicators
+  if (content) {
+    const firstLines = content.split('\n').slice(0, 10).join('\n');
+    if (
+      firstLines.includes('Title:') && 
+      (firstLines.includes('Author:') || firstLines.includes('by')) &&
+      /INT\.|EXT\./.test(content)
+    ) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
 const uploadScript = (file) => {
   return new Promise((resolve, reject) => {
     try {
@@ -451,6 +510,13 @@ const uploadScript = (file) => {
           reject(new Error(data.error));
         } else if (data.success && data.script) {
           console.log(`Script file ${data.script.id} uploaded successfully`);
+          
+          // Check if it's a Fountain file (only needed if the extension doesn't already say so)
+          if (!data.script.isFountain && data.script.body) {
+            data.script.isFountain = _isFountainFile(data.script.id, data.script.body);
+            console.log(`Detected fountain format for ${data.script.id}: ${data.script.isFountain}`);
+          }
+          
           resolve(data.script);
         } else {
           reject(new Error('Unexpected response from server'));
