@@ -6,6 +6,7 @@ import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
+import TeleprompterViewer from '../components/TeleprompterViewer';
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import ScriptUploadModal from '../components/ScriptUploadModal';
 import SearchModal from '../components/SearchModal';
@@ -186,7 +187,7 @@ const AdminPage = () => {
     
     if (isHtmlScript) {
       // For HTML scripts, we need to search the iframe content
-      const iframe = document.querySelector('#html-script-frame');
+      const iframe = document.querySelector('#teleprompter-frame');
       console.log('Search in HTML: iframe element found:', !!iframe);
       
       if (!iframe) {
@@ -479,17 +480,17 @@ const AdminPage = () => {
     let positionCaptureInterval = null;
     
     // Start or stop the position capture based on play state
-    if (isPlaying && selectedScript) {
+    if (!isPlaying && selectedScript) {
       console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback during playback');
       
       // Capture the position every 3 seconds during playback
       positionCaptureInterval = setInterval(() => {
         try {
           // Only capture if still playing
-          if (!isPlaying) return;
+          if (isPlaying) return;
           
           // Get the iframe
-          const iframe = document.querySelector('#html-script-frame');
+          const iframe = document.querySelector('#teleprompter-frame');
           if (iframe && iframe.contentWindow && iframe.contentDocument) {
             // Try to find the current visible dialog
             const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
@@ -586,7 +587,7 @@ const AdminPage = () => {
       }
       
       // Get the iframe
-      const iframe = document.querySelector('#html-script-frame');
+      const iframe = document.querySelector('#teleprompter-frame');
       if (!iframe || !iframe.contentWindow) {
         console.error('Cannot jump - iframe not accessible');
         return;
@@ -1005,16 +1006,17 @@ const AdminPage = () => {
       console.log("[ANIMATION] Notifying ScriptPlayer that animation is starting");
       scriptPlayerRef.current.setScrollAnimating(true);
     }
-    
+
+// Store current position for rollback when play is pressed
+    storeCurrentPositionForRollback();
+
     // Send WebSocket message with special metadata
     sendControlMessage('PLAY', {
       sourceId: "admin_direct_" + Date.now(),
-      initiatingSender: true,
+      initiatingSender: false,
       noLoop: true
     });
     
-    // Store current position for rollback when play is pressed
-    storeCurrentPositionForRollback();
   };
   
   // Explicit pause function
@@ -1044,13 +1046,11 @@ const AdminPage = () => {
     });
   };
   
-  // Removed togglePlay - only using explicit play/pause functions
-  
   // Store current position for rollback
   const storeCurrentPositionForRollback = () => {
     try {
       // Get the iframe or content container
-      const iframe = document.querySelector('#html-script-frame');
+      const iframe = document.querySelector('#teleprompter-frame');
       if (iframe && iframe.contentWindow && iframe.contentDocument) {
         console.log('Finding dialog node for rollback storage');
         
@@ -1293,7 +1293,7 @@ const AdminPage = () => {
     console.log('[ROLLBACK] No stored node data, finding first dialog');
     
     // Find the iframe
-    const iframe = document.querySelector('#html-script-frame');
+    const iframe = document.querySelector('#teleprompter-frame');
     if (iframe && iframe.contentDocument) {
       try {
         // Get all dialog elements
@@ -1649,7 +1649,7 @@ const AdminPage = () => {
                 </div>
                 {selectedScript ? (
                   <>
-                    <ScriptPlayer 
+                    <TeleprompterViewer
                       ref={scriptPlayerRef}
                       key={`preview-${selectedScript.id}`} 
                       script={selectedScript}
@@ -1658,7 +1658,6 @@ const AdminPage = () => {
                       direction={direction}
                       fontSize={Math.round(fontSize * 0.5)} // Reduce font size to 50% for preview
                       aspectRatio={aspectRatio}
-                      fullScreen={false}
                     />
                   </>
                 ) : (

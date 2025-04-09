@@ -60,15 +60,59 @@ export default React.forwardRef((props, ref) => {
   const { scrollToNode, jumpToPosition } = useNodeNavigation();
   
   // Expose methods via ref
-  React.useImperativeHandle(ref, () => ({
-    scrollToNode,
-    jumpToPosition,
+  React.useImperativeHandle(ref, () => {
+    // Log debug info when the ref methods are created
+    console.log('⭐ [POSITION DEBUG] Creating ref methods in TeleprompterViewer');
     
-    // No-op method required by some components
-    setScrollAnimating(isAnimating) {
-      console.log(`scrollAnimating set to ${isAnimating}`);
-    }
-  }));
+    // Create a unique ID for this ref creation to track persistence
+    const refId = Date.now().toString(36);
+    
+    return {
+      scrollToNode,
+      jumpToPosition,
+      
+      // Add getCurrentTopElement method - returns default data since we don't track it
+      getCurrentTopElement: () => ({ 
+        textContent: 'Current position in teleprompter', 
+        type: 'teleprompter-position' 
+      }),
+      
+      // Store position handler for compatibility with AdminPage
+      setPositionHandler(handler) {
+        console.log('⭐ [POSITION DEBUG] Setting position handler in TeleprompterViewer');
+        // Make the handler available globally to maintain compatibility
+        window._teleprompterPositionHandler = handler;
+        // Override sendPosition to use this handler
+        this.sendPosition = handler;
+      },
+      
+      // Flag to indicate animation is running (prevents user scroll events)
+      setScrollAnimating(isAnimating) {
+        // Direct access to module-scoped state for compatibility with ScriptPlayer
+        if (!window._scrollState) {
+          window._scrollState = {};
+        }
+        window._scrollState.isScrollAnimating = isAnimating;
+        console.log('📋 [DEBUG] TeleprompterViewer: Set animation state to', isAnimating);
+      },
+      
+      // This is just a placeholder that will be overwritten by the parent
+      sendPosition: (data) => {
+        console.log('⭐ [POSITION DEBUG] TeleprompterViewer: Default sendPosition called', data);
+        // Try to use the handler if available
+        if (window._teleprompterPositionHandler) {
+          window._teleprompterPositionHandler(data);
+        }
+      },
+      
+      // For debugging - add a ref ID and timestamp
+      _debugInfo: {
+        refId: refId,
+        createdAt: new Date().toISOString(),
+        component: 'TeleprompterViewer'
+      }
+    };
+  }, [scrollToNode, jumpToPosition]);
   
   // Render the component - don't pass ref as it would create circular reference
   return <TeleprompterViewer {...props} />;
