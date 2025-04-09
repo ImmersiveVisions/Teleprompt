@@ -923,17 +923,10 @@ const AdminPage = () => {
       const { data } = message;
       console.log('AdminPage: Received state update:', data);
       
-      // Check source metadata to avoid loops with play/pause
-      const isFromOurDirectCommands = data._sourceMetadata && 
-                                      data._sourceMetadata.sourceId && 
-                                      data._sourceMetadata.sourceId.startsWith('admin_direct_');
-      
-      // Only apply play/pause state if not from our direct commands
-      if (data.isPlaying !== undefined && !isFromOurDirectCommands) {
+      // Always apply play/pause state regardless of source
+      if (data.isPlaying !== undefined) {
         console.log('AdminPage: Applying play state from network:', data.isPlaying);
         setIsPlaying(data.isPlaying);
-      } else if (data.isPlaying !== undefined) {
-        console.log('AdminPage: Ignoring play state from our own direct command');
       }
       setSpeed(data.speed);
       setDirection(data.direction);
@@ -1164,88 +1157,63 @@ const AdminPage = () => {
           setStoredNodeData(null);
         }
         
-        // If starting playback, explicitly store the current position
-        if (newState === true) {
-          try {
-            console.log("[PLAYBACK] Attempting to store starting position for playback");
-            // Find all dialog elements in the current view
-            const allDialogs = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-            if (allDialogs.length > 0) {
-              // Get the current scroll position
-              const scrollY = iframe.contentWindow.scrollY || 0;
+        // Explicitly try to find the current dialog
+        try {
+          console.log("[PLAYBACK] Attempting to store starting position for playback");
+          // Find all dialog elements in the current view
+          const allDialogs = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+          if (allDialogs.length > 0) {
+            // Get the current scroll position
+            const scrollY = iframe.contentWindow.scrollY || 0;
+            
+            // Find which dialog is closest to the current view
+            let closestDialog = null;
+            let closestDistance = Infinity;
+            let dialogIndex = -1;
+            
+            allDialogs.forEach((dialog, idx) => {
+              const rect = dialog.getBoundingClientRect();
+              // Calculate absolute position
+              const dialogTop = rect.top + scrollY;
+              // Find distance to current scroll position
+              const distance = Math.abs(dialogTop - scrollY - 100); // 100px buffer from top
               
-              // Find which dialog is closest to the current view
-              let closestDialog = null;
-              let closestDistance = Infinity;
-              let dialogIndex = -1;
-              
-              allDialogs.forEach((dialog, idx) => {
-                const rect = dialog.getBoundingClientRect();
-                // Calculate absolute position
-                const dialogTop = rect.top + scrollY;
-                // Find distance to current scroll position
-                const distance = Math.abs(dialogTop - scrollY - 100); // 100px buffer from top
-                
-                if (distance < closestDistance) {
-                  closestDistance = distance;
-                  closestDialog = dialog;
-                  dialogIndex = idx;
-                }
-              });
-              
-              if (closestDialog) {
-                console.log("[PLAYBACK] Explicitly storing position at playback start, dialog:", 
-                  closestDialog.textContent.substring(0, 30));
-                
-                // Store the exact starting position data including the dialog index
-                const startPositionData = {
-                  type: 'dialog',
-                  text: closestDialog.textContent.trim().substring(0, 50),
-                  index: dialogIndex,
-                  totalDialogs: allDialogs.length,
-                  fromRollback: true,
-                  attributes: {
-                    dataType: 'dialog'
-                  }
-                };
-                
-                // Store it for rollback
-                setStoredNodeData(startPositionData);
-                console.log("[PLAYBACK] Stored starting position at index:", dialogIndex);
+              if (distance < closestDistance) {
+                closestDistance = distance;
+                closestDialog = dialog;
+                dialogIndex = idx;
               }
+            });
+            
+            if (closestDialog) {
+              console.log("[PLAYBACK] Explicitly storing position at playback start, dialog:", 
+                closestDialog.textContent.substring(0, 30));
+              
+              // Store the exact starting position data including the dialog index
+              const startPositionData = {
+                type: 'dialog',
+                text: closestDialog.textContent.trim().substring(0, 50),
+                index: dialogIndex,
+                totalDialogs: allDialogs.length,
+                fromRollback: true,
+                attributes: {
+                  dataType: 'dialog'
+                }
+              };
+              
+              // Store it for rollback
+              setStoredNodeData(startPositionData);
+              console.log("[PLAYBACK] Stored starting position at index:", dialogIndex);
             }
-          } catch (posError) {
-            console.error("[PLAYBACK] Error storing starting position:", posError);
           }
+        } catch (posError) {
+          console.error("[PLAYBACK] Error storing starting position:", posError);
         }
       }
     } catch (e) {
       console.error('Error in rollback handling:', e);
       setStoredNodeData(null);
     }
-    
-    // Update local state next
-    setIsPlaying(newState);
-    
-    // Inform the player that auto-scrolling is starting/stopping
-    // This prevents user scroll events from being detected during auto-scroll
-    if (scriptPlayerRef.current) {
-      if (scriptPlayerRef.current.setScrollAnimating) {
-        console.log('[ANIMATION] Notifying ScriptPlayer about animation state:', newState);
-        scriptPlayerRef.current.setScrollAnimating(newState);
-      }
-    }
-    
-    // Send WebSocket message IMMEDIATELY after state update
-    console.log('Sending control message:', newState ? 'PLAY' : 'PAUSE');
-    sendControlMessage(newState ? 'PLAY' : 'PAUSE');
-    
-    // Log current state for debugging
-    console.log('Play state after toggle:', {
-      isPlaying: newState,
-      scriptId: selectedScriptId,
-      scriptTitle: selectedScript ? selectedScript.title : 'unknown'
-    });
   };
   
   const changeSpeed = (newSpeed) => {

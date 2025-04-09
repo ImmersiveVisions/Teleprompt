@@ -101,7 +101,8 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
         setCurrentTopElement(topElement);
         
         // Only broadcast position if this was from user interaction (not from auto-scrolling)
-        if (isUserInitiated) {
+        // Make sure we're not playing (isPlaying) and not in animation (scrollState.isScrollAnimating)
+        if (isUserInitiated && !isPlaying && !scrollState.isScrollAnimating) {
           console.log('📋 [DEBUG] Processing user-initiated update (preparing to broadcast)');
           
           try {
@@ -202,6 +203,8 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
       } else {
         console.log('📋 [DEBUG] Not treating as user scroll because:', 
           scrollState.isScrollAnimating ? 'animation is running' : 'playback is active');
+        // Ensure user scrolling is false when auto-scrolling
+        scrollState.isUserScrolling = false;
       }
     };
     
@@ -246,7 +249,7 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
     const addScrollListeners = () => {
       try {
         if (iframe.contentWindow) {
-          // ALWAYS set isUserScrolling to true on ANY scroll event if not auto-scrolling
+          // Check if this is user scrolling or auto-scrolling
           const checkAndMarkUserScroll = (e) => {
             if (!scrollState.isScrollAnimating && !isPlaying) {
               console.log('📋 [DEBUG] Setting isUserScrolling to TRUE from', e.type);
@@ -257,6 +260,9 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
                 clearTimeout(scrollState.userScrollTimeout);
                 scrollState.userScrollTimeout = null;
               }
+            } else {
+              // Make sure we explicitly mark as NOT user scrolling when auto-scrolling
+              scrollState.isUserScrolling = false;
             }
           };
           
