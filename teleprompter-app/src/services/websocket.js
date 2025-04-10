@@ -158,6 +158,13 @@ const sendControlMessage = (action, value = null) => {
   // Special handling for play/pause commands - only these get fully logged
   if (action === 'PLAY' || action === 'PAUSE') {
     console.log(`!!!!! [WS CLIENT] IMPORTANT: Sending ${action} command`);
+    
+    // Track global playback state to prevent position messages during playback
+    if (action === 'PLAY') {
+      window._isPlaybackActive = true;
+    } else if (action === 'PAUSE') {
+      window._isPlaybackActive = false;
+    }
   }
 
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
@@ -208,6 +215,25 @@ const sendControlMessage = (action, value = null) => {
  * @param {object} data - The search position data
  */
 const sendSearchPosition = (data) => {
+  // IMPORTANT FIX: Don't send position updates during playback
+  // Check if playback is active using the global state
+  if (window._teleprompterState && window._teleprompterState.isAnimating) {
+    console.log('===== [WS CLIENT] Auto-scroll animation in progress, blocking SEARCH_POSITION message');
+    return; // Don't send position update during auto-scroll
+  }
+  
+  // Also check if this is a programmatic update during playback (not user-initiated)
+  // We only want to send search position messages when they're initiated by the user
+  // (like from clicking a search result or through the admin panel)
+  if (!data._debug && !data.fromSearch && !data.fromRollback && typeof data === 'object') {
+    // If this is a standard position update and not an explicit search or debug request,
+    // check if playback is active to prevent spamming during normal playback
+    if (window._isPlaybackActive) {
+      console.log('===== [WS CLIENT] Playback is active, blocking automatic SEARCH_POSITION message');
+      return;
+    }
+  }
+  
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
     console.log('===== [WS CLIENT] Sending SEARCH_POSITION message');
     
@@ -220,6 +246,11 @@ const sendSearchPosition = (data) => {
     } else if (data.position === undefined) {
       console.warn('===== [WS CLIENT] Search position data missing position property, adding default');
       messageData = { ...data, position: 0 };
+    }
+    
+    // Add a flag to indicate this is an explicit search to avoid filtering at server
+    if (data.fromSearch || data.fromRollback || data._debug) {
+      messageData._explicitSearch = true;
     }
     
     console.log('===== [WS CLIENT] Sending search position data:', 

@@ -9,7 +9,20 @@ const useTeleprompterScroll = (containerRef, isPlaying, speed, direction, script
       return;
     }
     
-    console.log(`TeleprompterViewer: Playback state updated - isPlaying: ${isPlaying}, speed: ${speed}`);
+    // Update global playback state to prevent position messages during playback
+    window._isPlaybackActive = isPlaying;
+    
+    // Setup global teleprompter state for other components to access
+    if (!window._teleprompterState) {
+      window._teleprompterState = {};
+    }
+    
+    // Update the global state
+    window._teleprompterState.isAnimating = isPlaying;
+    window._teleprompterState.speed = speed;
+    window._teleprompterState.direction = direction;
+    
+    console.log(`TeleprompterViewer: Playback state updated - isPlaying: ${isPlaying}, speed: ${speed}, global state updated`);
     
     // For iframe content - either HTML or fountain
     const iframe = document.getElementById('teleprompter-frame');
@@ -21,9 +34,21 @@ const useTeleprompterScroll = (containerRef, isPlaying, speed, direction, script
     // Clean up any existing animation
     const cleanupAnimation = () => {
       try {
+        // Cancel any running animation frame
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
           animationRef.current = null;
+        }
+        
+        // If we're cleaning up and not playing, reset the global flags
+        if (!isPlaying) {
+          // Update global state to indicate we're not animating anymore
+          if (window._teleprompterState) {
+            window._teleprompterState.isAnimating = false;
+          }
+          
+          // Also reset the playback active flag
+          window._isPlaybackActive = false;
         }
       } catch (e) {
         console.error('TeleprompterViewer: Error cleaning up animation:', e);
