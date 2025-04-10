@@ -20,6 +20,7 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
   const [currentTopElement, setCurrentTopElement] = useState(null);
   
   // Function to find the element closest to the top of the viewport
+  // Only focusing on dialog elements to prevent navigation issues
   const findElementAtViewportTop = () => {
     console.log('📋 [DEBUG] findElementAtViewportTop called');
     
@@ -32,14 +33,29 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
       
       console.log('📋 [DEBUG] iframe found:', iframe.id || 'no-id');
       
-      // Get all paragraph elements and other text blocks
-      const textElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
-      console.log('📋 [DEBUG] Found', textElements ? textElements.length : 0, 'text elements');
+      // Focus ONLY on dialog elements for more reliable navigation
+      const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
       
-      if (!textElements || textElements.length === 0) {
-        console.log('📋 [DEBUG] No text elements found, returning null');
-        return null;
+      console.log('📋 [DEBUG] Found', dialogElements ? dialogElements.length : 0, 'dialog elements');
+      
+      if (!dialogElements || dialogElements.length === 0) {
+        console.log('📋 [DEBUG] No dialog elements found, falling back to text elements');
+        
+        // Get all paragraph elements and other text blocks as fallback
+        const fallbackElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
+        
+        if (!fallbackElements || fallbackElements.length === 0) {
+          console.log('📋 [DEBUG] No fallback elements found either, returning null');
+          return null;
+        }
+        
+        console.log('📋 [DEBUG] Using', fallbackElements.length, 'fallback elements');
       }
+      
+      // The elements we'll actually use - prefer dialogs, fallback to text elements
+      const elementsToSearch = (dialogElements && dialogElements.length > 0) ? 
+                              dialogElements : 
+                              iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
       
       // Get current scroll position
       const scrollTop = iframe.contentWindow.scrollY || 
@@ -54,7 +70,7 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
       let closestElement = null;
       let closestDistance = Infinity;
       
-      textElements.forEach(element => {
+      elementsToSearch.forEach(element => {
         const rect = element.getBoundingClientRect();
         const elementTop = rect.top + scrollTop;
         
@@ -72,7 +88,8 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
         closestElement ? {
           tag: closestElement.tagName,
           text: closestElement.textContent.substring(0, 30).trim(),
-          distance: closestDistance
+          distance: closestDistance,
+          isDialog: closestElement.hasAttribute('data-type') && closestElement.getAttribute('data-type') === 'dialog'
         } : 'none found');
       
       return closestElement;
@@ -292,25 +309,42 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
           hasSendPosition: !!(ref && ref.current && ref.current.sendPosition)
         });
         
+        // Use a longer timeout to ensure scrolling has truly stopped before sending position update
         scrollState.userScrollTimeout = setTimeout(() => {
           console.log('📋 [DEBUG] Timeout fired! Scroll has settled, calling updateTopElement(true)');
-          console.log('📋 [DEBUG] Current ref state at timeout firing:', {
-            hasRef: !!ref,
-            hasRefCurrent: !!(ref && ref.current),
-            hasSendPosition: !!(ref && ref.current && ref.current.sendPosition),
-            refKeys: ref && ref.current ? Object.keys(ref.current) : 'none'
-          });
           
-          // Force a position update when scrolling stops 
-          updateTopElement(true);
+          // Store the current scroll position to check if it's still changing
+          const iframe = containerRef.current.querySelector('iframe');
+          const initialScrollY = iframe?.contentWindow?.scrollY || 0;
           
-          // Highlight that we're sending a position update
-          console.log('%c 📢 POSITION UPDATE 📢 Sending position after scroll stopped', 
-            'background: #4CAF50; color: white; font-weight: bold;');
+          // Check again in 100ms if scrolling has actually stopped
+          setTimeout(() => {
+            const currentScrollY = iframe?.contentWindow?.scrollY || 0;
             
-          console.log('📋 [DEBUG] updateTopElement(true) completed');
-          scrollState.isUserScrolling = false;
-        }, 300); // Shorter delay so it feels more responsive
+            // Only proceed if scroll position is stable
+            if (Math.abs(currentScrollY - initialScrollY) < 5) {
+              console.log('📋 [DEBUG] Current ref state at timeout firing:', {
+                hasRef: !!ref,
+                hasRefCurrent: !!(ref && ref.current),
+                hasSendPosition: !!(ref && ref.current && ref.current.sendPosition),
+                refKeys: ref && ref.current ? Object.keys(ref.current) : 'none'
+              });
+              
+              // Force a position update when scrolling stops 
+              updateTopElement(true);
+              
+              // Highlight that we're sending a position update
+              console.log('%c 📢 POSITION UPDATE 📢 Sending position after scroll stopped', 
+                'background: #4CAF50; color: white; font-weight: bold;');
+                
+              console.log('📋 [DEBUG] updateTopElement(true) completed');
+            } else {
+              console.log('📋 [DEBUG] Scroll position still changing, not updating position yet');
+            }
+            
+            scrollState.isUserScrolling = false;
+          }, 100);
+        }, 500); // Longer delay to ensure scrolling has truly stopped
       } else {
         console.log('📋 [DEBUG] Not processing scroll end - isUserScrolling is false');
       }
@@ -369,17 +403,56 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
             handleScrollStart();
           }, { passive: true });
           
+          // Track scroll position for efficiency
+          let lastScrollPosition = 0;
+          let lastScrollTime = 0;
+          let scrollTimeout = null;
+          
           // Detect ALL scrolling - this is critical for detecting scrollbar drags
           iframe.contentWindow.addEventListener('scroll', (e) => {
-            console.log('📋 [DEBUG] Scroll event detected');
-            checkAndMarkUserScroll(e);
-            handleScrollEnd();  // Every scroll event can potentially end scrolling
-            
-            // Throttle UI updates during active scrolling
+            // Only log once per second to reduce console spam
             const now = Date.now();
-            if (!window._lastUIUpdate || now - window._lastUIUpdate > 100) {
-              window._lastUIUpdate = now;
-              updateTopElement(false); // false = not user initiated (no broadcast)
+            if (!window._lastScrollLog || now - window._lastScrollLog > 1000) {
+              console.log('📋 [DEBUG] Scroll event detected');
+              window._lastScrollLog = now;
+            }
+            
+            // Get current scroll position
+            const scrollY = iframe.contentWindow.scrollY || 0;
+            
+            // Clear any pending timeout to prevent multiple updates
+            if (scrollTimeout) {
+              clearTimeout(scrollTimeout);
+              scrollTimeout = null;
+            }
+            
+            // Only process scroll events if:
+            // 1. User-initiated scrolling is detected
+            // 2. OR we haven't processed a scroll event in 500ms
+            // 3. OR the scroll position has changed significantly (more than 100px)
+            if (scrollState.isUserScrolling || 
+                now - lastScrollTime > 500 || 
+                Math.abs(scrollY - lastScrollPosition) > 100) {
+              
+              checkAndMarkUserScroll(e);
+              
+              // Set a timeout for a delayed update to reduce the message frequency
+              // This ensures we only send one update if multiple scroll events happen quickly
+              scrollTimeout = setTimeout(() => {
+                // Update time and position tracking
+                lastScrollTime = Date.now();
+                lastScrollPosition = scrollY;
+                
+                // Call handleScrollEnd to process the scroll completion
+                handleScrollEnd();
+                
+                // Throttle UI updates during active scrolling
+                // Only update UI elements at most once every 250ms
+                if (!window._lastUIUpdate || Date.now() - window._lastUIUpdate > 250) {
+                  window._lastUIUpdate = Date.now();
+                  updateTopElement(false); // false = not user initiated (no broadcast)
+                }
+              }, 300); // Wait 300ms after scrolling stops before processing
             }
           }, { passive: true });
           

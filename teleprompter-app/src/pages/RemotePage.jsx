@@ -12,6 +12,7 @@ const RemotePage = () => {
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
+  const [isFlipped, setIsFlipped] = useState(false); // Mirror mode state
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   
   // Clear script selection
@@ -44,6 +45,7 @@ const RemotePage = () => {
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
+      if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
       
       // If connection was just established, request full state
       if (connectionStatus === 'connecting') {
@@ -233,6 +235,12 @@ const RemotePage = () => {
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
   
+  const toggleMirrorMode = () => {
+    const newFlippedState = !isFlipped;
+    setIsFlipped(newFlippedState);
+    sendControlMessage('SET_FLIPPED', newFlippedState);
+  };
+  
   return (
     <div className="remote-page">
       <header className="remote-header">
@@ -404,6 +412,51 @@ const RemotePage = () => {
                 -
               </button>
             </div>
+          </div>
+          
+          {/* Mirror mode toggle button */}
+          <div className="mirror-toggle-container" style={{ textAlign: 'center', margin: '20px 0' }}>
+            <button 
+              onClick={toggleMirrorMode} 
+              className={`mirror-btn ${isFlipped ? 'active' : ''}`}
+              disabled={!selectedScriptId}
+              style={{
+                width: '140px',
+                height: '60px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                backgroundColor: isFlipped ? '#9C27B0' : '#7B1FA2',
+                color: 'white',
+                border: isFlipped ? '2px solid #7B1FA2' : '2px solid #6A1B9A',
+                boxShadow: isFlipped ? '0 0 10px rgba(156, 39, 176, 0.5)' : 'none',
+                borderRadius: '8px',
+                position: 'relative',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                opacity: 0.2,
+                pointerEvents: 'none',
+                zIndex: 1
+              }}>
+                {/* Mirror Icon */}
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                  <path d="M9 12L7 12 12 17 17 12 15 12 12 15z" transform="rotate(90, 12, 12)"/>
+                </svg>
+              </div>
+              <span style={{ position: 'relative', zIndex: 2 }}>
+                {isFlipped ? 'Mirror: ON' : 'Mirror: OFF'}
+              </span>
+            </button>
           </div>
         </div>
       </div>

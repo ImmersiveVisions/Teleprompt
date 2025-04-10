@@ -19,6 +19,7 @@ let sharedState = {
   direction: 'forward',
   fontSize: 24,
   aspectRatio: '16/9', // Default to 16:9 widescreen
+  isFlipped: false, // Mirror mode for teleprompter
   connectedClients: {
     admin: 0,
     viewer: 0, 
@@ -256,6 +257,10 @@ function handleMessage(message, sender) {
         case 'SET_ASPECT_RATIO':
           sharedState.aspectRatio = message.value;
           break;
+        case 'SET_FLIPPED':
+          sharedState.isFlipped = !!message.value; // Convert to boolean
+          console.log(`Mirror mode ${sharedState.isFlipped ? 'enabled' : 'disabled'}`);
+          break;
         case 'JUMP_TO_POSITION':
           // Handle jump to position command
           
@@ -359,6 +364,7 @@ function broadcastState() {
     direction: sharedState.direction || 'forward',
     fontSize: sharedState.fontSize || 24,
     aspectRatio: sharedState.aspectRatio || '16/9',
+    isFlipped: !!sharedState.isFlipped, // Include mirror mode state
     // Include connected clients information
     connectedClients: {
       admin: clientTypes.admin ? clientTypes.admin.length : 0,

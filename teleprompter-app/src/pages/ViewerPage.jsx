@@ -22,6 +22,7 @@ const ViewerPage = ({ directScriptId }) => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(32);
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
+  const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
   
   // Reference to the teleprompter viewer component
   const viewerRef = useRef(null);
@@ -92,17 +93,63 @@ const ViewerPage = ({ directScriptId }) => {
       }
     };
     
+    // Add keyboard handler for mirror mode toggling
+    const handleKeyPress = (e) => {
+      // Toggle mirror mode with 'M' key
+      if (e.key === 'm' || e.key === 'M') {
+        console.log('Toggling mirror mode');
+        setIsFlipped(prev => !prev);
+      }
+    };
+    
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('keydown', handleKeyPress);
+    
+    // Add info message about flipping
+    console.log('Press M to toggle mirror mode for teleprompter view');
+    const infoMsg = document.createElement('div');
+    infoMsg.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.5s;
+    `;
+    infoMsg.textContent = 'Press M to toggle mirror mode';
+    document.body.appendChild(infoMsg);
+    
+    // Fade out the message after 5 seconds
+    setTimeout(() => {
+      infoMsg.style.opacity = '0';
+      // Remove after fade completes
+      setTimeout(() => {
+        if (infoMsg.parentNode) {
+          infoMsg.parentNode.removeChild(infoMsg);
+        }
+      }, 500);
+    }, 5000);
     
     return () => {
       unregisterHandler();
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('keydown', handleKeyPress);
       
       // Exit fullscreen when component unmounts
       if (document.exitFullscreen && document.fullscreenElement) {
         document.exitFullscreen().catch(err => {
           console.warn('Error attempting to exit fullscreen:', err);
         });
+      }
+      
+      // Clean up info message if it still exists
+      if (infoMsg.parentNode) {
+        infoMsg.parentNode.removeChild(infoMsg);
       }
     };
   }, []);
@@ -403,6 +450,7 @@ const ViewerPage = ({ directScriptId }) => {
       if (data.direction !== undefined) setDirection(data.direction);
       if (data.fontSize !== undefined) setFontSize(data.fontSize);
       if (data.aspectRatio !== undefined) setAspectRatio(data.aspectRatio);
+      if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
     }
   };
   
@@ -447,18 +495,44 @@ const ViewerPage = ({ directScriptId }) => {
         padding: '0',
         maxHeight: '100vh',
         maxWidth: '100vw',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative'
       }}>
-        {/* Use the original TeleprompterViewer but disable its position sending */}
-        <TeleprompterViewer 
-          ref={viewerRef}
-          script={currentScript}
-          isPlaying={isPlaying}
-          speed={speed}
-          direction={direction}
-          fontSize={fontSize}
-          aspectRatio={aspectRatio}
-        />
+        {/* Mirror mode indicator */}
+        {isFlipped && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '5px 10px',
+            borderRadius: '4px',
+            zIndex: 100,
+            fontSize: '12px'
+          }}>
+            MIRROR MODE
+          </div>
+        )}
+        
+        {/* Wrapper for applying flip transform */}
+        <div style={{
+          width: '100%',
+          height: '100%',
+          transform: isFlipped ? 'scaleX(-1)' : 'none',
+          transition: 'transform 0.3s ease'
+        }}>
+          {/* Use the original TeleprompterViewer but disable its position sending */}
+          <TeleprompterViewer 
+            ref={viewerRef}
+            script={currentScript}
+            isPlaying={isPlaying}
+            speed={speed}
+            direction={direction}
+            fontSize={fontSize}
+            aspectRatio={aspectRatio}
+          />
+        </div>
       </div>
     </div>
   );

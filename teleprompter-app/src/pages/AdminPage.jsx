@@ -36,6 +36,7 @@ const AdminPage = () => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
+  const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
   const [storedNodeData, setStoredNodeData] = useState(null);
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
@@ -947,6 +948,7 @@ const AdminPage = () => {
       setDirection(data.direction);
       setFontSize(data.fontSize);
       if (data.aspectRatio) setAspectRatio(data.aspectRatio);
+      if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
       
       // Update connected clients state if it exists in the data
       if (data.connectedClients) {
@@ -1259,6 +1261,12 @@ const AdminPage = () => {
   const changeAspectRatio = (newRatio) => {
     setAspectRatio(newRatio);
     sendControlMessage('SET_ASPECT_RATIO', newRatio);
+  };
+  
+  const toggleMirrorMode = () => {
+    const newFlippedState = !isFlipped;
+    setIsFlipped(newFlippedState);
+    sendControlMessage('SET_FLIPPED', newFlippedState);
   };
   
   // Handle rollback to stored node
@@ -1730,6 +1738,43 @@ const AdminPage = () => {
                       -
                     </button>
                   </div>
+                  
+                  {/* Mirror mode toggle button */}
+                  <button
+                    onClick={toggleMirrorMode}
+                    style={{
+                      height: '150px',
+                      width: '100px',
+                      backgroundColor: isFlipped ? '#9c27b0' : '#6c757d',
+                      color: 'white',
+                      border: isFlipped ? '2px solid #7b1fa2' : '2px solid #5a6268',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      boxShadow: isFlipped ? '0 0 10px rgba(156, 39, 176, 0.5)' : 'none',
+                      flex: '0 0 auto'
+                    }}
+                  >
+                    <div style={{
+                      marginBottom: '10px',
+                      fontSize: '24px'
+                    }}>
+                      🔄
+                    </div>
+                    <div>MIRROR</div>
+                    <div style={{
+                      fontSize: '12px',
+                      marginTop: '5px',
+                      fontWeight: 'normal',
+                      opacity: 0.8
+                    }}>
+                      {isFlipped ? 'ON' : 'OFF'}
+                    </div>
+                  </button>
                 </div>
                 
               </div>

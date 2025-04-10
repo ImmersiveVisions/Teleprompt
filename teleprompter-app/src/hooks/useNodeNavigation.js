@@ -25,76 +25,97 @@ const useNodeNavigation = () => {
       const currentScrollTop = element.contentWindow.scrollY || 
         element.contentDocument.documentElement.scrollTop || 0;
         
-      // Search logic based on nodeData type
+      // Search logic based on nodeData type - USING DIALOG ELEMENTS ONLY
+      
+      // Helper function to create highlight effect
+      const createHighlightForElement = (targetElement, color = 'green') => {
+        // Define colors based on type
+        const colors = {
+          green: { bg: 'rgba(0, 255, 0, 0.3)', border: 'rgba(0, 255, 0, 0.7)', shadow: 'rgba(0, 255, 0, 0.5)' },
+          yellow: { bg: 'rgba(255, 255, 0, 0.3)', border: 'rgba(255, 215, 0, 0.7)', shadow: 'rgba(255, 215, 0, 0.5)' },
+          cyan: { bg: 'rgba(0, 255, 255, 0.2)', border: 'rgba(0, 255, 255, 0.7)', shadow: 'rgba(0, 255, 255, 0.3)' }
+        };
+        
+        const colorSet = colors[color] || colors.green;
+        
+        // Create highlight element
+        const highlightElement = element.contentDocument.createElement('div');
+        highlightElement.className = 'teleprompter-highlight';
+        highlightElement.style.cssText = `
+          position: absolute;
+          background-color: ${colorSet.bg};
+          border: 2px solid ${colorSet.border};
+          box-shadow: 0 0 10px ${colorSet.shadow};
+          z-index: 1000;
+          pointer-events: none;
+          animation: pulse-highlight 2s ease-in-out;
+        `;
+        
+        // Create animation if it doesn't exist
+        if (!element.contentDocument.getElementById('highlight-keyframes')) {
+          const keyframes = element.contentDocument.createElement('style');
+          keyframes.id = 'highlight-keyframes';
+          keyframes.textContent = `
+            @keyframes pulse-highlight {
+              0% { opacity: 0; }
+              25% { opacity: 1; }
+              75% { opacity: 1; }
+              100% { opacity: 0; }
+            }
+          `;
+          element.contentDocument.head.appendChild(keyframes);
+        }
+        
+        // Position the highlight based on the element
+        const rect = targetElement.getBoundingClientRect();
+        highlightElement.style.left = '0';
+        highlightElement.style.width = '100%';
+        highlightElement.style.top = `${rect.top + element.contentWindow.scrollY}px`;
+        highlightElement.style.height = `${rect.height}px`;
+        
+        // Add to body
+        element.contentDocument.body.appendChild(highlightElement);
+        
+        // Scroll element into view
+        targetElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+        
+        // Remove highlight after animation
+        setTimeout(() => {
+          if (highlightElement.parentNode) {
+            highlightElement.parentNode.removeChild(highlightElement);
+          }
+        }, 2000);
+        
+        return true;
+      };
+      
+      // First, get all dialog elements - we will use these exclusively for navigation
+      const dialogElements = element.contentDocument.querySelectorAll('[data-type="dialog"]');
+      console.log(`Found ${dialogElements.length} dialog elements for navigation`);
+      
+      if (dialogElements.length === 0) {
+        console.warn('No dialog elements found in document. Position navigation will be less accurate.');
+        // Fall back to position-based navigation if no dialogs found
+        return false;
+      }
       
       // If we have an index, try to use that first (most reliable)
       if (typeof nodeData.index === 'number') {
-        const dialogElements = element.contentDocument.querySelectorAll('[data-type="dialog"]');
         if (dialogElements.length > 0 && nodeData.index < dialogElements.length) {
           const targetElement = dialogElements[nodeData.index];
-          
-          // Create highlight effect for index-based navigation
-          const highlightElement = element.contentDocument.createElement('div');
-          highlightElement.className = 'teleprompter-highlight';
-          highlightElement.style.cssText = `
-            position: absolute;
-            background-color: rgba(0, 255, 0, 0.3);
-            border: 2px solid rgba(0, 255, 0, 0.7);
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-            z-index: 1000;
-            pointer-events: none;
-            animation: pulse-highlight 2s ease-in-out;
-          `;
-          
-          // Create animation if it doesn't exist
-          if (!element.contentDocument.getElementById('highlight-keyframes')) {
-            const keyframes = element.contentDocument.createElement('style');
-            keyframes.id = 'highlight-keyframes';
-            keyframes.textContent = `
-              @keyframes pulse-highlight {
-                0% { opacity: 0; }
-                25% { opacity: 1; }
-                75% { opacity: 1; }
-                100% { opacity: 0; }
-              }
-            `;
-            element.contentDocument.head.appendChild(keyframes);
-          }
-          
-          // Position the highlight based on the element
-          const rect = targetElement.getBoundingClientRect();
-          highlightElement.style.left = '0';
-          highlightElement.style.width = '100%';
-          highlightElement.style.top = `${rect.top + element.contentWindow.scrollY}px`;
-          highlightElement.style.height = `${rect.height}px`;
-          
-          // Add to body
-          element.contentDocument.body.appendChild(highlightElement);
-          
-          // Scroll element into view
-          targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-          });
-          
-          // Remove highlight after animation
-          setTimeout(() => {
-            if (highlightElement.parentNode) {
-              highlightElement.parentNode.removeChild(highlightElement);
-            }
-          }, 2000);
-          
-          return true;
+          console.log(`Using index navigation to dialog ${nodeData.index} of ${dialogElements.length}`);
+          return createHighlightForElement(targetElement, 'green');
         }
       }
       
-      // If we have text content, search for it
+      // If we have text content, search for it in dialog elements only
       if (nodeData.text) {
-        // First try dialog elements
-        const dialogElements = element.contentDocument.querySelectorAll('[data-type="dialog"]');
         const searchText = nodeData.text.trim().toLowerCase();
         
-        // Collect matches
+        // Collect matches from dialog elements only
         const matchingElements = [];
         dialogElements.forEach(element => {
           if (element.textContent.toLowerCase().includes(searchText)) {
@@ -103,12 +124,15 @@ const useNodeNavigation = () => {
         });
         
         if (matchingElements.length > 0) {
+          console.log(`Found ${matchingElements.length} dialog elements matching text "${searchText.substring(0, 20)}..."`);
+          
           // If rollback, use first match
           // Otherwise find closest to current position
           let targetElement;
           
           if (nodeData.fromRollback) {
             targetElement = matchingElements[0];
+            console.log('Using first match for rollback');
           } else {
             // Find closest to current position
             targetElement = matchingElements.reduce((closest, element) => {
@@ -121,142 +145,14 @@ const useNodeNavigation = () => {
               
               return elementDist < closestDist ? element : closest;
             }, null);
+            console.log('Using closest match to current position');
           }
           
           if (targetElement) {
-            // Create highlight effect
-            const highlightElement = element.contentDocument.createElement('div');
-            highlightElement.className = 'teleprompter-highlight';
-            highlightElement.style.cssText = `
-              position: absolute;
-              background-color: rgba(255, 255, 0, 0.3);
-              border: 2px solid rgba(255, 215, 0, 0.7);
-              box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-              z-index: 1000;
-              pointer-events: none;
-              animation: pulse-highlight 2s ease-in-out;
-            `;
-            
-            // Create animation if it doesn't exist
-            if (!element.contentDocument.getElementById('highlight-keyframes')) {
-              const keyframes = element.contentDocument.createElement('style');
-              keyframes.id = 'highlight-keyframes';
-              keyframes.textContent = `
-                @keyframes pulse-highlight {
-                  0% { opacity: 0; }
-                  25% { opacity: 1; }
-                  75% { opacity: 1; }
-                  100% { opacity: 0; }
-                }
-              `;
-              element.contentDocument.head.appendChild(keyframes);
-            }
-            
-            // Position the highlight based on the element
-            const rect = targetElement.getBoundingClientRect();
-            highlightElement.style.left = '0';
-            highlightElement.style.width = '100%';
-            highlightElement.style.top = `${rect.top + element.contentWindow.scrollY}px`;
-            highlightElement.style.height = `${rect.height}px`;
-            
-            // Add to body
-            element.contentDocument.body.appendChild(highlightElement);
-            
-            // Scroll element into view
-            targetElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center'
-            });
-            
-            // Remove highlight after animation
-            setTimeout(() => {
-              if (highlightElement.parentNode) {
-                highlightElement.parentNode.removeChild(highlightElement);
-              }
-            }, 2000);
-            
-            return true;
+            return createHighlightForElement(targetElement, 'yellow');
           }
-        }
-        
-        // Try text nodes as fallback
-        try {
-          const walker = document.createTreeWalker(
-            element.contentDocument.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-          );
-          
-          const textMatches = [];
-          let node;
-          
-          while ((node = walker.nextNode())) {
-            if (node.textContent && node.textContent.toLowerCase().includes(searchText)) {
-              textMatches.push(node);
-            }
-          }
-          
-          if (textMatches.length > 0) {
-            // Use first match for simplicity
-            const firstMatch = textMatches[0];
-            if (firstMatch.parentElement) {
-              // Create highlight effect for text node match
-              const highlightElement = element.contentDocument.createElement('div');
-              highlightElement.className = 'teleprompter-highlight';
-              highlightElement.style.cssText = `
-                position: absolute;
-                background-color: rgba(255, 255, 0, 0.3);
-                border: 2px solid rgba(255, 215, 0, 0.7);
-                box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-                z-index: 1000;
-                pointer-events: none;
-                animation: pulse-highlight 2s ease-in-out;
-              `;
-              
-              // Create animation if it doesn't exist
-              if (!element.contentDocument.getElementById('highlight-keyframes')) {
-                const keyframes = element.contentDocument.createElement('style');
-                keyframes.id = 'highlight-keyframes';
-                keyframes.textContent = `
-                  @keyframes pulse-highlight {
-                    0% { opacity: 0; }
-                    25% { opacity: 1; }
-                    75% { opacity: 1; }
-                    100% { opacity: 0; }
-                  }
-                `;
-                element.contentDocument.head.appendChild(keyframes);
-              }
-              
-              // Position the highlight based on the element
-              const rect = firstMatch.parentElement.getBoundingClientRect();
-              highlightElement.style.left = '0';
-              highlightElement.style.width = '100%';
-              highlightElement.style.top = `${rect.top + element.contentWindow.scrollY}px`;
-              highlightElement.style.height = `${rect.height}px`;
-              
-              // Add to body
-              element.contentDocument.body.appendChild(highlightElement);
-              
-              // Scroll element into view
-              firstMatch.parentElement.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-              });
-              
-              // Remove highlight after animation
-              setTimeout(() => {
-                if (highlightElement.parentNode) {
-                  highlightElement.parentNode.removeChild(highlightElement);
-                }
-              }, 2000);
-              
-              return true;
-            }
-          }
-        } catch (err) {
-          console.error('Error in text node search:', err);
+        } else {
+          console.log(`No dialog elements match text "${searchText.substring(0, 20)}..."`);
         }
       }
       
