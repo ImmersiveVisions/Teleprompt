@@ -47,89 +47,78 @@ const TeleprompterControlPanel = ({
       
       <div className="teleprompter-controls">
         <div className="control-group">
-          <button onClick={togglePlay} className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}>
-            {isPlaying ? 'PAUSE' : 'PLAY'}
-          </button>
-          
-          <button 
-            onClick={handleRollback} 
-            className="rollback-btn large-btn active"
-            disabled={false}
-            style={{
-              backgroundColor: '#28a745',
-              color: 'white',
-              cursor: 'pointer',
-              opacity: 1,
-              transition: 'all 0.3s ease',
-              border: '2px solid #28a745',
-              boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
-              fontWeight: 'bold'
-            }}
-            title="Click to return to a previous position"
-          >
-            ROLLBACK
-          </button>
-          
-          <button onClick={toggleDirection} className="direction-btn">
-            Direction: {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
-          </button>
-        </div>
-        
-        <div className="control-group">
-          <label>Speed: {speed.toFixed(2)}x</label>
-          <div className="speed-control">
+          {/* Main single row of controls */}
+          <div className="controls-row">
+            {/* Main action buttons */}
             <button 
-              onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-              className="speed-btn"
+              onClick={togglePlay} 
+              className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}
+              style={{ fontWeight: 'bold' }}
             >
-              -
+              {isPlaying ? 'PAUSE' : 'PLAY'}
             </button>
-            <input
-              type="range"
-              min="0.25"
-              max="2.5"
-              step="0.25"
-              value={speed}
-              onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-            />
+            
             <button 
-              onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-              className="speed-btn"
+              onClick={handleRollback} 
+              className="rollback-btn large-btn active"
+              style={{
+                backgroundColor: '#28a745',
+                color: 'white',
+                cursor: 'pointer',
+                opacity: 1,
+                transition: 'all 0.3s ease',
+                border: '2px solid #28a745',
+                boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
+                fontWeight: 'bold'
+              }}
+              title="Click to return to a previous position"
             >
-              +
+              ROLLBACK
             </button>
-          </div>
-          <div className="speed-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-            0.25 = very slow, 1.0 = moderate, 2.5 = fast
-          </div>
-        </div>
-        
-        <div className="control-group">
-          <label>Font Size: {fontSize}px</label>
-          <div className="font-size-control">
+            
             <button 
-              onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-              className="font-size-btn"
+              onClick={toggleDirection} 
+              className="direction-btn"
+              style={{ fontWeight: 'bold' }}
             >
-              A-
+              {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
             </button>
-            <input
-              type="range"
-              min="16"
-              max="48"
-              step="1"
-              value={fontSize}
-              onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
-            />
-            <button 
-              onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-              className="font-size-btn"
-            >
-              A+
-            </button>
-          </div>
-          <div className="font-size-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-            16px = small, 32px = medium, 48px = large
+            
+            {/* Speed control (spinbox) */}
+            <div className="spinbox speed-spinbox">
+              <div className="spinbox-label">Speed</div>
+              <button 
+                onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+                className="spinbox-up"
+              >
+                +
+              </button>
+              <div className="spinbox-value">{speed.toFixed(2)}x</div>
+              <button 
+                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+                className="spinbox-down"
+              >
+                -
+              </button>
+            </div>
+            
+            {/* Font size control (spinbox) */}
+            <div className="spinbox font-spinbox">
+              <div className="spinbox-label">Font</div>
+              <button 
+                onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+                className="spinbox-up"
+              >
+                +
+              </button>
+              <div className="spinbox-value">{fontSize}px</div>
+              <button 
+                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+                className="spinbox-down"
+              >
+                -
+              </button>
+            </div>
           </div>
         </div>
       </div>
