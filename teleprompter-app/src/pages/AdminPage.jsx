@@ -1082,6 +1082,7 @@ const AdminPage = () => {
           setTimeout(() => {
             previewHeader.style.color = '';  // Reset color
           }, 500);
+        }
         
         // Capture all dialog elements for context
         const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
@@ -1541,13 +1542,46 @@ const AdminPage = () => {
               </div>
               
               <div className="teleprompter-controls">
-                <div className="control-group">
+                <div className="control-group" style={{ 
+                  display: 'flex', 
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '15px'
+                }}>
                   {isPlaying ? (
-                    <button onClick={handlePause} className="pause-btn large-btn active">
+                    <button 
+                      onClick={handlePause} 
+                      className="pause-btn large-btn active"
+                      style={{
+                        width: '200px',
+                        height: '150px',
+                        fontSize: '28px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#f44336',
+                        color: 'white',
+                        border: '2px solid #d32f2f',
+                        boxShadow: '0 0 10px rgba(244, 67, 54, 0.5)',
+                        borderRadius: '8px'
+                      }}
+                    >
                       PAUSE
                     </button>
                   ) : (
-                    <button onClick={handlePlay} className="play-btn large-btn">
+                    <button 
+                      onClick={handlePlay} 
+                      className="play-btn large-btn"
+                      style={{
+                        width: '200px',
+                        height: '150px',
+                        fontSize: '28px',
+                        fontWeight: 'bold',
+                        backgroundColor: '#4CAF50',
+                        color: 'white',
+                        border: '2px solid #388E3C',
+                        boxShadow: '0 0 10px rgba(76, 175, 80, 0.5)',
+                        borderRadius: '8px'
+                      }}
+                    >
                       PLAY
                     </button>
                   )}
@@ -1557,6 +1591,10 @@ const AdminPage = () => {
                     className="rollback-btn large-btn active"
                     disabled={false}
                     style={{
+                      width: '200px',
+                      height: '150px',
+                      fontSize: '24px',
+                      fontWeight: 'bold',
                       backgroundColor: '#28a745',
                       color: 'white',
                       cursor: 'pointer',
@@ -1564,15 +1602,29 @@ const AdminPage = () => {
                       transition: 'all 0.3s ease',
                       border: '2px solid #28a745',
                       boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
-                      fontWeight: 'bold'
+                      borderRadius: '8px'
                     }}
                     title="Click to return to a previous position"
                   >
                     ROLLBACK
                   </button>
                   
-                  <button onClick={toggleDirection} className="direction-btn">
-                    Direction: {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
+                  <button 
+                    onClick={toggleDirection} 
+                    className="direction-btn"
+                    style={{
+                      width: '200px',
+                      height: '150px',
+                      fontSize: '20px',
+                      fontWeight: 'bold',
+                      backgroundColor: '#2196F3',
+                      color: 'white',
+                      border: '2px solid #1976D2',
+                      boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
                   </button>
                 </div>
                 
