@@ -11,7 +11,20 @@
     "web:start": "node server.js",
     "electron:build": "npm run build && electron-builder build",
     "electron:build:win": "npm run build && electron-builder build --win portable",
-    "electron:build:linux": "npm run build && electron-builder build --linux AppImage"
+    "electron:build:linux": "npm run build && electron-builder build --linux AppImage",
+    "security-fix": "npm audit fix && npm install --force"
+  },
+  "overrides": {
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.31",
+    "svgo": {
+      "css-select": {
+        "nth-check": "^2.1.1"
+      }
+    },
+    "resolve-url-loader": {
+      "postcss": "^8.4.31"
+    }
   },
   "dependencies": {
     "cheerio": "^1.0.0",
@@ -36,7 +49,9 @@
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
     "electron": "^29.0.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.31"
   },
   "build": {
     "appId": "com.teleprompter.app",
