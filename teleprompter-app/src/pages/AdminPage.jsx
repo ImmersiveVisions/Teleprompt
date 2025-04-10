@@ -1546,22 +1546,28 @@ const AdminPage = () => {
                   display: 'flex', 
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: '15px'
+                  gap: '15px',
+                  justifyContent: 'center',
+                  flexWrap: 'nowrap'
                 }}>
+                  {/* All controls in a single row */}
+                  
+                  {/* Play/Pause button */}
                   {isPlaying ? (
                     <button 
                       onClick={handlePause} 
                       className="pause-btn large-btn active"
                       style={{
-                        width: '200px',
+                        width: '150px',
                         height: '150px',
-                        fontSize: '28px',
+                        fontSize: '24px',
                         fontWeight: 'bold',
                         backgroundColor: '#f44336',
                         color: 'white',
                         border: '2px solid #d32f2f',
                         boxShadow: '0 0 10px rgba(244, 67, 54, 0.5)',
-                        borderRadius: '8px'
+                        borderRadius: '8px',
+                        flex: '0 0 auto'
                       }}
                     >
                       PAUSE
@@ -1571,29 +1577,31 @@ const AdminPage = () => {
                       onClick={handlePlay} 
                       className="play-btn large-btn"
                       style={{
-                        width: '200px',
+                        width: '150px',
                         height: '150px',
-                        fontSize: '28px',
+                        fontSize: '24px',
                         fontWeight: 'bold',
                         backgroundColor: '#4CAF50',
                         color: 'white',
                         border: '2px solid #388E3C',
                         boxShadow: '0 0 10px rgba(76, 175, 80, 0.5)',
-                        borderRadius: '8px'
+                        borderRadius: '8px',
+                        flex: '0 0 auto'
                       }}
                     >
                       PLAY
                     </button>
                   )}
                   
+                  {/* Rollback button */}
                   <button 
                     onClick={handleRollback} 
                     className="rollback-btn large-btn active"
                     disabled={false}
                     style={{
-                      width: '200px',
+                      width: '150px',
                       height: '150px',
-                      fontSize: '24px',
+                      fontSize: '20px',
                       fontWeight: 'bold',
                       backgroundColor: '#28a745',
                       color: 'white',
@@ -1602,87 +1610,80 @@ const AdminPage = () => {
                       transition: 'all 0.3s ease',
                       border: '2px solid #28a745',
                       boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
-                      borderRadius: '8px'
+                      borderRadius: '8px',
+                      flex: '0 0 auto'
                     }}
                     title="Click to return to a previous position"
                   >
                     ROLLBACK
                   </button>
                   
+                  {/* Direction button */}
                   <button 
                     onClick={toggleDirection} 
                     className="direction-btn"
                     style={{
-                      width: '200px',
+                      width: '150px',
                       height: '150px',
-                      fontSize: '20px',
+                      fontSize: '18px',
                       fontWeight: 'bold',
                       backgroundColor: '#2196F3',
                       color: 'white',
                       border: '2px solid #1976D2',
                       boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
-                      borderRadius: '8px'
+                      borderRadius: '8px',
+                      flex: '0 0 auto'
                     }}
                   >
                     {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
                   </button>
-                </div>
-                
-                <div className="control-group">
-                  <label>Speed: {speed.toFixed(2)}x</label>
-                  <div className="speed-control">
-                    <button 
-                      onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-                      className="speed-btn"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="range"
-                      min="0.25"
-                      max="2.5"
-                      step="0.25"
-                      value={speed}
-                      onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-                    />
+                  
+                  {/* Speed control (spinbox) */}
+                  <div className="spinbox speed-spinbox" style={{ 
+                    height: '150px', 
+                    width: '100px',
+                    flex: '0 0 auto'
+                  }}>
+                    <div className="spinbox-label" style={{ fontSize: '16px' }}>Speed</div>
                     <button 
                       onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-                      className="speed-btn"
+                      className="spinbox-up"
+                      style={{ height: '30px', fontSize: '20px', fontWeight: 'bold' }}
                     >
                       +
                     </button>
-                  </div>
-                  <div className="speed-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-                    0.25 = very slow, 1.0 = moderate, 2.5 = fast
-                  </div>
-                </div>
-                
-                <div className="control-group">
-                  <label>Font Size: {fontSize}px</label>
-                  <div className="font-size-control">
+                    <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold' }}>{speed.toFixed(2)}x</div>
                     <button 
-                      onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-                      className="font-size-btn"
+                      onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+                      className="spinbox-down"
+                      style={{ height: '30px', fontSize: '20px', fontWeight: 'bold' }}
                     >
-                      A-
+                      -
                     </button>
-                    <input
-                      type="range"
-                      min="16"
-                      max="48"
-                      step="1"
-                      value={fontSize}
-                      onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
-                    />
+                  </div>
+                  
+                  {/* Font size control (spinbox) */}
+                  <div className="spinbox font-spinbox" style={{ 
+                    height: '150px', 
+                    width: '100px',
+                    flex: '0 0 auto'
+                  }}>
+                    <div className="spinbox-label" style={{ fontSize: '16px' }}>Font Size</div>
                     <button 
                       onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-                      className="font-size-btn"
+                      className="spinbox-up"
+                      style={{ height: '30px', fontSize: '20px', fontWeight: 'bold' }}
                     >
-                      A+
+                      +
                     </button>
-                  </div>
-                  <div className="font-size-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-                    16px = small, 32px = medium, 48px = large
+                    <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold' }}>{fontSize}px</div>
+                    <button 
+                      onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+                      className="spinbox-down"
+                      style={{ height: '30px', fontSize: '20px', fontWeight: 'bold' }}
+                    >
+                      -
+                    </button>
                   </div>
                 </div>
                 

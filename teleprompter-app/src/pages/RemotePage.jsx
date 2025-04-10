@@ -271,80 +271,108 @@ const RemotePage = () => {
         </div>
         
         <div className="control-panel">
-          <div className="control-group primary-controls">
+          <div className="control-group" style={{ 
+            display: 'flex', 
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '20px',
+            margin: '20px 0',
+            flexWrap: 'nowrap'
+          }}>
+            {/* All controls in a single row */}
+            
+            {/* Play/Pause button */}
             <button 
               onClick={togglePlay} 
               className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}
               disabled={!selectedScriptId}
+              style={{
+                width: '140px',
+                height: '140px',
+                fontSize: '22px',
+                fontWeight: 'bold',
+                backgroundColor: isPlaying ? '#f44336' : '#4CAF50',
+                color: 'white',
+                border: isPlaying ? '2px solid #d32f2f' : '2px solid #388E3C',
+                boxShadow: isPlaying ? '0 0 10px rgba(244, 67, 54, 0.5)' : '0 0 10px rgba(76, 175, 80, 0.5)',
+                borderRadius: '8px',
+                flex: '0 0 auto'
+              }}
             >
               {isPlaying ? 'PAUSE' : 'PLAY'}
             </button>
-          </div>
-          
-          <div className="control-group direction-control">
+            
+            {/* Direction button */}
             <button 
               onClick={toggleDirection} 
               className="direction-btn"
               disabled={!selectedScriptId}
+              style={{
+                width: '140px',
+                height: '140px',
+                fontSize: '18px',
+                fontWeight: 'bold',
+                backgroundColor: '#2196F3',
+                color: 'white',
+                border: '2px solid #1976D2',
+                boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
+                borderRadius: '8px',
+                flex: '0 0 auto'
+              }}
             >
               {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
             </button>
-          </div>
-          
-          <div className="control-group">
-            <label>Speed: {speed.toFixed(2)}x</label>
-            <div className="speed-control">
-              <button 
-                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-                className="speed-btn"
-                disabled={!selectedScriptId}
-              >
-                -
-              </button>
-              <input
-                type="range"
-                min="0.25"
-                max="2.5"
-                step="0.25"
-                value={speed}
-                onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-                disabled={!selectedScriptId}
-              />
+            
+            {/* Speed control (spinbox) */}
+            <div className="spinbox speed-spinbox" style={{ 
+              height: '140px', 
+              width: '100px',
+              flex: '0 0 auto'
+            }}>
+              <div className="spinbox-label" style={{ fontSize: '16px', padding: '3px 0' }}>Speed</div>
               <button 
                 onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-                className="speed-btn"
+                className="spinbox-up"
+                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
                 disabled={!selectedScriptId}
               >
                 +
               </button>
-            </div>
-          </div>
-          
-          <div className="control-group">
-            <label>Font Size: {fontSize}px</label>
-            <div className="font-size-control">
+              <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold', padding: '8px 0' }}>{speed.toFixed(2)}x</div>
               <button 
-                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-                className="font-size-btn"
+                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+                className="spinbox-down"
+                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
                 disabled={!selectedScriptId}
               >
-                A-
+                -
               </button>
-              <input
-                type="range"
-                min="16"
-                max="48"
-                step="1"
-                value={fontSize}
-                onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
-                disabled={!selectedScriptId}
-              />
+            </div>
+            
+            {/* Font size control (spinbox) */}
+            <div className="spinbox font-spinbox" style={{ 
+              height: '140px', 
+              width: '100px',
+              flex: '0 0 auto'
+            }}>
+              <div className="spinbox-label" style={{ fontSize: '16px', padding: '3px 0' }}>Font Size</div>
               <button 
                 onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-                className="font-size-btn"
+                className="spinbox-up"
+                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
                 disabled={!selectedScriptId}
               >
-                A+
+                +
+              </button>
+              <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold', padding: '8px 0' }}>{fontSize}px</div>
+              <button 
+                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+                className="spinbox-down"
+                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
+                disabled={!selectedScriptId}
+              >
+                -
               </button>
             </div>
           </div>
