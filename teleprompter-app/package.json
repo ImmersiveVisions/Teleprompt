@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build": "react-scripts build",
-    "dev": "concurrently \"nodemon server.js\" \"DANGEROUSLY_DISABLE_HOST_CHECK=true HOST=0.0.0.0 react-scripts start\"",
+    "dev": "concurrently \"nodemon server.js\" \"DANGEROUSLY_DISABLE_HOST_CHECK=true HOST=0.0.0.0 WDS_SOCKET_HOST=0.0.0.0 react-scripts start\"",
     "test": "react-scripts test",
     "web:start": "node server.js",
     "electron:build": "npm run build && electron-builder build",
@@ -89,5 +89,5 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:3000"
+  "proxy": "http://0.0.0.0:3000"
 }

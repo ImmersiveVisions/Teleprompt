@@ -216,9 +216,26 @@ app.get('/api/status', (req, res) => {
   
   // First, collect all non-internal IPv4 addresses
   for (const name of Object.keys(networkInterfaces)) {
+    // Skip virtual interfaces like VirtualBox
+    if (name.toLowerCase().includes('virtualbox') || 
+        name.toLowerCase().includes('vboxnet') ||
+        name.toLowerCase().includes('vmnet') ||
+        name.startsWith('veth') ||
+        name.startsWith('docker')) {
+      continue;
+    }
+    
     for (const net of networkInterfaces[name]) {
       // Skip internal and non-IPv4 addresses
       if (net.family === 'IPv4' && !net.internal) {
+        // Skip VirtualBox and other virtual machine IP ranges
+        if (net.address.startsWith('172.') && 
+            !net.address.startsWith('172.16.') && 
+            !net.address.startsWith('172.17.')) {
+          console.log(`API: Skipping likely virtual interface IP: ${net.address} on ${name}`);
+          continue;
+        }
+      
         addresses.push(net.address);
         
         // Prefer non-localhost addresses over localhost
@@ -868,9 +885,25 @@ server.listen(PORT, '0.0.0.0', () => {
   const addresses = [];
   
   for (const name of Object.keys(networkInterfaces)) {
+    // Skip virtual interfaces like VirtualBox
+    if (name.toLowerCase().includes('virtualbox') || 
+        name.toLowerCase().includes('vboxnet') ||
+        name.toLowerCase().includes('vmnet') ||
+        name.startsWith('veth') ||
+        name.startsWith('docker')) {
+      continue;
+    }
+    
     for (const net of networkInterfaces[name]) {
       // Skip internal and non-IPv4 addresses
       if (net.family === 'IPv4' && !net.internal) {
+        // Skip VirtualBox and other virtual machine IP ranges
+        if (net.address.startsWith('172.') && 
+            !net.address.startsWith('172.16.') && 
+            !net.address.startsWith('172.17.')) {
+          console.log(`Skipping likely virtual interface IP: ${net.address} on ${name}`);
+          continue;
+        }
         addresses.push(net.address);
       }
     }
