@@ -90,7 +90,11 @@ const TeleprompterControlPanel = ({
               border: '2px solid #28a745',
               boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
               borderRadius: '4px',
-              flex: '0 0 auto'
+              flex: '0 0 auto',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              textAlign: 'center'
             }}
             title="Click to return to a previous position"
           >
