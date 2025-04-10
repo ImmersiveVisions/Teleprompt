@@ -40,16 +40,19 @@ const useTeleprompterFontSize = (containerRef, fontSize, script, isIframeLoaded)
             background-color: black !important;
             font-size: ${fontSize}px !important;
             font-family: 'Arial', sans-serif !important;
+            font-weight: bold !important;
           }
           
           /* Apply font size to all text elements */
           body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
             font-size: ${fontSize}px !important;
+            font-weight: bold !important;
           }
           
           /* Ensure specific selectors have the font size */
           p[style*="padding-left"] {
             font-size: ${fontSize}px !important;
+            font-weight: bold !important;
           }
           
           /* Character names */
@@ -65,6 +68,7 @@ const useTeleprompterFontSize = (containerRef, fontSize, script, isIframeLoaded)
           p[style*="padding-left: 104pt"],
           p[style*="padding-left: 83pt"] {
             font-size: ${fontSize}px !important;
+            font-weight: bold !important;
           }
         `;
       }

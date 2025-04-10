@@ -36,11 +36,13 @@
         background-color: black !important;
         font-size: ${size}px !important;
         font-family: 'Arial', sans-serif !important;
+        font-weight: bold !important;
       }
       
       /* Apply font size to all text elements */
       body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
         font-size: ${size}px !important;
+        font-weight: bold !important;
       }
       
       /* Center content */
@@ -51,6 +53,7 @@
       /* Ensure specific selectors have the font size */
       p[style*="padding-left"] {
         font-size: ${size}px !important;
+        font-weight: bold !important;
       }
 
       /* Character names - keep gold color but update font size */
@@ -66,6 +69,7 @@
       p[style*="padding-left: 104pt"],
       p[style*="padding-left: 83pt"] {
         font-size: ${size}px !important;
+        font-weight: bold !important;
       }
     `;
     
