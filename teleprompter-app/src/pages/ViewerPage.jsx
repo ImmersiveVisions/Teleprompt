@@ -1,8 +1,14 @@
 // src/pages/ViewerPage.jsx
+// This component is designed as a RECEIVER-ONLY for WebSocket messages.
+// It should never send WebSocket messages to maintain a clean one-way communication model
+// where the Admin controls the Viewer.
+// 
+// It also does NOT track scroll positions since it's purely controlled by AdminPage.
+
 import React, { useEffect, useState, useRef } from 'react';
 import { registerMessageHandler } from '../services/websocket';
 import fileSystemRepository from '../database/fileSystemRepository';
-import TeleprompterViewer from '../components/TeleprompterViewer';
+import TeleprompterViewer from '../components/TeleprompterViewer'; 
 import '../styles.css';
 
 const ViewerPage = ({ directScriptId }) => {
@@ -113,35 +119,158 @@ const ViewerPage = ({ directScriptId }) => {
     // Handle different message types
     console.log('ViewerPage: Received message type:', message.type);
     
-    // Handle dedicated search position messages
-    if (message.type === 'SEARCH_POSITION') {
-      console.log('ViewerPage: Processing SEARCH_POSITION message:', 
+    // Special debug helper for testing connection
+    if (message.type === 'STATE_UPDATE') {
+      window._lastStateUpdate = { timestamp: Date.now(), type: message.type };
+    } else {
+      window._lastMessage = { timestamp: Date.now(), type: message.type };
+      console.log('%c Message received: ' + message.type, 'background: blue; color: white;');
+    }
+    
+    // Handle the new sync position message type
+    if (message.type === 'SYNC_POSITION' || message.type === 'SEARCH_POSITION') {
+      const messageType = message.type === 'SYNC_POSITION' ? 'SYNC_POSITION' : 'SEARCH_POSITION';
+      const logColor = message.type === 'SYNC_POSITION' ? '🟢' : '🟡';
+      
+      console.log(`\n\n ${logColor} ${logColor} ${logColor} VIEWER RECEIVED ${messageType} MESSAGE ${logColor} ${logColor} ${logColor} \n\n`);
+      console.log(`!!!! ViewerPage: Processing ${messageType} message !!!:`, 
         message.data ? JSON.stringify(message.data).substring(0, 100) + '...' : 'null');
       
-      // Check if playing and pause for rollback
-      const isRollback = message.data && message.data.fromRollback === true;
-      if (isRollback && isPlaying) {
-        setIsPlaying(false);
-        console.log('ViewerPage: Pausing playback for rollback operation');
-      }
+      // Make data available globally for debugging
+      window._lastPositionMessage = {
+        type: messageType,
+        timestamp: Date.now(),
+        data: message.data
+      };
       
-      // Use the viewer component to scroll to the node
-      if (viewerRef.current) {
-        if (typeof viewerRef.current.scrollToNode === 'function') {
-          try {
-            const success = viewerRef.current.scrollToNode(message.data);
-            console.log('ViewerPage: Node navigation result:', success ? 'successful' : 'failed');
-          } catch (err) {
-            console.error('ViewerPage: Error in scrollToNode call:', err);
+      // Create function to handle both message types
+      const handlePositionUpdate = (data) => {
+        // Validate message data
+        if (!data) {
+          console.error('ViewerPage: Invalid position message - no data');
+          return;
+        }
+        
+        // Check if playing and pause for rollback
+        const isRollback = data && data.fromRollback === true;
+        if (isRollback && isPlaying) {
+          setIsPlaying(false);
+          console.log('ViewerPage: Pausing playback for rollback operation');
+        }
+        
+        // Confirm we have an iframe to work with
+        let iframe = document.getElementById('teleprompter-frame');
+        if (!iframe) {
+          console.error('ViewerPage: Cannot locate teleprompter-frame element');
+          
+          // Try to find ANY iframe as fallback
+          iframe = document.querySelector('iframe');
+          if (iframe) {
+            console.log('ViewerPage: Found alternate iframe:', iframe.id || 'unnamed');
+          } else {
+            console.error('ViewerPage: No iframe elements found in document');
           }
         } else {
-          console.error('ViewerPage: viewerRef.current.scrollToNode is not a function:', 
-            typeof viewerRef.current.scrollToNode);
-          console.log('ViewerPage: viewerRef.current methods:', 
-            Object.keys(viewerRef.current).filter(key => typeof viewerRef.current[key] === 'function'));
+          console.log('ViewerPage: Found teleprompter-frame element:', iframe.id);
         }
-      } else {
-        console.error('ViewerPage: Cannot scroll - viewerRef not available');
+        
+        // Try direct DOM access (separate from ref methods)
+        if (iframe && iframe.contentWindow) {
+          try {
+            // Implement a direct scroll mechanism for quick testing
+            // This bypasses all the complicated node finding logic
+            if (typeof data.position === 'number') {
+              const scrollHeight = iframe.contentDocument.body.scrollHeight;
+              const scrollTo = Math.floor(data.position * scrollHeight);
+              console.log(`Direct scrolling to position ${scrollTo}px of ${scrollHeight}px total`);
+              
+              // Actually do the scroll
+              iframe.contentWindow.scrollTo({
+                top: scrollTo,
+                behavior: 'smooth'
+              });
+              
+              // Create a highlight to show the scroll position
+              try {
+                const highlight = iframe.contentDocument.createElement('div');
+                highlight.className = 'direct-scroll-highlight';
+                highlight.style.cssText = `
+                  position: absolute;
+                  left: 0;
+                  width: 100%;
+                  height: 50px;
+                  background-color: rgba(255, 0, 0, 0.3);
+                  border-top: 2px solid red;
+                  border-bottom: 2px solid red;
+                  z-index: 1000;
+                  pointer-events: none;
+                `;
+                highlight.style.top = `${scrollTo}px`;
+                iframe.contentDocument.body.appendChild(highlight);
+                
+                // Remove after 2 seconds
+                setTimeout(() => {
+                  if (highlight.parentNode) {
+                    highlight.parentNode.removeChild(highlight);
+                  }
+                }, 2000);
+              } catch (highlightErr) {
+                console.error('Error creating highlight:', highlightErr);
+              }
+              
+              console.log('Direct DOM scroll completed');
+            }
+          } catch (directScrollErr) {
+            console.error('Error using direct scroll:', directScrollErr);
+          }
+        }
+        
+        // Use the viewer component to scroll to the node
+        if (viewerRef.current) {
+          console.log('ViewerPage: viewerRef is available, methods:', Object.keys(viewerRef.current));
+          
+          if (typeof viewerRef.current.scrollToNode === 'function') {
+            try {
+              console.log('ViewerPage: Calling scrollToNode with data:', data);
+              const success = viewerRef.current.scrollToNode(data);
+              console.log('ViewerPage: Node navigation result:', success ? 'successful' : 'failed');
+              
+              // Visual feedback in console
+              if (success) {
+                console.log('%c Position updated successfully! ', 'background: green; color: white; font-size: 16px;');
+              } else {
+                console.log('%c Position update failed! ', 'background: red; color: white; font-size: 16px;');
+              }
+            } catch (err) {
+              console.error('ViewerPage: Error in scrollToNode call:', err);
+            }
+          } else {
+            console.error('ViewerPage: scrollToNode is not a function:', 
+              typeof viewerRef.current.scrollToNode);
+            console.log('ViewerPage: Available methods on viewerRef.current:', 
+              Object.keys(viewerRef.current).filter(key => typeof viewerRef.current[key] === 'function'));
+            
+            // Try alternative navigation methods as fallback
+            if (typeof viewerRef.current.jumpToPosition === 'function') {
+              console.log('ViewerPage: Attempting fallback with jumpToPosition');
+              try {
+                viewerRef.current.jumpToPosition(data);
+                console.log('ViewerPage: Fallback navigation completed');
+              } catch (err) {
+                console.error('ViewerPage: Error in fallback navigation:', err);
+              }
+            }
+          }
+        } else {
+          console.error('ViewerPage: Cannot scroll - viewerRef not available');
+        }
+      };
+      
+      // Handle both message types with the same function
+      if (message.type === 'SYNC_POSITION') {
+        handlePositionUpdate(message.data);
+      } else if (message.type === 'SEARCH_POSITION') {
+        handlePositionUpdate(message.data);
       }
       
       return; // Skip the rest of the state update handling
@@ -277,6 +406,19 @@ const ViewerPage = ({ directScriptId }) => {
     }
   };
   
+  // Disable any position sending from the viewer component
+  useEffect(() => {
+    if (viewerRef.current) {
+      // Replace the sendPosition function with a no-op
+      viewerRef.current.sendPosition = (data) => {
+        console.log('📢 [VIEWER] Position sending disabled');
+        // Store for debugging if needed
+        window._lastViewerPosition = data;
+      };
+      console.log('📢 [VIEWER] Disabled position sending in ViewerPage');
+    }
+  }, [viewerRef.current]);
+  
   return (
     <div className="viewer-page">
       {!connected && (
@@ -307,6 +449,7 @@ const ViewerPage = ({ directScriptId }) => {
         maxWidth: '100vw',
         overflow: 'hidden'
       }}>
+        {/* Use the original TeleprompterViewer but disable its position sending */}
         <TeleprompterViewer 
           ref={viewerRef}
           script={currentScript}

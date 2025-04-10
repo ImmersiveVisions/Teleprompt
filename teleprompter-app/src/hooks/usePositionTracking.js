@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react';
 
+/**
+ * Hook for tracking position in teleprompter content
+ * 
+ * IMPORTANT: This hook SENDS WebSocket messages by default.
+ * If used in a receiver-only component (like ViewerPage), you should
+ * either:
+ * 1. Override the sending methods in the ref (recommended)
+ * 2. Pass null for the ref parameter 
+ * 3. Create a read-only version of this hook
+ * 
+ * @param {React.RefObject} containerRef - Reference to the container element
+ * @param {boolean} isPlaying - Whether playback is active
+ * @param {Object} script - The current script being displayed
+ * @param {React.RefObject} ref - Optional ref from a parent component to expose methods
+ * @returns {Object} Position tracking utilities
+ */
 const usePositionTracking = (containerRef, isPlaying, script, ref) => {
   const [currentTopElement, setCurrentTopElement] = useState(null);
   
@@ -100,9 +116,9 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
         console.log('📋 [DEBUG] Setting currentTopElement and processing position');
         setCurrentTopElement(topElement);
         
-        // Only broadcast position if this was from user interaction (not from auto-scrolling)
-        // Make sure we're not playing (isPlaying) and not in animation (scrollState.isScrollAnimating)
-        if (isUserInitiated && !isPlaying && !scrollState.isScrollAnimating) {
+        // IMPORTANT: Send position update whenever the current node changes
+        // But only if we're not playing (isPlaying) and not in animation (scrollState.isScrollAnimating)
+        if (!isPlaying && !scrollState.isScrollAnimating) {
           console.log('📋 [DEBUG] Processing user-initiated update (preparing to broadcast)');
           
           try {
@@ -144,7 +160,7 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
               hasRef: !!ref,
               hasRefCurrent: !!(ref && ref.current), 
               hasSendPosition: !!(ref && ref.current && ref.current.sendPosition),
-              refContent: ref ? JSON.stringify(ref.current, (key, value) => {
+              refContent: (ref && ref.current) ? JSON.stringify(ref.current, (key, value) => {
                 if (typeof value === 'function') return 'Function';
                 return value;
               }) : 'null'
@@ -152,25 +168,66 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
             
             // CRITICAL FIX: Use direct access to a window-level function
             // to bypass any potential ref issues
+            // Store the latest position data for debugging
+            window._lastPosition = enhancedPositionData;
+            
+            // Try every possible way to send position updates
+            
+            // METHOD 1: Global position callback
             if (window._sendPositionCallback) {
               console.log('⭐ [POSITION DEBUG] Using global position callback');
               window._sendPositionCallback(enhancedPositionData);
-            } else if (ref.current && ref.current.sendPosition) {
+              console.log('%c ✅ Position sent via global callback', 'background: green; color: white; font-weight: bold;');
+            } 
+            // METHOD 2: Ref method
+            else if (ref && ref.current && ref.current.sendPosition) {
               console.log('⭐ [POSITION DEBUG] Using ref.sendPosition');
               ref.current.sendPosition(enhancedPositionData);
-            } else {
-              console.error('⭐ [POSITION DEBUG] No position sending mechanism available! Saving to window._lastPosition');
-              window._lastPosition = enhancedPositionData;
+              console.log('%c ✅ Position sent via ref method', 'background: green; color: white; font-weight: bold;');
+            }
+            // METHOD 3: Try all other methods
+            else {
+              console.log('⭐ [POSITION DEBUG] Trying fallback methods...');
               
-              // Try to use websocket directly if available
+              // Try METHOD 3: websocket SendSyncPosition (new preferred method)
               try {
-                if (window.sendSearchPosition || window.websocketService?.sendSearchPosition) {
-                  const sendFn = window.sendSearchPosition || window.websocketService.sendSearchPosition;
-                  console.log('⭐ [POSITION DEBUG] Using global sendSearchPosition function');
-                  sendFn(enhancedPositionData);
+                // Import the module directly
+                const websocketModule = require('../services/websocket');
+                if (websocketModule && websocketModule.sendSyncPosition) {
+                  console.log('⭐ [POSITION DEBUG] Using imported sendSyncPosition');
+                  websocketModule.sendSyncPosition(enhancedPositionData);
+                  console.log('%c ✅ Position sent via imported sendSyncPosition', 'background: green; color: white; font-weight: bold;');
+                } else {
+                  console.log('⭐ [POSITION DEBUG] sendSyncPosition not available in import');
                 }
-              } catch (e) {
-                console.error('⭐ [POSITION DEBUG] Error using direct websocket access:', e);
+              } catch (importErr) {
+                console.log('⭐ [POSITION DEBUG] Could not import websocket module:', importErr.message);
+                
+                // Try METHOD 4: Any available global methods
+                try {
+                  // Try sendSyncPosition from global or websocketService
+                  if (window.sendSyncPosition) {
+                    window.sendSyncPosition(enhancedPositionData);
+                    console.log('%c ✅ Position sent via global sendSyncPosition', 'background: green; color: white; font-weight: bold;');
+                  } else if (window.websocketService?.sendSyncPosition) {
+                    window.websocketService.sendSyncPosition(enhancedPositionData);
+                    console.log('%c ✅ Position sent via websocketService.sendSyncPosition', 'background: green; color: white; font-weight: bold;');
+                  } 
+                  // Fall back to sendSearchPosition methods
+                  else if (window.sendSearchPosition) {
+                    window.sendSearchPosition(enhancedPositionData);
+                    console.log('%c ✅ Position sent via global sendSearchPosition', 'background: green; color: white; font-weight: bold;');
+                  } else if (window.websocketService?.sendSearchPosition) {
+                    window.websocketService.sendSearchPosition(enhancedPositionData);
+                    console.log('%c ✅ Position sent via websocketService.sendSearchPosition', 'background: green; color: white; font-weight: bold;');
+                  } else {
+                    console.error('❌ [POSITION DEBUG] No position sending method available');
+                    window._pendingPositionUpdate = enhancedPositionData;
+                  }
+                } catch (e) {
+                  console.error('⭐ [POSITION DEBUG] Error using global position methods:', e);
+                  window._pendingPositionUpdate = enhancedPositionData;
+                }
               }
             }
           } catch (e) {
@@ -182,12 +239,16 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
     
     // Detect when a scroll is due to user interaction vs. animation
     const handleScrollStart = () => {
-      console.log('📋 [DEBUG] handleScrollStart called, current states:', {
-        isScrollAnimating: scrollState.isScrollAnimating, 
-        isPlaying,
-        isUserScrolling: scrollState.isUserScrolling,
-        hasTimeout: !!scrollState.userScrollTimeout
-      });
+      // Don't log this message on every scroll event to reduce noise
+      if (!window._lastScrollLog || Date.now() - window._lastScrollLog > 1000) {
+        console.log('📋 [DEBUG] handleScrollStart called, current states:', {
+          isScrollAnimating: scrollState.isScrollAnimating, 
+          isPlaying,
+          isUserScrolling: scrollState.isUserScrolling,
+          hasTimeout: !!scrollState.userScrollTimeout
+        });
+        window._lastScrollLog = Date.now();
+      }
       
       // If not currently auto-scrolling, mark this as user-initiated
       if (!scrollState.isScrollAnimating && !isPlaying) {
@@ -209,7 +270,11 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
     };
     
     const handleScrollEnd = () => {
-      console.log('📋 [DEBUG] handleScrollEnd called, isUserScrolling:', scrollState.isUserScrolling);
+      // Don't log this message on every scroll event to reduce noise
+      if (!window._lastScrollEndLog || Date.now() - window._lastScrollEndLog > 1000) {
+        console.log('📋 [DEBUG] handleScrollEnd called, isUserScrolling:', scrollState.isUserScrolling);
+        window._lastScrollEndLog = Date.now();
+      }
       
       if (scrollState.isUserScrolling) {
         // Clear any existing timeout to prevent multiple calls
@@ -236,10 +301,16 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
             refKeys: ref && ref.current ? Object.keys(ref.current) : 'none'
           });
           
-          updateTopElement(true); // true = user initiated
+          // Force a position update when scrolling stops 
+          updateTopElement(true);
+          
+          // Highlight that we're sending a position update
+          console.log('%c 📢 POSITION UPDATE 📢 Sending position after scroll stopped', 
+            'background: #4CAF50; color: white; font-weight: bold;');
+            
           console.log('📋 [DEBUG] updateTopElement(true) completed');
           scrollState.isUserScrolling = false;
-        }, 500); // Longer delay to ensure scrolling has completely settled
+        }, 300); // Shorter delay so it feels more responsive
       } else {
         console.log('📋 [DEBUG] Not processing scroll end - isUserScrolling is false');
       }
@@ -327,7 +398,8 @@ const usePositionTracking = (containerRef, isPlaying, script, ref) => {
     };
     
     // Expose the function to the ref so we can tell when animations start/end
-    if (ref.current) {
+    // But only if the ref exists and has a current property
+    if (ref && ref.current) {
       ref.current.setScrollAnimating = setScrollAnimating;
     }
     
