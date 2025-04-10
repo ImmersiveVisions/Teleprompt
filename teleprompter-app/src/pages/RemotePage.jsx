@@ -297,10 +297,39 @@ const RemotePage = () => {
                 border: isPlaying ? '2px solid #d32f2f' : '2px solid #388E3C',
                 boxShadow: isPlaying ? '0 0 10px rgba(244, 67, 54, 0.5)' : '0 0 10px rgba(76, 175, 80, 0.5)',
                 borderRadius: '8px',
-                flex: '0 0 auto'
+                flex: '0 0 auto',
+                position: 'relative',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
               }}
             >
-              {isPlaying ? 'PAUSE' : 'PLAY'}
+              <div style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                opacity: 0.15,
+                pointerEvents: 'none',
+                zIndex: 1
+              }}>
+                {/* Play or Pause Icon SVG based on state */}
+                {isPlaying ? (
+                  <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                ) : (
+                  <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </div>
+              <span style={{ position: 'relative', zIndex: 2 }}>
+                {isPlaying ? 'PAUSE' : 'PLAY'}
+              </span>
             </button>
             
             {/* Direction button */}

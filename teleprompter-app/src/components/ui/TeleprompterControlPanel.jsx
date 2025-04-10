@@ -66,10 +66,39 @@ const TeleprompterControlPanel = ({
               color: 'white',
               border: isPlaying ? '2px solid #d32f2f' : '2px solid #388E3C',
               borderRadius: '4px',
-              flex: '0 0 auto'
+              flex: '0 0 auto',
+              position: 'relative',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center'
             }}
           >
-            {isPlaying ? 'PAUSE' : 'PLAY'}
+            <div style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              opacity: 0.15,
+              pointerEvents: 'none',
+              zIndex: 1
+            }}>
+              {/* Play or Pause Icon SVG based on state */}
+              {isPlaying ? (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="white">
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
+                </svg>
+              ) : (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="white">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </div>
+            <span style={{ position: 'relative', zIndex: 2 }}>
+              {isPlaying ? 'PAUSE' : 'PLAY'}
+            </span>
           </button>
           
           {/* Rollback button */}
