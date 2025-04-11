@@ -44,13 +44,15 @@ const storage = multer.diskStorage({
     cb(null, safeName);
   }
 });
-// Configure multer to only accept fountain files
+// Configure multer to accept both fountain and PDF files
 const upload = multer({ 
   storage: storage,
   fileFilter: function(req, file, cb) {
-    // Accept only .fountain extension files
-    if (!file.originalname.toLowerCase().endsWith('.fountain')) {
-      return cb(new Error('Only fountain files are allowed!'), false);
+    // Accept .fountain extension files and PDF files
+    if (!file.originalname.toLowerCase().endsWith('.fountain') && 
+        !file.originalname.toLowerCase().endsWith('.pdf') &&
+        file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only fountain and PDF files are allowed!'), false);
     }
     cb(null, true);
   }
@@ -566,7 +568,7 @@ app.post('/api/convert-scripts', async (req, res) => {
   }
 });
 
-// Endpoint for file uploads - accepts only fountain script files
+// Endpoint for file uploads - accepts both fountain and PDF script files (PDF files are converted on client side)
 app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
   try {
     if (!req.file) {
@@ -576,15 +578,25 @@ app.post('/api/upload-script', upload.single('scriptFile'), (req, res) => {
       });
     }
 
-    // Check if file is a fountain file
+    // Check file type - Fountain files only are supported on the server
+    // (PDF files should be converted to Fountain on the client side before upload)
     const isFountain = req.file.filename.toLowerCase().endsWith('.fountain') || _isFountainFile(req.file.filename);
+    const isPdf = req.file.filename.toLowerCase().endsWith('.pdf') || req.file.mimetype === 'application/pdf';
     
-    if (!isFountain) {
-      // Delete the non-fountain file
+    // Only allow Fountain files (PDFs should be converted on client side)
+    if (!isFountain && isPdf) {
+      // Delete the PDF file - it should have been converted on client side
       fs.unlinkSync(req.file.path);
       return res.status(400).json({
         success: false,
-        error: 'Only fountain screenplay files (.fountain) are supported'
+        error: 'PDF files must be converted to Fountain format before upload (use the Convert button)'
+      });
+    } else if (!isFountain && !isPdf) {
+      // Delete unsupported file type
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        error: 'Only Fountain screenplay files (.fountain) are supported for direct upload'
       });
     }
 
