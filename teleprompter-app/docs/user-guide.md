@@ -89,6 +89,8 @@ The Admin Panel generates QR codes for easy mobile access:
 ### Script Management
 
 - **Add Script**: Upload or create new scripts
+  - Supports Fountain (.fountain) and PDF (.pdf) screenplay files
+  - PDF files are automatically converted to Fountain format
 - **Delete Script**: Remove scripts from the library
 - **Convert Scripts**: Process scripts from intake directory
 
@@ -149,6 +151,37 @@ The Remote Control provides a simplified interface for controlling the telepromp
 ## Script Formats
 
 The teleprompter supports two main script formats:
+
+### Fountain Scripts
+
+Fountain is a simple markup syntax for writing, editing, and sharing screenplays in plain text:
+
+- Industry-standard format for screenplays
+- Automatic formatting for scene headings, character names, dialogue
+- Support for title pages, notes, transitions
+- Must have `.fountain` extension
+- Can be converted from PDF screenplay files
+
+Example:
+```fountain
+Title: Example Script
+Author: John Doe
+Draft date: 2023-04-10
+
+EXT. PARK - DAY
+
+A beautiful day in the park.
+
+JOHN
+This is sample dialogue.
+
+(smiling)
+It's formatted automatically.
+
+CUT TO:
+
+INT. OFFICE - DAY
+```
 
 ### HTML Scripts
 

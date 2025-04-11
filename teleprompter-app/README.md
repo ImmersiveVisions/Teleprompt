@@ -5,6 +5,7 @@ A complete web-based teleprompter application that runs locally on Windows syste
 ## Features
 
 - **Multiple Script Storage**: Save and manage multiple scripts in a local browser database
+- **PDF to Fountain Conversion**: Convert PDF screenplay files to Fountain format
 - **Chapter Navigation**: Automatically detects "FILM CLIP" markers as chapter points
 - **Multiple Access Modes**:
   - **Admin Mode**: Add/edit scripts and control the teleprompter
@@ -230,3 +231,5 @@ This software is licensed under the MIT License - see the LICENSE file for detai
 - [WebSockets](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
 - [Dexie.js](https://dexie.org/)
 - [QRCode.js](https://github.com/davidshimjs/qrcodejs)
+- [PDF.js](https://mozilla.github.io/pdf.js/)
+- [Fountain.js](https://github.com/mattdaly/Fountain.js)
