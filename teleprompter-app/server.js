@@ -445,13 +445,13 @@ app.get('/api/scripts/:id', async (req, res) => {
   try {
     const scriptId = req.params.id;
     
-    // Only handle HTML files from public/scripts directory
-    const filePath = path.join(SCRIPTS_DIRECTORY, scriptId);
-    console.log(`Looking for HTML file in scripts directory: ${scriptId}`);
+    // Look for the file in the public directory (not just scripts subdirectory)
+    const filePath = path.join(__dirname, 'public', scriptId);
+    console.log(`Looking for script file in public directory: ${scriptId}`);
     
     // Add a direct web URL for client-side access
     const publicUrl = `${scriptId}`;
-    console.log(`Public URL for HTML file: ${publicUrl}`);
+    console.log(`Public URL for script file: ${publicUrl}`);
     
     // If file doesn't exist
     if (!fs.existsSync(filePath)) {
@@ -851,6 +851,49 @@ app.get('/:script', (req, res) => {
       </body>
       </html>
     `);
+  }
+});
+
+// Endpoint to delete a script
+app.delete('/api/scripts/:id', (req, res) => {
+  try {
+    const scriptId = req.params.id;
+    console.log(`DELETE request received for script: ${scriptId}`);
+    
+    // Validate the filename to prevent directory traversal
+    if (!scriptId || scriptId.includes('..') || scriptId.includes('/') || scriptId.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid script ID'
+      });
+    }
+    
+    const scriptPath = path.join(__dirname, 'public', scriptId);
+    console.log(`Attempting to delete script at path: ${scriptPath}`);
+    
+    // Check if file exists
+    if (!fs.existsSync(scriptPath)) {
+      console.log(`File not found: ${scriptPath}`);
+      return res.status(404).json({
+        success: false,
+        error: 'Script not found'
+      });
+    }
+    
+    // Delete the file
+    fs.unlinkSync(scriptPath);
+    console.log(`Script deleted successfully: ${scriptId}`);
+    
+    res.json({
+      success: true,
+      message: 'Script deleted successfully'
+    });
+  } catch (error) {
+    console.error(`Error deleting script: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

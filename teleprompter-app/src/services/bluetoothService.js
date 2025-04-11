@@ -90,8 +90,12 @@ const handleCharacteristicValueChanged = (event) => {
   const value = event.target.value;
   const command = new TextDecoder().decode(value);
   
-  console.log('Received bluetooth command:', command);
+  // Log detailed information about the custom protocol command
+  console.log('BLUETOOTH REMOTE - Received custom command:', command);
+  console.log('BLUETOOTH REMOTE - Raw data:', Array.from(new Uint8Array(value.buffer)).map(b => '0x' + b.toString(16)).join(', '));
+  
   processRemoteCommand(command);
+  console.log('BLUETOOTH REMOTE - Custom command processed successfully');
 };
 
 // Set up generic remote control using standard HID profiles
@@ -157,26 +161,39 @@ const handleHIDReport = (event) => {
     keyCode = data[1]; // Second byte is often the keycode in HID reports
   }
   
-  console.log('Received HID report, keycode:', keyCode);
+  // Log detailed information about the button press
+  console.log('BLUETOOTH REMOTE - Raw data:', Array.from(data).map(b => '0x' + b.toString(16)).join(', '));
+  console.log('BLUETOOTH REMOTE - Detected keycode:', keyCode ? '0x' + keyCode.toString(16) : 'none');
   
   if (keyCode) {
     // Map keycodes to actions
+    let commandSent = true;
+    
     switch (keyCode) {
       case 0x28: // Enter key
       case 0x44: // F1 key (often used in presentation remotes)
+        console.log('BLUETOOTH REMOTE - Action: PLAY_PAUSE (Enter/F1)');
         processRemoteCommand('PLAY_PAUSE');
         break;
       case 0x4B: // Page Down / Next
+        console.log('BLUETOOTH REMOTE - Action: NEXT (Page Down)');
         processRemoteCommand('NEXT');
         break;
       case 0x4E: // Page Up / Previous
+        console.log('BLUETOOTH REMOTE - Action: PREV (Page Up)');
         processRemoteCommand('PREV');
         break;
       case 0x29: // Escape
+        console.log('BLUETOOTH REMOTE - Action: STOP (Escape)');
         processRemoteCommand('STOP');
         break;
       default:
-        console.log('Unhandled keycode:', keyCode);
+        console.log('BLUETOOTH REMOTE - Unhandled keycode: 0x' + keyCode.toString(16));
+        commandSent = false;
+    }
+    
+    if (commandSent) {
+      console.log('BLUETOOTH REMOTE - Command successfully processed');
     }
   }
 };

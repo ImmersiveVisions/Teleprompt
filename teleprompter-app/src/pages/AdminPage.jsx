@@ -907,30 +907,41 @@ const AdminPage = () => {
     }
   };
   
-  // Handle deleting a script
-  const handleDeleteScript = async () => {
-    if (!selectedScriptId) return;
+  // State for delete script modal
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [scriptToDelete, setScriptToDelete] = useState(null);
+  
+  // Handle opening the delete script modal
+  const handleDeleteScript = () => {
+    setIsDeleteModalOpen(true);
+  };
+  
+  // Handle actual script deletion
+  const confirmDeleteScript = async (scriptId) => {
+    if (!scriptId) return;
     
-    if (window.confirm(`Are you sure you want to delete the script "${selectedScript?.title}"?`)) {
-      try {
-        await fileSystemRepository.deleteScript(selectedScriptId);
-        
-        // Reload scripts
-        const allScripts = await fileSystemRepository.getAllScripts();
-        setScripts(allScripts);
-        
-        // Select the first script or clear the selection
-        if (allScripts.length > 0) {
-          handleScriptSelect(allScripts[0].id);
-        } else {
-          setSelectedScriptId(null);
-          setSelectedScript(null);
-        }
-      } catch (error) {
-        console.error('Error deleting script:', error);
-        alert('Failed to delete script: ' + error.message);
+    try {
+      await fileSystemRepository.deleteScript(scriptId);
+      
+      // Reload scripts
+      const allScripts = await fileSystemRepository.getAllScripts();
+      setScripts(allScripts);
+      
+      // Select the first script or clear the selection
+      if (allScripts.length > 0) {
+        handleScriptSelect(allScripts[0].id);
+      } else {
+        setSelectedScriptId(null);
+        setSelectedScript(null);
       }
+    } catch (error) {
+      console.error('Error deleting script:', error);
+      alert('Failed to delete script: ' + error.message);
     }
+    
+    // Close the modal
+    setIsDeleteModalOpen(false);
+    setScriptToDelete(null);
   };
   
   // Handle state updates from WebSocket
@@ -1465,14 +1476,65 @@ const AdminPage = () => {
         onUpload={handleFileUpload}
       />
       
+      {/* Delete Script Modal */}
+      {isDeleteModalOpen && (
+        <div className="modal-overlay">
+          <div className="script-entry-modal" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Delete Script</h2>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="close-btn">×</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <p>Select a script to delete:</p>
+              <div className="scripts-list" style={{ maxHeight: '300px', overflowY: 'auto', margin: '15px 0' }}>
+                {scripts.map(script => (
+                  <div 
+                    key={script.id}
+                    className={`script-item ${scriptToDelete === script.id ? 'selected' : ''}`}
+                    onClick={() => setScriptToDelete(script.id)}
+                    style={{ 
+                      padding: '10px', 
+                      margin: '5px 0', 
+                      cursor: 'pointer',
+                      backgroundColor: scriptToDelete === script.id ? '#f0f0f0' : 'transparent',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <div className="script-item-title">{script.title}</div>
+                    <div className="script-item-date" style={{ fontSize: '12px', color: '#666' }}>
+                      Last modified: {new Date(script.lastModified).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="form-actions" style={{ marginTop: '20px' }}>
+                <button onClick={() => setIsDeleteModalOpen(false)} className="cancel-btn">Cancel</button>
+                <button 
+                  onClick={() => confirmDeleteScript(scriptToDelete)} 
+                  className="delete-btn"
+                  disabled={!scriptToDelete}
+                  style={{ 
+                    backgroundColor: '#f44336', 
+                    color: 'white',
+                    opacity: scriptToDelete ? 1 : 0.5 
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="admin-content">
         <div className="scripts-panel">
-          <div className="scripts-header">
-            <h2>Scripts</h2>
-            <div>
-              <button onClick={handleAddScript} className="add-script-btn">New Script</button>
-              <button onClick={handleUploadScript} className="add-script-btn" style={{marginLeft: "8px"}}>Add Script</button>
+          <div className="scripts-header" style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '15px' }}>
+              <button onClick={handleUploadScript} className="add-script-btn" style={{ marginBottom: '8px' }}>Add Script</button>
+              <button onClick={handleDeleteScript} className="delete-script-btn" style={{ backgroundColor: '#f44336', color: 'white' }}>Delete Script</button>
             </div>
+            <h2>Scripts</h2>
           </div>
           
           <div className="scripts-list">
