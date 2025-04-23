@@ -1462,12 +1462,138 @@ const AdminPage = () => {
   return (
     <div className="admin-page">
       <header className="admin-header">
-        <h1>Teleprompter Admin</h1>
-        <div className="nav-links">
-          <Link to="/" className="nav-link">Home</Link>
-          <Link to="/viewer" className="nav-link">Open Viewer</Link>
-          <Link to="/remote" className="nav-link">Open Remote</Link>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <h1>Teleprompter Admin</h1>
+          <div className="nav-links">
+            <Link to="/" className="nav-link">Home</Link>
+            <Link to="/viewer" className="nav-link">Open Viewer</Link>
+            <Link to="/remote" className="nav-link">Open Remote</Link>
+          </div>
         </div>
+        
+        {/* Add teleprompter controls to the header */}
+        {selectedScript && (
+          <div style={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: '10px', 
+            backgroundColor: '#f5f5f5', 
+            padding: '10px', 
+            borderRadius: '5px',
+            marginBottom: '10px'
+          }}>
+            {/* Play/Pause Button */}
+            <button 
+              onClick={isPlaying ? handlePause : handlePlay}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: isPlaying ? '#f44336' : '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              {isPlaying ? '⏸️ Pause' : '▶️ Play'}
+            </button>
+            
+            {/* Rollback Button */}
+            <button 
+              onClick={handleRollback}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              ⏮️ Rollback
+            </button>
+            
+            {/* Direction Button */}
+            <button 
+              onClick={toggleDirection}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: '#2196F3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
+            </button>
+            
+            {/* Speed Control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span>Speed:</span>
+              <button 
+                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              >-</button>
+              <span>{speed.toFixed(2)}x</span>
+              <button 
+                onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              >+</button>
+            </div>
+            
+            {/* Font Size Control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span>Font:</span>
+              <button 
+                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              >-</button>
+              <span>{fontSize}px</span>
+              <button 
+                onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              >+</button>
+            </div>
+            
+            {/* Mirror Mode Toggle */}
+            <button 
+              onClick={toggleMirrorMode}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: isFlipped ? '#673AB7' : '#9E9E9E',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {isFlipped ? '🔄 Mirror On' : '🔄 Mirror Off'}
+            </button>
+            
+            {/* Search Button */}
+            <button 
+              onClick={() => {
+                setSearchTerm('');
+                setSearchResults([]);
+                setIsSearchModalOpen(true);
+              }}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: '#FF9800',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginLeft: 'auto'
+              }}
+            >
+              🔍 Search
+            </button>
+          </div>
+        )}
       </header>
       
       {/* Script Entry Modal */}
