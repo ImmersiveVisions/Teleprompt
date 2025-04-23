@@ -441,15 +441,7 @@ const AdminPage = () => {
         sendControlMessage('JUMP_TO_POSITION', positionData);
       }
       
-      // Visual feedback to show we're syncing position
-      const previewHeader = document.querySelector('.preview-header h3');
-      if (previewHeader) {
-        const originalText = previewHeader.textContent;
-        previewHeader.textContent = 'Syncing position to viewers...';
-        setTimeout(() => {
-          previewHeader.textContent = originalText;
-        }, 800);
-      }
+      // Note: Visual feedback from preview header has been removed as part of UI cleanup
     };
     
     // Set global callback for direct access from any component
@@ -722,15 +714,7 @@ const AdminPage = () => {
       // This updates the shared state position for all clients
       sendControlMessage('JUMP_TO_POSITION', percentPos);
       
-      // Optional: Add visual feedback
-      const previewHeader = document.querySelector('.preview-header h3');
-      if (previewHeader) {
-        const originalText = previewHeader.textContent;
-        previewHeader.textContent = 'Jumping to position...';
-        setTimeout(() => {
-          previewHeader.textContent = originalText;
-        }, 1000);
-      }
+      // Note: Visual feedback has been removed as part of UI cleanup
       
       // Close the search modal after jumping
       setIsSearchModalOpen(false);
@@ -1088,14 +1072,7 @@ const AdminPage = () => {
         const viewportCenter = viewportTop + (viewportHeight / 2);
         
         // Update preview header to show position being captured
-        const previewHeader = document.querySelector('.preview-header h3');
-        if (previewHeader && !isPlaying) {
-          previewHeader.style.transition = 'color 0.3s ease';
-          previewHeader.style.color = '#4CAF50';  // Green to indicate capture
-          setTimeout(() => {
-            previewHeader.style.color = '';  // Reset color
-          }, 500);
-        }
+        // Note: Visual feedback from preview header has been removed as part of UI cleanup
         
         // Capture all dialog elements for context
         const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
@@ -1289,14 +1266,6 @@ const AdminPage = () => {
       sendControlMessage('PAUSE');
     }
     
-    // Add visual feedback first
-    const previewHeader = document.querySelector('.preview-header h3');
-    let originalText = '';
-    if (previewHeader) {
-      originalText = previewHeader.textContent;
-      previewHeader.textContent = 'Rolling back to previous dialog...';
-    }
-    
     // Check if we have stored data to use for rollback
     if (storedNodeData) {
       console.log('[ROLLBACK] Using stored position data:', storedNodeData);
@@ -1322,12 +1291,7 @@ const AdminPage = () => {
       // Send to all clients
       sendSearchPosition(rollbackData);
       
-      // Reset visual feedback
-      if (previewHeader) {
-        setTimeout(() => {
-          previewHeader.textContent = originalText;
-        }, 800);
-      }
+      // Note: Visual feedback removed as part of UI cleanup
       
       return;
     }
@@ -1383,12 +1347,7 @@ const AdminPage = () => {
           // Store for future use
           setStoredNodeData(defaultData);
           
-          // Reset visual feedback
-          if (previewHeader) {
-            setTimeout(() => {
-              previewHeader.textContent = originalText;
-            }, 800);
-          }
+          // Note: Visual feedback from preview header has been removed as part of UI cleanup
           
           return;
         }
@@ -1419,12 +1378,7 @@ const AdminPage = () => {
     // Send to all clients
     sendSearchPosition(defaultData);
     
-    // Reset visual feedback
-    if (previewHeader) {
-      setTimeout(() => {
-        previewHeader.textContent = originalText;
-      }, 800);
-    }
+    // Note: Visual feedback removed as part of UI cleanup
   };
   
   // Chapter functionality has been removed
@@ -1531,7 +1485,7 @@ const AdminPage = () => {
             </button>
             
             {/* Speed Control */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontWeight: 'bold' }}>Speed:</span>
               <button 
                 onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
@@ -1541,7 +1495,7 @@ const AdminPage = () => {
                   borderRadius: '4px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  backgroundColor: '#f0f0f0',
+                  backgroundColor: '#4CAF50',
                   cursor: 'pointer'
                 }}
               >−</button>
@@ -1559,24 +1513,24 @@ const AdminPage = () => {
                   borderRadius: '4px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  backgroundColor: '#f0f0f0',
+                  backgroundColor: '#4CAF50',
                   cursor: 'pointer'
                 }}
               >+</button>
             </div>
             
             {/* Font Size Control */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontWeight: 'bold' }}>Font:</span>
               <button 
                 onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
                 style={{ 
-                  padding: '6px 15px', 
+                  padding: '3px 15px', 
                   border: '1px solid #ccc', 
                   borderRadius: '4px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  backgroundColor: '#f0f0f0',
+                  backgroundColor: '#4CAF50',
                   cursor: 'pointer'
                 }}
               >−</button>
@@ -1589,12 +1543,12 @@ const AdminPage = () => {
               <button 
                 onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
                 style={{ 
-                  padding: '6px 15px', 
+                  padding: '3px 15px', 
                   border: '1px solid #ccc', 
                   borderRadius: '4px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  backgroundColor: '#f0f0f0',
+                  backgroundColor: '#4CAF50',
                   cursor: 'pointer'
                 }}
               >+</button>
@@ -1809,26 +1763,7 @@ const AdminPage = () => {
               />
               
               <div className="preview-container">
-                <div className="preview-header">
-                  <h3>
-                    {isPlaying 
-                      ? `Preview: ${selectedScript?.title}` 
-                      : `Current Script Position: ${storedNodeData?.text?.substring(0, 30)}${storedNodeData?.text?.length > 30 ? '...' : ''}`
-                    }
-                  </h3>
-                  {!isPlaying && storedNodeData && (
-                    <div className="position-indicator" style={{ 
-                      fontSize: '12px', 
-                      color: '#aaa', 
-                      marginTop: '4px',
-                      backgroundColor: 'rgba(0,0,0,0.1)',
-                      padding: '4px 8px',
-                      borderRadius: '4px'
-                    }}>
-                      {storedNodeData.index !== undefined && `Position: ${storedNodeData.index + 1}/${storedNodeData.totalDialogs || '?'}`}
-                    </div>
-                  )}
-                </div>
+                {/* Preview header removed to create cleaner UI */}
                 {selectedScript ? (
                   <>
                     <PreviewComponent

@@ -44,26 +44,41 @@ const PreviewComponent = React.forwardRef((props, ref) => {
         return null;
       }
       
-      // Get all elements that could be at the top of the viewport
-      const allElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
+      // Get all elements that could be at the top of the viewport - prioritize dialog elements
+      const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+      // Also get other text elements as fallback
+      const textElements = iframe.contentDocument.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div:not(:has(*))');
+      
+      // Combine the elements, prioritizing dialog elements
+      const allElements = [...dialogElements, ...textElements];
       
       // Get current scroll position
       const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
       
-      // Add a small offset from top
-      const viewportTopPosition = scrollTop + 80; // Match tracking line position
+      // Add offset from top to match our new tracking line position
+      const viewportTopPosition = scrollTop + 50; // Match tracking line position
       
       // Find the element closest to our tracking line
       let closestElement = null;
       let closestDistance = Infinity;
       
       allElements.forEach(element => {
+        // Skip empty elements
+        if (!element.textContent.trim()) return;
+        
         const rect = element.getBoundingClientRect();
         const elementTop = rect.top + scrollTop;
         const distance = Math.abs(elementTop - viewportTopPosition);
         
-        if (distance < closestDistance && element.textContent.trim()) {
-          closestDistance = distance;
+        // Calculate a priority score - dialog elements get priority
+        let priorityScore = distance;
+        if (element.getAttribute('data-type') === 'dialog') {
+          // Give dialog elements a boost in priority (subtract 1000 from distance)
+          priorityScore -= 1000;
+        }
+        
+        if (priorityScore < closestDistance) {
+          closestDistance = priorityScore;
           closestElement = element;
         }
       });
@@ -91,6 +106,35 @@ const PreviewComponent = React.forwardRef((props, ref) => {
       // Find the element at current position
       const element = findElementAtViewportTop();
       if (element) {
+        // Clear any previous highlight
+        const iframe = containerRef.current.querySelector('iframe');
+        if (iframe && iframe.contentDocument) {
+          // Remove previous highlight class from all elements
+          iframe.contentDocument.querySelectorAll('.current-line-highlight').forEach(el => {
+            el.classList.remove('current-line-highlight');
+          });
+          
+          // Add subtle highlight to current element if indicator is showing
+          if (showIndicator) {
+            // Add highlight class
+            element.classList.add('current-line-highlight');
+            
+            // Add style for highlight if it doesn't exist
+            if (!iframe.contentDocument.getElementById('highlight-style')) {
+              const style = iframe.contentDocument.createElement('style');
+              style.id = 'highlight-style';
+              style.textContent = `
+                .current-line-highlight {
+                  background-color: rgba(255, 0, 0, 0.08) !important;
+                  box-shadow: 0 0 10px rgba(255, 0, 0, 0.1) !important;
+                  outline: 1px dashed rgba(255, 0, 0, 0.3) !important;
+                }
+              `;
+              iframe.contentDocument.head.appendChild(style);
+            }
+          }
+        }
+        
         setCurrentPosition({
           element: element,
           text: element.textContent.trim().substring(0, 50)
@@ -113,12 +157,18 @@ const PreviewComponent = React.forwardRef((props, ref) => {
             // Only send position update if not already playing
             // This prevents loops during playback
             if (!isPlaying) {
-              // Send enhanced position data
+              // Send enhanced position data with better element identification
               onPositionChange({
                 position: percentage,
                 text: element.textContent.trim(),
                 tag: element.tagName,
-                absolutePosition: scrollTop
+                type: element.getAttribute('data-type') || element.tagName.toLowerCase(),
+                absolutePosition: scrollTop,
+                attributes: {
+                  class: element.getAttribute('class'),
+                  id: element.getAttribute('id'),
+                  dataType: element.getAttribute('data-type')
+                }
               });
             }
           }
@@ -243,14 +293,16 @@ const PreviewComponent = React.forwardRef((props, ref) => {
       {showIndicator && (
         <div className="tracking-line" style={{
           position: 'absolute',
-          top: '80px', // Position at top of viewport plus offset
+          top: '50px', // Positioned higher for better visibility
           left: '0',
           right: '0',
-          height: '3px',
-          backgroundColor: 'rgba(255, 0, 0, 0.7)',
+          height: '2px',
+          backgroundColor: 'rgba(255, 0, 0, 0.9)',
           zIndex: 1000,
           pointerEvents: 'none', // Don't interfere with mouse events
-          boxShadow: '0 0 5px 1px rgba(255, 0, 0, 0.5)'
+          boxShadow: '0 0 8px 2px rgba(255, 0, 0, 0.7)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.3)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.3)'
         }} />
       )}
       
@@ -270,17 +322,20 @@ const PreviewComponent = React.forwardRef((props, ref) => {
           position: 'absolute',
           top: '10px',
           right: '10px',
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: showIndicator ? 'rgba(255, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.7)',
           color: 'white',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          border: '1px solid rgba(255, 255, 255, 0.5)',
           borderRadius: '4px',
-          padding: '4px 8px',
-          fontSize: '12px',
+          padding: '5px 10px',
+          fontSize: '13px',
+          fontWeight: 'bold',
           cursor: 'pointer',
-          zIndex: 1001
+          zIndex: 1001,
+          boxShadow: '0 0 5px rgba(0, 0, 0, 0.5)',
+          transition: 'background-color 0.3s ease'
         }}
       >
-        {showIndicator ? 'Hide' : 'Show'} Tracking
+        {showIndicator ? '❌ Hide Marker' : '⏺️ Show Marker'}
       </button>
     </div>
   );
