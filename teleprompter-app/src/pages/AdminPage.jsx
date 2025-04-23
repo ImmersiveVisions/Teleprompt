@@ -1531,30 +1531,72 @@ const AdminPage = () => {
             </button>
             
             {/* Speed Control */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span>Speed:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 'bold' }}>Speed:</span>
               <button 
                 onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              >-</button>
-              <span>{speed.toFixed(2)}x</span>
+                style={{ 
+                  padding: '6px 15px', 
+                  border: '1px solid #ccc', 
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#f0f0f0',
+                  cursor: 'pointer'
+                }}
+              >−</button>
+              <span style={{ 
+                fontSize: '16px', 
+                fontWeight: 'bold', 
+                minWidth: '60px', 
+                textAlign: 'center' 
+              }}>{speed.toFixed(2)}x</span>
               <button 
                 onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{ 
+                  padding: '6px 15px', 
+                  border: '1px solid #ccc', 
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#f0f0f0',
+                  cursor: 'pointer'
+                }}
               >+</button>
             </div>
             
             {/* Font Size Control */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span>Font:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 'bold' }}>Font:</span>
               <button 
                 onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
-              >-</button>
-              <span>{fontSize}px</span>
+                style={{ 
+                  padding: '6px 15px', 
+                  border: '1px solid #ccc', 
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#f0f0f0',
+                  cursor: 'pointer'
+                }}
+              >−</button>
+              <span style={{ 
+                fontSize: '16px', 
+                fontWeight: 'bold', 
+                minWidth: '60px', 
+                textAlign: 'center' 
+              }}>{fontSize}px</span>
               <button 
                 onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-                style={{ padding: '2px 8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                style={{ 
+                  padding: '6px 15px', 
+                  border: '1px solid #ccc', 
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#f0f0f0',
+                  cursor: 'pointer'
+                }}
               >+</button>
             </div>
             
