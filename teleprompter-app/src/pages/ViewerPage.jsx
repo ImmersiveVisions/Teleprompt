@@ -515,7 +515,7 @@ const ViewerPage = ({ directScriptId }) => {
           </div>
         )}
         
-        {/* Wrapper for applying flip transform */}
+        {/* Wrapper for applying flip transform - only apply transform here, not in ViewerComponent */}
         <div style={{
           width: '100%',
           height: '100%',
@@ -531,7 +531,7 @@ const ViewerPage = ({ directScriptId }) => {
             direction={direction}
             fontSize={fontSize} // Larger font size for the viewer
             aspectRatio={aspectRatio}
-            isFlipped={isFlipped}
+            isFlipped={false} // Always pass false here to prevent double transformation
           />
         </div>
       </div>

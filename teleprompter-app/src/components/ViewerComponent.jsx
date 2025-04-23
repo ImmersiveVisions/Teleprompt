@@ -95,11 +95,11 @@ const ViewerComponent = React.forwardRef((props, ref) => {
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
-        transform: isFlipped ? 'scaleX(-1)' : 'none',
         transition: 'transform 0.3s ease'
+        // Removed transform: isFlipped ? 'scaleX(-1)' : 'none' to prevent double transformation
       }}
     >
-      {/* Mirror mode indicator */}
+      {/* Mirror mode indicator - parent component controls isFlipped state */}
       {isFlipped && (
         <div style={{
           position: 'absolute',
@@ -110,8 +110,7 @@ const ViewerComponent = React.forwardRef((props, ref) => {
           padding: '5px 10px',
           borderRadius: '4px',
           zIndex: 100,
-          fontSize: '12px',
-          transform: 'scaleX(-1)' // Flip back so text is readable
+          fontSize: '12px'
         }}>
           MIRROR MODE
         </div>
