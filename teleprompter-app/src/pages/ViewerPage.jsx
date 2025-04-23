@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { registerMessageHandler } from '../services/websocket';
 import fileSystemRepository from '../database/fileSystemRepository';
-import TeleprompterViewer from '../components/TeleprompterViewer'; 
+import ViewerComponent from '../components/ViewerComponent'; 
 import '../styles.css';
 
 const ViewerPage = ({ directScriptId }) => {
@@ -20,7 +20,7 @@ const ViewerPage = ({ directScriptId }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
-  const [fontSize, setFontSize] = useState(32);
+  const [fontSize, setFontSize] = useState(46); // Start with a larger font size for better readability
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
   const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
   
@@ -522,15 +522,16 @@ const ViewerPage = ({ directScriptId }) => {
           transform: isFlipped ? 'scaleX(-1)' : 'none',
           transition: 'transform 0.3s ease'
         }}>
-          {/* Use the original TeleprompterViewer but disable its position sending */}
-          <TeleprompterViewer 
+          {/* Use the dedicated one-way ViewerComponent that never sends messages back */}
+          <ViewerComponent 
             ref={viewerRef}
             script={currentScript}
             isPlaying={isPlaying}
             speed={speed}
             direction={direction}
-            fontSize={fontSize}
+            fontSize={fontSize} // Larger font size for the viewer
             aspectRatio={aspectRatio}
+            isFlipped={isFlipped}
           />
         </div>
       </div>

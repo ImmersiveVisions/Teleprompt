@@ -6,7 +6,7 @@ import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
-import TeleprompterViewer from '../components/TeleprompterViewer';
+import PreviewComponent from '../components/PreviewComponent';
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import ScriptUploadModal from '../components/ScriptUploadModal';
 import SearchModal from '../components/SearchModal';
@@ -1449,6 +1449,16 @@ const AdminPage = () => {
     setBluetoothDeviceName(null);
   };
   
+  // Handle position changes from the preview component
+  const handlePreviewPositionChange = (data) => {
+    // Only send position updates if we're not in playback mode
+    // This prevents loops during auto-scrolling
+    if (!isPlaying) {
+      // Send the position data to other clients
+      sendSearchPosition(data);
+    }
+  };
+  
   return (
     <div className="admin-page">
       <header className="admin-header">
@@ -1894,15 +1904,16 @@ const AdminPage = () => {
                 </div>
                 {selectedScript ? (
                   <>
-                    <TeleprompterViewer
+                    <PreviewComponent
                       ref={scriptPlayerRef}
                       key={`preview-${selectedScript.id}`} 
                       script={selectedScript}
                       isPlaying={isPlaying}
                       speed={speed}
                       direction={direction}
-                      fontSize={fontSize} // Use the actual font size without reduction
+                      fontSize={fontSize} // Use a smaller preview font size
                       aspectRatio={aspectRatio}
+                      onPositionChange={handlePreviewPositionChange}
                     />
                   </>
                 ) : (
