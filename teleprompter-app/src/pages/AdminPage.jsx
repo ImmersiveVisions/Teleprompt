@@ -1477,7 +1477,7 @@ const AdminPage = () => {
             display: 'flex', 
             flexWrap: 'wrap', 
             gap: '10px', 
-            backgroundColor: '#f5f5f5', 
+            backgroundColor: '#A9A9A9', 
             padding: '10px', 
             borderRadius: '5px',
             marginBottom: '10px'
@@ -1700,8 +1700,13 @@ const AdminPage = () => {
         <div className="script-viewer-panel">
           {selectedScript ? (
             <>
-              <div className="script-header">
-                <h2>{selectedScript.title}</h2>
+              <div className="script-header" style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '5px 0'
+              }}>
+                {/* Aspect Ratio Controls */}
                 <div className="aspect-ratio-selector">
                   <div className="radio-group">
                     <label className={aspectRatio === '16/9' ? 'selected' : ''}>
@@ -1726,12 +1731,14 @@ const AdminPage = () => {
                     </label>
                   </div>
                 </div>
-              </div>
-              
-              
-              <div className="search-navigation">
-                <h3>Search Script</h3>
-                <div className="search-container">
+                
+                {/* Search Controls */}
+                <div className="search-container" style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '10px',
+                  maxWidth: '300px'
+                }}>
                   <input
                     type="text"
                     className="search-input"
@@ -1739,12 +1746,12 @@ const AdminPage = () => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && executeSearch()}
+                    style={{ width: '180px' }}
                   />
-                  <span className="search-icon">🔍</span>
-                  <button className="search-button" onClick={executeSearch}>
-                    Search
+                  <button className="search-button" onClick={executeSearch} style={{ whiteSpace: 'nowrap' }}>
+                    🔍 Search
                     {searchResults.length > 0 && (
-                      <span className="search-count">{searchResults.length}</span>
+                      <span className="search-count" style={{ marginLeft: '5px' }}>{searchResults.length}</span>
                     )}
                   </button>
                 </div>
