@@ -19,7 +19,7 @@ const PreviewComponent = React.forwardRef((props, ref) => {
     isPlaying,
     speed = 1,
     direction = 'forward',
-    fontSize = 18, // Smaller size for admin preview
+    fontSize = 12, // Smaller size for admin preview
     aspectRatio = '16/9',
     onPositionChange = null
   } = props;

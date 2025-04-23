@@ -1,12 +1,14 @@
 // src/pages/AdminPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import ScriptViewer from '../components/ScriptViewer';
-import ScriptPlayer from '../components/ScriptPlayer';
+import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
+import PreviewComponent from '../components/PreviewComponent';
 import ScriptEntryModal from '../components/ScriptEntryModal';
+import ScriptUploadModal from '../components/ScriptUploadModal';
 import SearchModal from '../components/SearchModal';
 import '../styles.css';
 
@@ -15,6 +17,7 @@ const AdminPage = () => {
   const [selectedScriptId, setSelectedScriptId] = useState(null);
   const [selectedScript, setSelectedScript] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
@@ -33,9 +36,17 @@ const AdminPage = () => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
+  const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
   const [storedNodeData, setStoredNodeData] = useState(null);
   // Removed currentChapter state
   // Removed currentPosition state since we're disabling position updates
+  
+  // State for tracking connected clients
+  const [connectedClients, setConnectedClients] = useState({
+    admin: 0,
+    viewer: 0,
+    remote: 0
+  });
   
   // Load scripts and QR code URLs on component mount
   useEffect(() => {
@@ -177,7 +188,7 @@ const AdminPage = () => {
     
     if (isHtmlScript) {
       // For HTML scripts, we need to search the iframe content
-      const iframe = document.querySelector('#html-script-frame');
+      const iframe = document.querySelector('#teleprompter-frame');
       console.log('Search in HTML: iframe element found:', !!iframe);
       
       if (!iframe) {
@@ -391,7 +402,7 @@ const AdminPage = () => {
   };
   
   // Reference to the script player component
-  const scriptPlayerRef = React.useRef(null);
+  const scriptPlayerRef = useRef(null);
   
   // Set up the position sending functionality
   useEffect(() => {
@@ -446,8 +457,14 @@ const AdminPage = () => {
     
     // Also set the callback on the ref if it's available
     if (scriptPlayerRef.current) {
-      console.log('⭐ [POSITION DEBUG] Setting sendPosition on scriptPlayerRef.current');
-      scriptPlayerRef.current.sendPosition = handlePositionUpdate;
+      console.log('⭐ [POSITION DEBUG] Setting position handler on scriptPlayerRef.current');
+      // Support both new and legacy APIs
+      if (typeof scriptPlayerRef.current.setPositionHandler === 'function') {
+        scriptPlayerRef.current.setPositionHandler(handlePositionUpdate);
+      } else {
+        // Legacy API - assign method directly
+        scriptPlayerRef.current.sendPosition = handlePositionUpdate;
+      }
       
       // Debug current state of the ref
       console.log('⭐ [POSITION DEBUG] AdminPage: Current ref state:', {
@@ -463,18 +480,19 @@ const AdminPage = () => {
     // Set up a periodic position capture for rollback during playback
     let positionCaptureInterval = null;
     
-    // Start or stop the position capture based on play state
-    if (isPlaying && selectedScript) {
-      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback during playback');
+    // Start position capture when a script is selected
+    if (selectedScript) {
+      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback and position tracking');
       
-      // Capture the position every 3 seconds during playback
+      // Capture the position every 3 seconds
       positionCaptureInterval = setInterval(() => {
         try {
-          // Only capture if still playing
-          if (!isPlaying) return;
+          // Capture regardless of play state to ensure position is always tracked
+          // when debugging check play state
+          console.log('⭐ [POSITION DEBUG] Capturing position, play state:', isPlaying);
           
           // Get the iframe
-          const iframe = document.querySelector('#html-script-frame');
+          const iframe = document.querySelector('#teleprompter-frame');
           if (iframe && iframe.contentWindow && iframe.contentDocument) {
             // Try to find the current visible dialog
             const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
@@ -543,10 +561,23 @@ const AdminPage = () => {
     return () => {
       // Clean up global callback
       delete window._sendPositionCallback;
+      delete window._teleprompterPositionHandler;
       
       // Clean up interval
       if (positionCaptureInterval) {
         clearInterval(positionCaptureInterval);
+        positionCaptureInterval = null;
+      }
+      
+      // Clean up any highlight animations
+      try {
+        const iframe = document.querySelector('#teleprompter-frame');
+        if (iframe && iframe.contentDocument) {
+          const highlights = iframe.contentDocument.querySelectorAll('.teleprompter-highlight');
+          highlights.forEach(el => el.parentNode?.removeChild(el));
+        }
+      } catch (e) {
+        console.error('Error cleaning up highlights:', e);
       }
     };
   }, [selectedScript, isPlaying]);
@@ -571,7 +602,7 @@ const AdminPage = () => {
       }
       
       // Get the iframe
-      const iframe = document.querySelector('#html-script-frame');
+      const iframe = document.querySelector('#teleprompter-frame');
       if (!iframe || !iframe.contentWindow) {
         console.error('Cannot jump - iframe not accessible');
         return;
@@ -674,8 +705,13 @@ const AdminPage = () => {
       })));
       
       // If we have a direct reference to the player, use it
-      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-        scriptPlayerRef.current.jumpToPosition(position);
+      if (scriptPlayerRef.current) {
+        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+        if (scriptPlayerRef.current.scrollToNode) {
+          scriptPlayerRef.current.scrollToNode({ position, text: result.line });
+        } else if (scriptPlayerRef.current.jumpToPosition) {
+          scriptPlayerRef.current.jumpToPosition(position);
+        }
       }
       
       // Calculate the position as a percentage of the total script length
@@ -784,6 +820,32 @@ const AdminPage = () => {
     setIsModalOpen(true);
   };
   
+  // Handle uploading a script file
+  const handleUploadScript = () => {
+    setIsUploadModalOpen(true);
+  };
+  
+  // Handle script file upload submission
+  const handleFileUpload = async (file) => {
+    try {
+      console.log("Uploading script file:", file.name);
+      const uploadedScript = await fileSystemRepository.uploadScript(file);
+      
+      // Reload scripts to refresh the list
+      await loadScripts();
+      
+      // Select the newly uploaded script
+      if (uploadedScript && uploadedScript.id) {
+        handleScriptSelect(uploadedScript.id);
+      }
+      
+      return uploadedScript;
+    } catch (error) {
+      console.error("Error uploading script:", error);
+      throw error;
+    }
+  };
+  
   // Handle editing an existing script
   const handleEditScript = () => {
     if (selectedScript) {
@@ -845,30 +907,41 @@ const AdminPage = () => {
     }
   };
   
-  // Handle deleting a script
-  const handleDeleteScript = async () => {
-    if (!selectedScriptId) return;
+  // State for delete script modal
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [scriptToDelete, setScriptToDelete] = useState(null);
+  
+  // Handle opening the delete script modal
+  const handleDeleteScript = () => {
+    setIsDeleteModalOpen(true);
+  };
+  
+  // Handle actual script deletion
+  const confirmDeleteScript = async (scriptId) => {
+    if (!scriptId) return;
     
-    if (window.confirm(`Are you sure you want to delete the script "${selectedScript?.title}"?`)) {
-      try {
-        await fileSystemRepository.deleteScript(selectedScriptId);
-        
-        // Reload scripts
-        const allScripts = await fileSystemRepository.getAllScripts();
-        setScripts(allScripts);
-        
-        // Select the first script or clear the selection
-        if (allScripts.length > 0) {
-          handleScriptSelect(allScripts[0].id);
-        } else {
-          setSelectedScriptId(null);
-          setSelectedScript(null);
-        }
-      } catch (error) {
-        console.error('Error deleting script:', error);
-        alert('Failed to delete script: ' + error.message);
+    try {
+      await fileSystemRepository.deleteScript(scriptId);
+      
+      // Reload scripts
+      const allScripts = await fileSystemRepository.getAllScripts();
+      setScripts(allScripts);
+      
+      // Select the first script or clear the selection
+      if (allScripts.length > 0) {
+        handleScriptSelect(allScripts[0].id);
+      } else {
+        setSelectedScriptId(null);
+        setSelectedScript(null);
       }
+    } catch (error) {
+      console.error('Error deleting script:', error);
+      alert('Failed to delete script: ' + error.message);
     }
+    
+    // Close the modal
+    setIsDeleteModalOpen(false);
+    setScriptToDelete(null);
   };
   
   // Handle state updates from WebSocket
@@ -877,12 +950,22 @@ const AdminPage = () => {
       const { data } = message;
       console.log('AdminPage: Received state update:', data);
       
-      // Update local control states
-      setIsPlaying(data.isPlaying);
+      // Always apply play/pause state regardless of source
+      if (data.isPlaying !== undefined) {
+        console.log('AdminPage: Applying play state from network:', data.isPlaying);
+        setIsPlaying(data.isPlaying);
+      }
       setSpeed(data.speed);
       setDirection(data.direction);
       setFontSize(data.fontSize);
       if (data.aspectRatio) setAspectRatio(data.aspectRatio);
+      if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
+      
+      // Update connected clients state if it exists in the data
+      if (data.connectedClients) {
+        console.log('AdminPage: Updating connected clients:', data.connectedClients);
+        setConnectedClients(data.connectedClients);
+      }
       
       // No need to handle rollback button state anymore
       // Removed currentChapter update
@@ -931,43 +1014,95 @@ const AdminPage = () => {
     }
   };
   
-  // Teleprompter control functions
-  const togglePlay = () => {
-    // Only toggle play if we have a script selected
-    if (!selectedScript) {
-      console.error('Cannot play - no script selected');
-      alert('Please select a script first');
+  // Explicit play function
+  const handlePlay = () => {
+    // Only play if not already playing and we have a script
+    if (isPlaying || !selectedScript) {
+      console.error('Cannot play - already playing or no script selected');
+      if (!selectedScript) alert('Please select a script first');
       return;
     }
     
-    const newState = !isPlaying;
-    console.log('PLAY STATE CHANGE - setting isPlaying to:', newState, 'from:', isPlaying);
+    console.log('DIRECT PLAY COMMAND - NO MESSAGE LOOPS');
     
-    // Always store the current node for rollback, regardless of play state
-    // This ensures rollback button always works even during playback
+    // Set local state first
+    setIsPlaying(true);
+    
+    // Inform the player that auto-scrolling is starting
+    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
+      console.log("[ANIMATION] Notifying ScriptPlayer that animation is starting");
+      scriptPlayerRef.current.setScrollAnimating(true);
+    }
+
+// Store current position for rollback when play is pressed
+    storeCurrentPositionForRollback();
+
+    // Send WebSocket message with special metadata
+    sendControlMessage('PLAY', {
+      sourceId: "admin_direct_" + Date.now(),
+      initiatingSender: false,
+      noLoop: true
+    });
+    
+  };
+  
+  // Explicit pause function
+  const handlePause = () => {
+    // Only pause if currently playing
+    if (!isPlaying) {
+      console.error('Cannot pause - already paused');
+      return;
+    }
+    
+    console.log('DIRECT PAUSE COMMAND - NO MESSAGE LOOPS');
+    
+    // Set local state first
+    setIsPlaying(false);
+    
+    // Inform the player that auto-scrolling is stopping
+    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
+      console.log("[ANIMATION] Notifying ScriptPlayer that animation is stopping");
+      scriptPlayerRef.current.setScrollAnimating(false);
+    }
+    
+    // Send WebSocket message with special metadata 
+    sendControlMessage('PAUSE', {
+      sourceId: "admin_direct_" + Date.now(), 
+      initiatingSender: true,
+      noLoop: true
+    });
+  };
+  
+  // Store current position for rollback
+  const storeCurrentPositionForRollback = () => {
+    try {
       // Get the iframe or content container
-      const iframe = document.querySelector('#html-script-frame');
-      if (iframe && iframe.contentWindow) {
-        try {
-          console.log('Finding dialog node for rollback storage');
-          
-          // Get current scroll position for viewport calculations
-          const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
-          const viewportTop = scrollTop;
-          const viewportHeight = iframe.contentWindow.innerHeight;
-          const viewportCenter = viewportTop + (viewportHeight / 2);
-          
-          // Capture all dialog elements for context
-          const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-          console.log(`Found ${dialogElements.length} dialog elements with data-type attribute`);
-          
-          // If we have no dialog elements, we can't create reliable rollback data
-          if (dialogElements.length === 0) {
-            console.warn('[ROLLBACK] No dialog elements found, cannot create reliable rollback data');
-            setStoredNodeData(null);
-            return;
-          }
-          
+      const iframe = document.querySelector('#teleprompter-frame');
+      if (iframe && iframe.contentWindow && iframe.contentDocument) {
+        console.log('Finding dialog node for rollback storage');
+        
+        // Get current scroll position for viewport calculations
+        const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
+        const viewportTop = scrollTop;
+        const viewportHeight = iframe.contentWindow.innerHeight;
+        const viewportCenter = viewportTop + (viewportHeight / 2);
+        
+        // Update preview header to show position being captured
+        const previewHeader = document.querySelector('.preview-header h3');
+        if (previewHeader && !isPlaying) {
+          previewHeader.style.transition = 'color 0.3s ease';
+          previewHeader.style.color = '#4CAF50';  // Green to indicate capture
+          setTimeout(() => {
+            previewHeader.style.color = '';  // Reset color
+          }, 500);
+        }
+        
+        // Capture all dialog elements for context
+        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+        console.log(`Found ${dialogElements.length} dialog elements with data-type attribute`);
+        
+        // If we have dialog elements, find the best one to store
+        if (dialogElements.length > 0) {
           // Find the currently visible dialog - the one closest to viewport center
           let currentDialogElement = null;
           let currentDialogDistance = Infinity;
@@ -1054,40 +1189,68 @@ const AdminPage = () => {
             console.log('[ROLLBACK] Using first dialog for rollback:', nodeData);
             setStoredNodeData(nodeData);
           }
-        } catch (e) {
-          console.error('Error finding node for rollback:', e);
+        } else {
+          console.warn('[ROLLBACK] No dialog elements found, cannot create reliable rollback data');
           setStoredNodeData(null);
         }
+        
+        // Explicitly try to find the current dialog
+        try {
+          console.log("[PLAYBACK] Attempting to store starting position for playback");
+          // Find all dialog elements in the current view
+          const allDialogs = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+          if (allDialogs.length > 0) {
+            // Get the current scroll position
+            const scrollY = iframe.contentWindow.scrollY || 0;
+            
+            // Find which dialog is closest to the current view
+            let closestDialog = null;
+            let closestDistance = Infinity;
+            let dialogIndex = -1;
+            
+            allDialogs.forEach((dialog, idx) => {
+              const rect = dialog.getBoundingClientRect();
+              // Calculate absolute position
+              const dialogTop = rect.top + scrollY;
+              // Find distance to current scroll position
+              const distance = Math.abs(dialogTop - scrollY - 100); // 100px buffer from top
+              
+              if (distance < closestDistance) {
+                closestDistance = distance;
+                closestDialog = dialog;
+                dialogIndex = idx;
+              }
+            });
+            
+            if (closestDialog) {
+              console.log("[PLAYBACK] Explicitly storing position at playback start, dialog:", 
+                closestDialog.textContent.substring(0, 30));
+              
+              // Store the exact starting position data including the dialog index
+              const startPositionData = {
+                type: 'dialog',
+                text: closestDialog.textContent.trim().substring(0, 50),
+                index: dialogIndex,
+                totalDialogs: allDialogs.length,
+                fromRollback: true,
+                attributes: {
+                  dataType: 'dialog'
+                }
+              };
+              
+              // Store it for rollback
+              setStoredNodeData(startPositionData);
+              console.log("[PLAYBACK] Stored starting position at index:", dialogIndex);
+            }
+          }
+        } catch (posError) {
+          console.error("[PLAYBACK] Error storing starting position:", posError);
+        }
       }
+    } catch (e) {
+      console.error('Error in rollback handling:', e);
+      setStoredNodeData(null);
     }
-    
-    // Update local state first
-    setIsPlaying(newState);
-    
-    // Inform the ScriptPlayer that auto-scrolling is starting/stopping
-    // This prevents user scroll events from being detected during auto-scroll
-    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
-      scriptPlayerRef.current.setScrollAnimating(newState);
-    }
-    
-    // Log state after setting for debugging
-    setTimeout(() => {
-      console.log('Play state check after 100ms:', {
-        isPlayingStateNow: isPlaying,
-        shouldBe: newState
-      });
-    }, 100);
-    
-    // Then send message to all clients
-    console.log('Sending control message:', newState ? 'PLAY' : 'PAUSE');
-    sendControlMessage(newState ? 'PLAY' : 'PAUSE');
-    
-    // Log current state for debugging
-    console.log('Play state after toggle:', {
-      isPlaying: newState,
-      scriptId: selectedScriptId,
-      scriptTitle: selectedScript.title
-    });
   };
   
   const changeSpeed = (newSpeed) => {
@@ -1111,6 +1274,12 @@ const AdminPage = () => {
     sendControlMessage('SET_ASPECT_RATIO', newRatio);
   };
   
+  const toggleMirrorMode = () => {
+    const newFlippedState = !isFlipped;
+    setIsFlipped(newFlippedState);
+    sendControlMessage('SET_FLIPPED', newFlippedState);
+  };
+  
   // Handle rollback to stored node
   const handleRollback = () => {
     // If we're playing, pause playback first
@@ -1120,61 +1289,6 @@ const AdminPage = () => {
       sendControlMessage('PAUSE');
     }
     
-    // If we have no stored node data but we're in a playable state,
-    // try to capture the current position before rollback
-    if (!storedNodeData && selectedScript) {
-      console.log('[ROLLBACK] No stored node data, trying to capture current position');
-      
-      // Try to find current position from the iframe
-      const iframe = document.querySelector('#html-script-frame');
-      if (iframe && iframe.contentWindow && iframe.contentDocument) {
-        try {
-          // Look for dialog elements
-          const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-          if (dialogElements.length > 0) {
-            // Use the first dialog as a fallback
-            const firstDialog = dialogElements[0];
-            const nodeData = {
-              type: firstDialog.getAttribute('data-type') || firstDialog.tagName.toLowerCase(),
-              text: firstDialog.textContent.trim().substring(0, 50),
-              index: 0,
-              fromRollback: true,
-              attributes: {
-                dataType: firstDialog.getAttribute('data-type')
-              }
-            };
-            console.log('[ROLLBACK] Captured emergency node data:', nodeData);
-            setStoredNodeData(nodeData);
-          }
-        } catch (e) {
-          console.error('[ROLLBACK] Error capturing emergency position:', e);
-        }
-      }
-    }
-    
-    // If we still don't have node data, fall back to beginning of script
-    if (!storedNodeData) {
-      console.log('[ROLLBACK] No stored node data for rollback, using beginning of script');
-      
-      // If no stored node, just go to the beginning
-      const defaultData = {
-        position: 0,
-        fromRollback: true,
-        text: "Beginning of script"
-      };
-      
-      // Apply to local preview first
-      if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-        scriptPlayerRef.current.jumpToPosition(defaultData);
-      }
-      
-      // Send WebSocket message to update all clients
-      sendSearchPosition(defaultData);
-      return;
-    }
-    
-    console.log('Rolling back to stored node:', storedNodeData);
-    
     // Add visual feedback first
     const previewHeader = document.querySelector('.preview-header h3');
     let originalText = '';
@@ -1183,79 +1297,129 @@ const AdminPage = () => {
       previewHeader.textContent = 'Rolling back to previous dialog...';
     }
     
-    // Create the rollback data with the rollback flag
-    const rollbackData = {
-      ...storedNodeData,
-      fromRollback: true,  // Mark this as coming from rollback
-      timestamp: Date.now() // Add timestamp to ensure uniqueness for each rollback
-    };
-    
-    console.log('Sending node data for rollback:', rollbackData);
-    
-    // IMPORTANT: Apply to local preview FIRST
-    if (scriptPlayerRef.current && scriptPlayerRef.current.jumpToPosition) {
-      console.log('Applying rollback to local preview via scriptPlayerRef');
-      scriptPlayerRef.current.jumpToPosition(rollbackData);
-    } else {
-      console.warn('scriptPlayerRef not available for local preview rollback');
+    // Check if we have stored data to use for rollback
+    if (storedNodeData) {
+      console.log('[ROLLBACK] Using stored position data:', storedNodeData);
       
-      // Try alternate method to find the preview iframe
-      try {
-        const previewIframe = document.querySelector('.preview-container iframe');
-        if (previewIframe && previewIframe.contentDocument) {
-          console.log('Found preview iframe, attempting direct rollback');
-          
-          // Find elements matching the stored node data
-          if (rollbackData.attributes && rollbackData.attributes.dataType) {
-            const elements = previewIframe.contentDocument.querySelectorAll(
-              `[data-type="${rollbackData.attributes.dataType}"]`
-            );
-            
-            if (elements.length > 0) {
-              console.log(`Found ${elements.length} elements with data-type=${rollbackData.attributes.dataType}`);
-              
-              // Try to find one matching the text
-              let matchingElement = null;
-              if (rollbackData.text) {
-                for (const element of elements) {
-                  if (element.textContent.includes(rollbackData.text)) {
-                    matchingElement = element;
-                    break;
-                  }
-                }
-              }
-              
-              // If no specific match, use the first element
-              if (!matchingElement && elements.length > 0) {
-                matchingElement = elements[0];
-              }
-              
-              // Scroll the element into view
-              if (matchingElement) {
-                matchingElement.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'center'
-                });
-                
-                // Highlight for visibility
-                const originalBg = matchingElement.style.backgroundColor;
-                matchingElement.style.backgroundColor = '#ff6600';
-                setTimeout(() => {
-                  matchingElement.style.backgroundColor = originalBg;
-                }, 2000);
-              }
-            }
-          }
+      // Create the rollback data with the rollback flag
+      const rollbackData = {
+        ...storedNodeData,
+        fromRollback: true,
+        timestamp: Date.now() // Add timestamp to ensure uniqueness 
+      };
+      
+      // Apply to local preview first
+      if (scriptPlayerRef.current) {
+        console.log('[ROLLBACK] Applying to local preview via scriptPlayerRef');
+        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+        if (scriptPlayerRef.current.scrollToNode) {
+          scriptPlayerRef.current.scrollToNode(rollbackData);
+        } else if (scriptPlayerRef.current.jumpToPosition) {
+          scriptPlayerRef.current.jumpToPosition(rollbackData);
         }
-      } catch (e) {
-        console.error('Failed to perform direct rollback on preview:', e);
+      }
+      
+      // Send to all clients
+      sendSearchPosition(rollbackData);
+      
+      // Reset visual feedback
+      if (previewHeader) {
+        setTimeout(() => {
+          previewHeader.textContent = originalText;
+        }, 800);
+      }
+      
+      return;
+    }
+    
+    // If no stored data is available, try to find the current dialog
+    console.log('[ROLLBACK] No stored node data, finding first dialog');
+    
+    // Find the iframe
+    const iframe = document.querySelector('#teleprompter-frame');
+    if (iframe && iframe.contentDocument) {
+      try {
+        // Get all dialog elements
+        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
+        console.log(`[ROLLBACK] Found ${dialogElements.length} dialog elements`);
+        
+        if (dialogElements.length > 0) {
+          // Use the first dialog as a default
+          const firstDialog = dialogElements[0];
+          
+          // Create node data
+          const defaultData = {
+            type: 'dialog',
+            text: firstDialog.textContent.trim().substring(0, 50),
+            index: 0,
+            totalDialogs: dialogElements.length,
+            fromRollback: true,
+            attributes: {
+              dataType: 'dialog'
+            }
+          };
+          
+          console.log('[ROLLBACK] Using first dialog:', defaultData);
+          
+          // Apply to local preview
+          if (scriptPlayerRef.current) {
+            // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+            if (scriptPlayerRef.current.scrollToNode) {
+              scriptPlayerRef.current.scrollToNode(defaultData);
+            } else if (scriptPlayerRef.current.jumpToPosition) {
+              scriptPlayerRef.current.jumpToPosition(defaultData);
+            }
+          } else {
+            // Scroll directly if needed
+            firstDialog.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }
+          
+          // Send to all clients
+          sendSearchPosition(defaultData);
+          
+          // Store for future use
+          setStoredNodeData(defaultData);
+          
+          // Reset visual feedback
+          if (previewHeader) {
+            setTimeout(() => {
+              previewHeader.textContent = originalText;
+            }, 800);
+          }
+          
+          return;
+        }
+      } catch (error) {
+        console.error('[ROLLBACK] Error finding dialogs:', error);
       }
     }
     
-    // THEN send WebSocket message to update all clients using SEARCH_POSITION
-    sendSearchPosition(rollbackData);
+    // Absolute last resort - go to beginning
+    console.log('[ROLLBACK] No dialogs found, going to beginning of script');
     
-    // Reset the visual feedback after a delay
+    const defaultData = {
+      position: 0,
+      fromRollback: true,
+      text: "Beginning of script"
+    };
+    
+    // Apply to local preview
+    if (scriptPlayerRef.current) {
+      // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
+      if (scriptPlayerRef.current.scrollToNode) {
+        scriptPlayerRef.current.scrollToNode(defaultData);
+      } else if (scriptPlayerRef.current.jumpToPosition) {
+        scriptPlayerRef.current.jumpToPosition(defaultData);
+      }
+    }
+    
+    // Send to all clients
+    sendSearchPosition(defaultData);
+    
+    // Reset visual feedback
     if (previewHeader) {
       setTimeout(() => {
         previewHeader.textContent = originalText;
@@ -1285,15 +1449,290 @@ const AdminPage = () => {
     setBluetoothDeviceName(null);
   };
   
+  // Handle position changes from the preview component
+  const handlePreviewPositionChange = (data) => {
+    // Only send position updates if we're not in playback mode
+    // This prevents loops during auto-scrolling
+    if (!isPlaying) {
+      // Send the position data to other clients
+      sendSearchPosition(data);
+    }
+  };
+  
   return (
     <div className="admin-page">
       <header className="admin-header">
-        <h1>Teleprompter Admin</h1>
-        <div className="nav-links">
-          <Link to="/" className="nav-link">Home</Link>
-          <Link to="/viewer" className="nav-link">Open Viewer</Link>
-          <Link to="/remote" className="nav-link">Open Remote</Link>
+        <div className="admin-header-top" style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '10px'
+        }}>
+          <h1>Teleprompter Admin</h1>
+          <div className="nav-links">
+            <Link to="/" className="nav-link">Home</Link>
+            <Link to="/viewer" className="nav-link">Open Viewer</Link>
+            <Link to="/remote" className="nav-link">Open Remote</Link>
+          </div>
         </div>
+        
+        {/* Moved teleprompter controls to header */}
+        {selectedScript && (
+          <div className="teleprompter-controls" style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '15px',
+            padding: '10px',
+            background: '#f8f8f8',
+            borderRadius: '8px',
+            marginBottom: '10px',
+            flexWrap: 'wrap'
+          }}>
+            {/* Play/Pause button */}
+            {isPlaying ? (
+              <button 
+                onClick={handlePause} 
+                className="pause-btn large-btn active"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#f44336',
+                  color: 'white',
+                  border: '2px solid #d32f2f',
+                  boxShadow: '0 0 5px rgba(244, 67, 54, 0.5)',
+                  borderRadius: '8px',
+                  position: 'relative',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  opacity: 0.15,
+                  pointerEvents: 'none',
+                  zIndex: 1
+                }}>
+                  {/* Pause Icon SVG */}
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                </div>
+                <span style={{ position: 'relative', zIndex: 2 }}>PAUSE</span>
+              </button>
+            ) : (
+              <button 
+                onClick={handlePlay} 
+                className="play-btn large-btn"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#4CAF50',
+                  color: 'white',
+                  border: '2px solid #388E3C',
+                  boxShadow: '0 0 5px rgba(76, 175, 80, 0.5)',
+                  borderRadius: '8px',
+                  position: 'relative',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  opacity: 0.15,
+                  pointerEvents: 'none',
+                  zIndex: 1
+                }}>
+                  {/* Play Icon SVG */}
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+                <span style={{ position: 'relative', zIndex: 2 }}>PLAY</span>
+              </button>
+            )}
+            
+            {/* Rollback button */}
+            <button 
+              onClick={handleRollback} 
+              className="rollback-btn"
+              style={{
+                width: '80px',
+                height: '80px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                backgroundColor: '#28a745',
+                color: 'white',
+                cursor: 'pointer',
+                border: '2px solid #28a745',
+                boxShadow: '0 0 5px rgba(40, 167, 69, 0.5)',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}
+              title="Click to return to a previous position"
+            >
+              ROLLBACK
+            </button>
+            
+            {/* Direction button */}
+            <button 
+              onClick={toggleDirection} 
+              className="direction-btn"
+              style={{
+                width: '80px',
+                height: '80px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                backgroundColor: '#2196F3',
+                color: 'white',
+                border: '2px solid #1976D2',
+                boxShadow: '0 0 5px rgba(33, 150, 243, 0.5)',
+                borderRadius: '8px'
+              }}
+            >
+              {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
+            </button>
+            
+            {/* Speed control (spinbox) */}
+            <div className="spinbox speed-spinbox" style={{ 
+              height: '80px', 
+              width: '70px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <div className="spinbox-label" style={{ fontSize: '14px' }}>Speed</div>
+              <button 
+                onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+                className="spinbox-up"
+                style={{ height: '20px', fontSize: '16px', fontWeight: 'bold', width: '40px' }}
+              >
+                +
+              </button>
+              <div className="spinbox-value" style={{ fontSize: '14px', fontWeight: 'bold' }}>{speed.toFixed(2)}x</div>
+              <button 
+                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+                className="spinbox-down"
+                style={{ height: '20px', fontSize: '16px', fontWeight: 'bold', width: '40px' }}
+              >
+                -
+              </button>
+            </div>
+            
+            {/* Font size control (spinbox) */}
+            <div className="spinbox font-spinbox" style={{ 
+              height: '80px', 
+              width: '70px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <div className="spinbox-label" style={{ fontSize: '14px' }}>Font Size</div>
+              <button 
+                onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+                className="spinbox-up"
+                style={{ height: '20px', fontSize: '16px', fontWeight: 'bold', width: '40px' }}
+              >
+                +
+              </button>
+              <div className="spinbox-value" style={{ fontSize: '14px', fontWeight: 'bold' }}>{fontSize}px</div>
+              <button 
+                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+                className="spinbox-down"
+                style={{ height: '20px', fontSize: '16px', fontWeight: 'bold', width: '40px' }}
+              >
+                -
+              </button>
+            </div>
+            
+            {/* Mirror mode toggle button */}
+            <button
+              onClick={toggleMirrorMode}
+              style={{
+                height: '80px',
+                width: '70px',
+                backgroundColor: isFlipped ? '#673AB7' : '#9E9E9E',
+                color: 'white',
+                border: isFlipped ? '2px solid #512DA8' : '2px solid #757575',
+                boxShadow: isFlipped ? '0 0 5px rgba(103, 58, 183, 0.5)' : 'none',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <div style={{
+                transform: 'scaleX(-1)',
+                fontSize: '24px',
+                marginBottom: '5px'
+              }}>
+                📱
+              </div>
+              <div>
+                {isFlipped ? 'MIRROR ON' : 'MIRROR OFF'}
+              </div>
+            </button>
+            
+            {/* Search button */}
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSearchResults([]);
+                setIsSearchModalOpen(true);
+              }}
+              style={{
+                height: '80px',
+                width: '70px',
+                backgroundColor: '#FF9800',
+                color: 'white',
+                border: '2px solid #F57C00',
+                boxShadow: '0 0 5px rgba(255, 152, 0, 0.5)',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <div style={{ fontSize: '24px', marginBottom: '5px' }}>
+                🔍
+              </div>
+              <div>
+                SEARCH
+              </div>
+            </button>
+          </div>
+        )}
       </header>
       
       {/* Script Entry Modal */}
@@ -1305,11 +1744,72 @@ const AdminPage = () => {
         initialBody={selectedScript ? (selectedScript.body || selectedScript.content || '') : ''}
       />
       
+      {/* Script Upload Modal */}
+      <ScriptUploadModal 
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUpload={handleFileUpload}
+      />
+      
+      {/* Delete Script Modal */}
+      {isDeleteModalOpen && (
+        <div className="modal-overlay">
+          <div className="script-entry-modal" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Delete Script</h2>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="close-btn">×</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <p>Select a script to delete:</p>
+              <div className="scripts-list" style={{ maxHeight: '300px', overflowY: 'auto', margin: '15px 0' }}>
+                {scripts.map(script => (
+                  <div 
+                    key={script.id}
+                    className={`script-item ${scriptToDelete === script.id ? 'selected' : ''}`}
+                    onClick={() => setScriptToDelete(script.id)}
+                    style={{ 
+                      padding: '10px', 
+                      margin: '5px 0', 
+                      cursor: 'pointer',
+                      backgroundColor: scriptToDelete === script.id ? '#f0f0f0' : 'transparent',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <div className="script-item-title">{script.title}</div>
+                    <div className="script-item-date" style={{ fontSize: '12px', color: '#666' }}>
+                      Last modified: {new Date(script.lastModified).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="form-actions" style={{ marginTop: '20px' }}>
+                <button onClick={() => setIsDeleteModalOpen(false)} className="cancel-btn">Cancel</button>
+                <button 
+                  onClick={() => confirmDeleteScript(scriptToDelete)} 
+                  className="delete-btn"
+                  disabled={!scriptToDelete}
+                  style={{ 
+                    backgroundColor: '#f44336', 
+                    color: 'white',
+                    opacity: scriptToDelete ? 1 : 0.5 
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="admin-content">
         <div className="scripts-panel">
-          <div className="scripts-header">
+          <div className="scripts-header" style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '15px' }}>
+              <button onClick={handleUploadScript} className="add-script-btn" style={{ marginBottom: '8px' }}>Add Script</button>
+              <button onClick={handleDeleteScript} className="delete-script-btn" style={{ backgroundColor: '#f44336', color: 'white' }}>Delete Script</button>
+            </div>
             <h2>Scripts</h2>
-            {/* Removed Add New Script button as we're only reading scripts from directory */}
           </div>
           
           <div className="scripts-list">
@@ -1386,92 +1886,36 @@ const AdminPage = () => {
                 </div>
               </div>
               
-              <div className="teleprompter-controls">
-                <div className="control-group">
-                  <button onClick={togglePlay} className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}>
-                    {isPlaying ? 'PAUSE' : 'PLAY'}
-                  </button>
-                  
-                  <button 
-                    onClick={handleRollback} 
-                    className={`rollback-btn large-btn ${storedNodeData || isPlaying ? 'active' : ''}`}
-                    disabled={!storedNodeData && !isPlaying}
-                    style={{
-                      backgroundColor: storedNodeData || isPlaying ? '#28a745' : '#cccccc',
+                      backgroundColor: isFlipped ? '#9c27b0' : '#6c757d',
                       color: 'white',
-                      cursor: storedNodeData || isPlaying ? 'pointer' : 'not-allowed',
-                      opacity: storedNodeData || isPlaying ? 1 : 0.7,
-                      transition: 'all 0.3s ease',
-                      border: `2px solid ${storedNodeData || isPlaying ? '#28a745' : '#aaaaaa'}`,
-                      boxShadow: storedNodeData || isPlaying ? '0 0 5px rgba(40, 167, 69, 0.5)' : 'none',
-                      fontWeight: 'bold'
+                      border: isFlipped ? '2px solid #7b1fa2' : '2px solid #5a6268',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      boxShadow: isFlipped ? '0 0 10px rgba(156, 39, 176, 0.5)' : 'none',
+                      flex: '0 0 auto'
                     }}
-                    title={storedNodeData || isPlaying ? "Click to return to a previous position" : "No previous position available"}
                   >
-                    ROLLBACK
+                    <div style={{
+                      marginBottom: '10px',
+                      fontSize: '24px'
+                    }}>
+                      🔄
+                    </div>
+                    <div>MIRROR</div>
+                    <div style={{
+                      fontSize: '12px',
+                      marginTop: '5px',
+                      fontWeight: 'normal',
+                      opacity: 0.8
+                    }}>
+                      {isFlipped ? 'ON' : 'OFF'}
+                    </div>
                   </button>
-                  
-                  <button onClick={toggleDirection} className="direction-btn">
-                    Direction: {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
-                  </button>
-                </div>
-                
-                <div className="control-group">
-                  <label>Speed: {speed.toFixed(2)}x</label>
-                  <div className="speed-control">
-                    <button 
-                      onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-                      className="speed-btn"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="range"
-                      min="0.25"
-                      max="2.5"
-                      step="0.25"
-                      value={speed}
-                      onChange={(e) => changeSpeed(parseFloat(e.target.value))}
-                    />
-                    <button 
-                      onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-                      className="speed-btn"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="speed-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-                    0.25 = very slow, 1.0 = moderate, 2.5 = fast
-                  </div>
-                </div>
-                
-                <div className="control-group">
-                  <label>Font Size: {fontSize}px</label>
-                  <div className="font-size-control">
-                    <button 
-                      onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-                      className="font-size-btn"
-                    >
-                      A-
-                    </button>
-                    <input
-                      type="range"
-                      min="16"
-                      max="48"
-                      step="1"
-                      value={fontSize}
-                      onChange={(e) => changeFontSize(parseInt(e.target.value, 10))}
-                    />
-                    <button 
-                      onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-                      className="font-size-btn"
-                    >
-                      A+
-                    </button>
-                  </div>
-                  <div className="font-size-info" style={{ fontSize: '0.8em', opacity: 0.7, marginTop: '2px' }}>
-                    16px = small, 32px = medium, 48px = large
-                  </div>
                 </div>
                 
               </div>
@@ -1508,20 +1952,37 @@ const AdminPage = () => {
               
               <div className="preview-container">
                 <div className="preview-header">
-                  <h3>Preview: {selectedScript?.title}</h3>
+                  <h3>
+                    {isPlaying 
+                      ? `Preview: ${selectedScript?.title}` 
+                      : `Current Script Position: ${storedNodeData?.text?.substring(0, 30)}${storedNodeData?.text?.length > 30 ? '...' : ''}`
+                    }
+                  </h3>
+                  {!isPlaying && storedNodeData && (
+                    <div className="position-indicator" style={{ 
+                      fontSize: '12px', 
+                      color: '#aaa', 
+                      marginTop: '4px',
+                      backgroundColor: 'rgba(0,0,0,0.1)',
+                      padding: '4px 8px',
+                      borderRadius: '4px'
+                    }}>
+                      {storedNodeData.index !== undefined && `Position: ${storedNodeData.index + 1}/${storedNodeData.totalDialogs || '?'}`}
+                    </div>
+                  )}
                 </div>
                 {selectedScript ? (
                   <>
-                    <ScriptPlayer 
+                    <PreviewComponent
                       ref={scriptPlayerRef}
                       key={`preview-${selectedScript.id}`} 
                       script={selectedScript}
                       isPlaying={isPlaying}
                       speed={speed}
                       direction={direction}
-                      fontSize={Math.round(fontSize * 0.5)} // Reduce font size to 50% for preview
+                      fontSize={fontSize} // Use a smaller preview font size
                       aspectRatio={aspectRatio}
-                      fullScreen={false}
+                      onPositionChange={handlePreviewPositionChange}
                     />
                   </>
                 ) : (
@@ -1537,29 +1998,35 @@ const AdminPage = () => {
         </div>
         
         <div className="admin-sidebar">
-          <div className="script-selector-panel">
-            <h3>Script Selection</h3>
-            <div className="script-dropdown-container">
-              <select 
-                className="admin-script-dropdown"
-                value={selectedScriptId || ''}
-                onChange={(e) => {
-                  // Convert to number if it looks like a number
-                  const val = e.target.value;
-                  const numVal = !isNaN(Number(val)) && val !== 'none' ? Number(val) : val;
-                  handleScriptSelect(numVal);
-                }}
-              >
-                <option value="" disabled>Select a script...</option>
-                <option value="none">No script (clear selection)</option>
-                {scripts.map(script => (
-                  <option key={script.id} value={script.id}>
-                    {script.title}
-                  </option>
-                ))}
-              </select>
+          <div className="connected-clients-panel">
+            <h3>Connected Clients</h3>
+            <div className="connected-clients-list">
+              <div className="client-item active">
+                <div className="client-icon">💻</div>
+                <div className="client-info">
+                  <div className="client-name">Admin Panel</div>
+                  <div className="client-status">Connected{connectedClients.admin > 0 ? ` (${connectedClients.admin})` : ''}</div>
+                </div>
+              </div>
+              <div className={`client-item ${connectedClients.viewer > 0 ? 'active' : ''}`}>
+                <div className="client-icon">📱</div>
+                <div className="client-info">
+                  <div className="client-name">Viewer Display</div>
+                  <div className="client-status">
+                    {connectedClients.viewer > 0 ? `Connected (${connectedClients.viewer})` : 'Waiting for connection...'}
+                  </div>
+                </div>
+              </div>
+              <div className={`client-item ${connectedClients.remote > 0 ? 'active' : ''}`}>
+                <div className="client-icon">🎮</div>
+                <div className="client-info">
+                  <div className="client-name">Remote Control</div>
+                  <div className="client-status">
+                    {connectedClients.remote > 0 ? `Connected (${connectedClients.remote})` : 'Waiting for connection...'}
+                  </div>
+                </div>
+              </div>
             </div>
-            
           </div>
           
           <div className="connection-panel">
