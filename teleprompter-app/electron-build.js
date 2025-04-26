@@ -13,6 +13,7 @@ try {
   const config = `
 appId: com.teleprompter.app
 productName: Teleprompter
+author: Immersive Visions
 files:
   - build/**/*
   - node_modules/**/*
@@ -23,6 +24,8 @@ files:
   - convertScripts.js
   - intake/**/*
   - public/**/*
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
 directories:
   buildResources: public
   output: dist

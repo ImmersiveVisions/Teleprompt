@@ -2,13 +2,47 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const url = require('url');
-const { initWebSocketServer } = require('./server-utils');
 const http = require('http');
 const express = require('express');
 const os = require('os');
-const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const { execSync } = require('child_process');
+
+// Setup debug logging
+console.log('Starting Teleprompter application');
+console.log('App path:', __dirname);
+console.log('Process path:', process.cwd());
+console.log('Is packaged:', app.isPackaged);
+
+// Load local modules with explicit error handling
+let initWebSocketServer;
+try {
+  const serverUtils = require('./server-utils');
+  initWebSocketServer = serverUtils.initWebSocketServer;
+  console.log('Server utils loaded successfully');
+} catch (error) {
+  console.error('Error loading server-utils:', error);
+  // Provide a fallback function if needed
+  initWebSocketServer = (server) => {
+    console.error('Using fallback WebSocket implementation');
+    return null;
+  };
+}
+
+// Load QR code terminal with error handling
+let qrcode;
+try {
+  qrcode = require('qrcode-terminal');
+  console.log('QR code module loaded successfully');
+} catch (error) {
+  console.error('Error loading qrcode-terminal:', error);
+  // Provide a fallback function
+  qrcode = {
+    generate: (text) => {
+      console.log('QR Code would show URL:', text);
+    }
+  };
+}
 
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow;
@@ -85,13 +119,95 @@ function createWindow() {
   // Load the app
   if (app.isPackaged) {
     // In production, load from the build directory
-    mainWindow.loadURL(url.format({
-      pathname: 'localhost:3000',
-      protocol: 'http:',
-      slashes: true
-    }));
+    console.log('Running in packaged mode, loading from build directory');
+    
+    // Add error handler for content loading
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('Failed to load content:', errorCode, errorDescription);
+      
+      // Show error in window
+      mainWindow.webContents.executeJavaScript(`
+        document.body.innerHTML = '<div style="padding: 20px; font-family: Arial, sans-serif;">' +
+          '<h2>Error Loading Content</h2>' +
+          '<p>Error Code: ${errorCode}</p>' +
+          '<p>Description: ${errorDescription}</p>' +
+          '<p>App Path: ${__dirname}</p>' +
+          '</div>';
+      `).catch(err => console.error('Failed to show error page:', err));
+      
+      // Open DevTools in production to help diagnose
+      mainWindow.webContents.openDevTools();
+    });
+    
+    // Try multiple path strategies for loading the app
+    
+    // Strategy 1: Try to load the index.html file directly
+    const indexPath = path.join(__dirname, 'build', 'index.html');
+    console.log('Checking for index.html at:', indexPath);
+    
+    if (fs.existsSync(indexPath)) {
+      console.log('Found index.html at:', indexPath);
+      mainWindow.loadFile(indexPath).catch(error => {
+        console.error('Error loading file directly:', error);
+        fallbackLoading();
+      });
+    } else {
+      console.log('index.html not found at expected path, trying alternatives');
+      fallbackLoading();
+    }
+    
+    function fallbackLoading() {
+      // Strategy 2: Try looking in the app's resources directory
+      const resourcePath = path.join(process.resourcesPath || __dirname, 'app.asar', 'build', 'index.html');
+      console.log('Checking resource path:', resourcePath);
+      
+      if (fs.existsSync(resourcePath)) {
+        console.log('Found index.html in resources at:', resourcePath);
+        mainWindow.loadFile(resourcePath).catch(error => {
+          console.error('Error loading from resources:', error);
+          localServerFallback();
+        });
+      } else {
+        console.log('Resource path not found, trying server fallback');
+        localServerFallback();
+      }
+    }
+    
+    function localServerFallback() {
+      // Strategy 3: Fall back to the local HTTP server
+      console.log('Attempting to load from local server');
+      mainWindow.loadURL(url.format({
+        pathname: 'localhost:3000',
+        protocol: 'http:',
+        slashes: true
+      })).catch(error => {
+        console.error('Error loading from local server:', error);
+        showErrorScreen();
+      });
+    }
+    
+    function showErrorScreen() {
+      // Last resort - show a basic HTML error page
+      mainWindow.loadURL(`data:text/html,
+        <html>
+          <head><title>Teleprompter Error</title></head>
+          <body style="background: #222; color: white; font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Unable to Load Teleprompter</h2>
+            <p>The application could not find the required files.</p>
+            <p>Path searched:</p>
+            <pre>${indexPath}</pre>
+            <hr/>
+            <p>To troubleshoot this issue, please try reinstalling the application.</p>
+          </body>
+        </html>
+      `).catch(err => console.error('Failed to show error screen:', err));
+      
+      // Always open DevTools when showing error screen
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     // In development, connect to the React development server
+    console.log('Running in development mode');
     mainWindow.loadURL('http://localhost:3000');
     // Open the DevTools automatically
     mainWindow.webContents.openDevTools();
