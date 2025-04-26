@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
+import { useSearchHandler } from '../hooks'; // Import the search handler hook
 import ScriptViewer from '../components/ScriptViewer';
 import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
 import PreviewComponent from '../components/PreviewComponent';
@@ -18,7 +19,7 @@ const AdminPage = () => {
   const [selectedScript, setSelectedScript] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  // Search modal state is now managed by the useSearchHandler hook
   // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
@@ -157,19 +158,61 @@ const AdminPage = () => {
     }
   };
   
-  // State for search
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Import and use the search handler hook
+  const { 
+    searchResults, 
+    searchTerm, 
+    isSearchModalOpen, 
+    setSearchTerm,
+    setIsSearchModalOpen,
+    handleScriptSearch: hookHandleScriptSearch,
+    executeSearch: hookExecuteSearch,
+    jumpToSearchResult: hookJumpToSearchResult 
+  } = useSearchHandler(selectedScript, isPlaying, setIsPlaying);
   
-  // Handle script search
+  // Execute search function
+  const executeSearch = () => {
+    if (searchTerm.trim()) {
+      try {
+        hookExecuteSearch();
+      } catch (error) {
+        console.error('Search error:', error);
+        alert('Search error: ' + error.message);
+      }
+    }
+  };
+  
+  // Jump to search result handler - make sure we have access to the scriptPlayerRef
+  const jumpToSearchResult = (result) => {
+    try {
+      console.log('AdminPage: Jump to search result handler called with player ref:', !!scriptPlayerRef.current);
+      hookJumpToSearchResult(result, scriptPlayerRef);
+    } catch (error) {
+      console.error('Error jumping to search result:', error);
+      alert('Error jumping to result: ' + error.message);
+    }
+  };
+  
+  // Handle script search using the hook
   const handleScriptSearch = (searchTerm) => {
+    try {
+      // Use the hook's implementation
+      return hookHandleScriptSearch(searchTerm);
+    } catch (error) {
+      console.error('Search error:', error);
+      // Fallback to legacy implementation if hook fails
+      return legacyHandleScriptSearch(searchTerm);
+    }
+  };
+  
+  // Legacy search implementation (renamed but kept for fallback)
+  const legacyHandleScriptSearch = (searchTerm) => {
     console.log('Search initiated for term:', searchTerm);
     setSearchTerm(searchTerm);
     
     if (!selectedScript || !searchTerm) {
       console.log('No script or search term provided');
-      setSearchResults([]);
-      return;
+      return [];
     }
     
     console.log('Selected script for search:', {
@@ -321,14 +364,17 @@ const AdminPage = () => {
             
             console.log(`Fallback search complete. Found ${fallbackResults.length} matches`);
             
-            setSearchResults(fallbackResults);
+            // Return the results instead of setting state directly
+            const results = fallbackResults;
             
             // Open the search modal if we have results
-            if (fallbackResults.length > 0) {
+            if (results.length > 0) {
               setIsSearchModalOpen(true);
             } else {
               alert(`No results found for "${searchTerm}" in script content`);
             }
+            
+            return results;
             return;
           } else {
             console.error('No fallback content available for search');
@@ -355,14 +401,14 @@ const AdminPage = () => {
         
         console.log(`Search complete. Found ${results.length} matches for "${searchTerm}"`);
         
-        setSearchResults(results);
-        
-        // Open the search modal if we have results
+        // Return the results
         if (results.length > 0) {
           setIsSearchModalOpen(true);
         } else {
           alert(`No results found for "${searchTerm}"`);
         }
+        
+        return results;
       } catch (error) {
         console.error('Error searching in HTML content:', error);
         alert('Error searching in HTML content: ' + error.message);
@@ -383,9 +429,7 @@ const AdminPage = () => {
         }
       });
       
-      setSearchResults(results);
-      
-      // Open the search modal if we have results
+      // Return results instead of using state setter
       if (results.length > 0) {
         setIsSearchModalOpen(true);
       } else {
@@ -394,12 +438,7 @@ const AdminPage = () => {
     }
   };
   
-  // Handle executing a search
-  const executeSearch = () => {
-    if (searchTerm.trim()) {
-      handleScriptSearch(searchTerm);
-    }
-  };
+  // Removed duplicate executeSearch - using the one from hook implementation
   
   // Reference to the script player component
   const scriptPlayerRef = useRef(null);
@@ -574,152 +613,7 @@ const AdminPage = () => {
     };
   }, [selectedScript, isPlaying]);
   
-  // Jump to search result - handles both HTML and text content
-  const jumpToSearchResult = (result) => {
-    if (!selectedScript) {
-      console.error('Cannot jump to search result - no script selected');
-      alert('Please select a script first');
-      return;
-    }
-    
-    // Check if this is an HTML script result
-    if (result.isHtml && result.node) {
-      // For HTML content, we'll scroll the iframe to the node
-      console.log(`Jumping to HTML node containing: "${result.line.substring(0, 30)}..."`);
-      
-      // Pause playback when jumping
-      if (isPlaying) {
-        setIsPlaying(false);
-        sendControlMessage('PAUSE');
-      }
-      
-      // Get the iframe
-      const iframe = document.querySelector('#teleprompter-frame');
-      if (!iframe || !iframe.contentWindow) {
-        console.error('Cannot jump - iframe not accessible');
-        return;
-      }
-      
-      try {
-        // Scroll the node into view within the iframe
-        result.node.parentElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-        
-        // Highlight the element for visibility
-        const originalBackground = result.node.parentElement.style.backgroundColor;
-        const originalColor = result.node.parentElement.style.color;
-        
-        // Flash the element to make it visible
-        result.node.parentElement.style.backgroundColor = '#ff6600';
-        result.node.parentElement.style.color = '#ffffff';
-        
-        // Reset after a delay
-        setTimeout(() => {
-          result.node.parentElement.style.backgroundColor = originalBackground;
-          result.node.parentElement.style.color = originalColor;
-        }, 2000);
-        
-        // Send a SCROLL_TO message with the node information
-        try {
-          // Get text content to identify the node
-          const nodeText = result.node.textContent.trim();
-          // Get parent node tag name
-          const parentTag = result.node.parentElement.tagName;
-          // Get index of node among siblings
-          const siblings = Array.from(result.node.parentElement.childNodes);
-          const nodeIndex = siblings.indexOf(result.node);
-          
-          // Calculate the approximate position as a percentage of the document
-          const totalHeight = iframe.contentDocument.body.scrollHeight;
-          const currentPos = result.node.parentElement.getBoundingClientRect().top;
-          const viewportOffset = iframe.contentWindow.pageYOffset || iframe.contentDocument.documentElement.scrollTop;
-          const absolutePosition = currentPos + viewportOffset;
-          
-          // Calculate percentage (0-1)
-          const percentPos = Math.max(0, Math.min(1, absolutePosition / totalHeight));
-          
-          // Create a data object with multiple ways to identify the node
-          const scrollData = {
-            position: percentPos, // Normalized position (0-1)
-            text: nodeText.substring(0, 50), // First 50 chars of text
-            parentTag: parentTag, // Parent tag name
-            nodeIndex: nodeIndex, // Index in parent's children
-            absolutePosition: absolutePosition // Absolute pixel position
-          };
-          
-          // Log the actual scrollData object being sent
-          console.log('===== [ADMIN PAGE] Final scrollData object being sent:', JSON.stringify(scrollData));
-          
-          // Send WebSocket message with enhanced data using the new dedicated message type
-          sendSearchPosition(scrollData);
-        } catch (posError) {
-          console.error('Error calculating scroll position for WebSocket:', posError);
-        }
-        
-        // Close the search modal after jumping
-        setIsSearchModalOpen(false);
-      } catch (error) {
-        console.error('Error jumping to HTML search result:', error);
-        alert('Error scrolling to search result: ' + error.message);
-      }
-    } else {
-      // For text content, use the original approach with position calculation
-      const lineIndex = result.index;
-      const scriptContent = selectedScript.body || selectedScript.content || '';
-      if (!scriptContent) {
-        console.error('Cannot jump to search result - script has no content');
-        return;
-      }
-      
-      // Calculate position in script
-      const lines = scriptContent.split('\n');
-      let position = 0;
-      
-      // Calculate the exact character position where the line starts
-      for (let i = 0; i < lineIndex; i++) {
-        position += lines[i].length + 1; // +1 for newline character
-      }
-      
-      console.log(`Jumping to line ${lineIndex} at position ${position}`);
-      
-      // Pause playback when jumping
-      if (isPlaying) {
-        setIsPlaying(false);
-        sendControlMessage('PAUSE');
-      }
-      
-      // Highlight the clicked search result in the UI
-      setSearchResults(prev => prev.map((item, idx) => ({
-        ...item,
-        active: item.index === lineIndex
-      })));
-      
-      // If we have a direct reference to the player, use it
-      if (scriptPlayerRef.current) {
-        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
-        if (scriptPlayerRef.current.scrollToNode) {
-          scriptPlayerRef.current.scrollToNode({ position, text: result.line });
-        } else if (scriptPlayerRef.current.jumpToPosition) {
-          scriptPlayerRef.current.jumpToPosition(position);
-        }
-      }
-      
-      // Calculate the position as a percentage of the total script length
-      const totalLength = scriptContent.length;
-      const percentPos = Math.max(0, Math.min(1, position / totalLength));
-      
-      // For regular position jumps, we can use the standard position control
-      // This updates the shared state position for all clients
-      sendControlMessage('JUMP_TO_POSITION', percentPos);
-      
-      // Note: Visual feedback has been removed as part of UI cleanup
-      
-      // Close the search modal after jumping
-      setIsSearchModalOpen(false);
-    }
-  };
+  // Removed duplicate jumpToSearchResult - using the one from hook implementation
   
   // Clear script selection
   const clearScriptSelection = () => {
@@ -1758,7 +1652,7 @@ const AdminPage = () => {
                 isOpen={isSearchModalOpen}
                 onClose={() => setIsSearchModalOpen(false)}
                 searchResults={searchResults}
-                onResultSelect={jumpToSearchResult}
+                onResultSelect={(result) => hookJumpToSearchResult(result, scriptPlayerRef)}
                 searchTerm={searchTerm}
               />
               

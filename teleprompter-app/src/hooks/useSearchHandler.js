@@ -24,12 +24,13 @@ const useSearchHandler = (selectedScript, isPlaying, setIsPlaying) => {
       isFountain: selectedScript.isFountain,
     });
 
-    // We only need to handle fountain scripts now
-    // For fountain script, search in the iframe content - try multiple IDs for compatibility
+    // We need to find the iframe element that contains the script content
+    // Try different iframe IDs that might be used throughout the application
     const iframe =
-      document.querySelector("#fountain-script-frame") ||
       document.querySelector("#teleprompter-frame") ||
-      document.querySelector("#html-script-frame");
+      document.querySelector("#fountain-script-frame") ||
+      document.querySelector("#html-script-frame") ||
+      document.querySelector("iframe");
     console.log("Search in fountain iframe: element found:", !!iframe);
 
     if (!iframe) {
@@ -252,12 +253,20 @@ const useSearchHandler = (selectedScript, isPlaying, setIsPlaying) => {
         sendControlMessage("PAUSE");
       }
 
-      // Get the iframe
-      const iframe = document.querySelector("#fountain-script-frame");
+      // Get the iframe - try multiple selectors to ensure we find it
+      const iframe = 
+        document.querySelector("#teleprompter-frame") ||
+        document.querySelector("#fountain-script-frame") ||
+        document.querySelector("#html-script-frame") ||
+        document.querySelector("iframe");
+        
       if (!iframe || !iframe.contentWindow) {
-        console.error("Cannot jump - fountain iframe not accessible");
+        console.error("Cannot jump - iframe not accessible");
+        console.log("Available iframes:", document.querySelectorAll("iframe").length);
         return;
       }
+      
+      console.log("Found iframe with ID:", iframe.id || "no-id");
 
       try {
         // Scroll the node into view within the iframe
@@ -371,13 +380,21 @@ const useSearchHandler = (selectedScript, isPlaying, setIsPlaying) => {
       );
 
       // If we have a direct reference to the player, use it
-      if (scriptPlayerRef.current) {
+      if (scriptPlayerRef && scriptPlayerRef.current) {
+        console.log('Using scriptPlayerRef methods to jump to position:', 
+                    'scrollToNode:', !!scriptPlayerRef.current.scrollToNode,
+                    'jumpToPosition:', !!scriptPlayerRef.current.jumpToPosition);
+                    
         // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
         if (scriptPlayerRef.current.scrollToNode) {
           scriptPlayerRef.current.scrollToNode({ position, text: result.line });
         } else if (scriptPlayerRef.current.jumpToPosition) {
           scriptPlayerRef.current.jumpToPosition(position);
+        } else {
+          console.warn('scriptPlayerRef exists but has no navigation methods');
         }
+      } else {
+        console.warn('No scriptPlayerRef available for navigation');
       }
 
       // Calculate the position as a percentage of the total script length

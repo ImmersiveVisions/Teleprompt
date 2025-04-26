@@ -13,7 +13,9 @@ const SearchModal = ({ isOpen, onClose, searchResults, onResultSelect, searchTer
   }, [isOpen]);
   
   const handleResultClick = (result) => {
+    console.log('SearchModal: Result clicked:', result);
     setActiveResult(result.index);
+    console.log('SearchModal: Calling onResultSelect');
     onResultSelect(result);
   };
   
