@@ -296,9 +296,11 @@ body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.6;
   color: #333;
-  background-color: #f5f5f5;
+  background-color: #000;
   height: 100vh;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 /* Global bold text setting for all viewers */
@@ -1114,14 +1116,14 @@ input, select, textarea {
 }
 
 /* Script Viewer Component */
-.script-viewer {
+.script-viewer, .teleprompter-viewer {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background-color: #000;
   color: #fff;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .script-line {
@@ -1137,10 +1139,18 @@ input, select, textarea {
 }
 
 /* Special styling for 4:3 full screen containers */
-.viewer-page .script-content-container[data-aspect-ratio="4/3"] {
+.viewer-page .script-content-container[data-aspect-ratio="4/3"],
+.remote-page-fullscreen .viewer-content-container[data-aspect-ratio="4/3"] {
   margin: 0 auto !important;
   height: 100vh !important;
   max-height: 100vh !important;
+}
+
+/* Special styling for 16:9 containers to match viewer */
+.viewer-content-container[data-aspect-ratio="16/9"] {
+  width: 100% !important;
+  max-width: 177.78vh !important; /* 16:9 ratio */
+  margin: 0 auto !important;
 }
 
 .html-content {
@@ -1428,7 +1438,82 @@ input, select, textarea {
   padding: 1rem;
   background-color: #f8f9fa;
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.show-script-btn {
+  display: block !important;
+  padding: 20px 25px !important;
+  font-size: 24px !important;
+  font-weight: bold !important;
+  background-color: #ff5722 !important; /* Bright orange for visibility */
+  color: white !important;
+  border: 3px solid #e64a19 !important;
+  border-radius: 10px !important;
+  margin: 20px auto !important;
+  width: 100% !important;
+  max-width: 400px !important;
+  text-align: center !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3) !important;
+  position: relative !important;
+  overflow: visible !important;
+  animation: pulse-button 2s infinite !important;
+  z-index: 100 !important;
+  text-transform: uppercase !important;
+}
+
+@keyframes pulse-button {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 12px 20px rgba(0,0,0,0.4);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+  }
+}
+
+/* Mobile-specific styles */
+@media (max-width: 767px) {
+  .remote-footer {
+    padding: 20px !important;
+    width: 100% !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 999 !important;
+    background-color: rgba(248, 249, 250, 0.95) !important;
+  }
+  
+  .show-script-btn {
+    padding: 25px !important;
+    font-size: 28px !important;
+    margin-bottom: 25px !important;
+    width: 100% !important;
+    border-width: 4px !important;
+  }
+  
+  .remote-content {
+    padding: 15px !important;
+    padding-bottom: 180px !important; /* Make room for fixed footer */
+  }
+}
+
+/* Special tablet styles */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .show-script-btn {
+    padding: 22px !important;
+    font-size: 26px !important;
+    margin: 25px auto !important;
+    border-width: 3px !important;
+  }
 }
 
 /* QR Code */
@@ -1516,5 +1601,213 @@ input, select, textarea {
   
   .scripts-panel, .script-editor-panel, .admin-sidebar {
     grid-column: span 1;
+  }
+}
+
+/* New Remote Page Fullscreen Styles */
+.remote-page-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: none;
+  box-sizing: border-box;
+}
+
+.remote-script-fullscreen-container {
+  flex: 1;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: none;
+  box-sizing: border-box;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Floating Header */
+.remote-floating-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 15px;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 9999;
+  transition: transform 0.3s ease, opacity 0.2s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.remote-floating-header.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.remote-floating-header.hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.remote-header-left, .remote-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.remote-script-select {
+  min-width: 200px;
+  padding: 8px 12px;
+  background-color: rgba(50, 50, 50, 0.8);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.remote-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.remote-control-btn {
+  background-color: rgba(50, 50, 50, 0.8);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.remote-control-btn:hover {
+  background-color: rgba(70, 70, 70, 0.8);
+}
+
+.remote-control-btn.active {
+  background-color: #d9534f;
+  border-color: #d43f3a;
+}
+
+.remote-control-btn.play-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  border-radius: 50%;
+  background-color: rgba(40, 167, 69, 0.8);
+}
+
+.remote-control-btn.play-btn.active {
+  background-color: rgba(220, 53, 69, 0.8);
+}
+
+/* High DPI Mode Button */
+.remote-control-btn.high-dpi-btn {
+  background-color: rgba(75, 75, 75, 0.8);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: bold;
+  border-radius: 4px;
+}
+
+.remote-control-btn.high-dpi-btn.active {
+  background-color: rgba(40, 167, 69, 0.8);
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+.remote-control-btn.direction-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  background-color: rgba(0, 123, 255, 0.8);
+}
+
+.remote-control-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(40, 40, 40, 0.8);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.remote-control-value {
+  color: white;
+  font-size: 14px;
+  min-width: 45px;
+  text-align: center;
+}
+
+/* Control toggle button */
+.controls-toggle-btn {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 10000;
+  transition: background-color 0.2s ease;
+}
+
+.controls-toggle-btn:hover {
+  background-color: rgba(50, 50, 50, 0.7);
+}
+
+/* Responsive adjustments for remote page */
+@media (max-width: 768px) {
+  .remote-floating-header {
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .remote-header-left, .remote-header-controls, .remote-header-right {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .remote-script-select {
+    width: 100%;
+  }
+  
+  .remote-header-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  
+  .controls-toggle-btn {
+    top: auto;
+    bottom: 10px;
+    right: 10px;
   }
 }

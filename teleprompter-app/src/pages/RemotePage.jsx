@@ -1,8 +1,9 @@
 // src/pages/RemotePage.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { sendControlMessage, registerMessageHandler } from '../services/websocket';
 import fileSystemRepository from '../database/fileSystemRepository';
+import RemoteScriptViewer from '../components/RemoteScriptViewer';
 import '../styles.css';
 
 const RemotePage = () => {
@@ -14,7 +15,9 @@ const RemotePage = () => {
   const [fontSize, setFontSize] = useState(24);
   const [isFlipped, setIsFlipped] = useState(false); // Mirror mode state
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  
+  const [showControls, setShowControls] = useState(true);
+  const [isHighDPI, setIsHighDPI] = useState(false); // Add high DPI mode toggle
+
   // Clear script selection
   const clearScriptSelection = useCallback(() => {
     console.log('RemotePage: Clearing script selection');
@@ -110,9 +113,33 @@ const RemotePage = () => {
       window.websocketService.sendControlMessage('GET_STATE');
     }
     
+    // Request fullscreen when component mounts
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.warn('Error attempting to enable fullscreen:', err);
+      });
+    }
+    
+    // Listen for fullscreen change
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        console.log('Fullscreen mode exited');
+      }
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
     return () => {
       console.log('RemotePage: Cleaning up WebSocket message handler');
       unregisterHandler();
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      
+      // Exit fullscreen when component unmounts
+      if (document.exitFullscreen && document.fullscreenElement) {
+        document.exitFullscreen().catch(err => {
+          console.warn('Error attempting to exit fullscreen:', err);
+        });
+      }
     };
   }, [handleStateUpdate]); // Depend on handleStateUpdate
   
@@ -235,29 +262,33 @@ const RemotePage = () => {
     sendControlMessage('SET_FONT_SIZE', newSize);
   };
   
-  const toggleMirrorMode = () => {
-    const newFlippedState = !isFlipped;
-    setIsFlipped(newFlippedState);
-    sendControlMessage('SET_FLIPPED', newFlippedState);
-  };
+  // Mirror mode toggle removed as it's not needed
   
+  // Toggle header controls visibility
+  const toggleControls = () => {
+    setShowControls(!showControls);
+  };
+
   return (
-    <div className="remote-page">
-      <header className="remote-header">
-        <h1>Teleprompter Remote Control</h1>
-        <div className="nav-links">
-          <Link to="/" className="nav-link">Home</Link>
-        </div>
-        <div className={`connection-status ${connectionStatus}`}>
-          {connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
-        </div>
-      </header>
+    <div className="remote-page-fullscreen">
+      {/* Fullscreen script viewer */}
+      <div className="remote-script-fullscreen-container">
+        <RemoteScriptViewer 
+          scriptId={selectedScriptId}
+          isPlaying={isPlaying}
+          speed={speed}
+          direction={direction}
+          fontSize={fontSize}
+          isFlipped={isFlipped}
+          isHighDPI={isHighDPI}
+        />
+      </div>
       
-      <div className="remote-content">
-        <div className="script-selector">
-          <label htmlFor="script-select">Select Script:</label>
+      {/* Floating header with controls */}
+      <div className={`remote-floating-header ${showControls ? 'visible' : 'hidden'}`}>
+        <div className="remote-header-left">
           <select 
-            id="script-select" 
+            className="remote-script-select"
             value={selectedScriptId || ''} 
             onChange={(e) => handleScriptSelect(e.target.value)}
             disabled={scripts.length === 0}
@@ -270,201 +301,90 @@ const RemotePage = () => {
               </option>
             ))}
           </select>
-          
-          {scripts.length === 0 && (
-            <div className="no-scripts-message">
-              No scripts available. Add scripts in Admin mode.
-            </div>
-          )}
         </div>
         
-        <div className="control-panel">
-          <div className="control-group" style={{ 
-            display: 'flex', 
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '20px',
-            margin: '20px 0',
-            flexWrap: 'nowrap'
-          }}>
-            {/* All controls in a single row */}
-            
-            {/* Play/Pause button */}
+        <div className="remote-header-controls">
+          {/* Play/Pause button */}
+          <button 
+            onClick={togglePlay} 
+            className={`remote-control-btn play-btn ${isPlaying ? 'active' : ''}`}
+            disabled={!selectedScriptId}
+          >
+            {isPlaying ? '⏸' : '▶'}
+          </button>
+          
+          {/* Direction button */}
+          <button 
+            onClick={toggleDirection} 
+            className="remote-control-btn direction-btn"
+            disabled={!selectedScriptId}
+          >
+            {direction === 'forward' ? '⬇️' : '⬆️'}
+          </button>
+          
+          {/* Speed controls */}
+          <div className="remote-control-group">
             <button 
-              onClick={togglePlay} 
-              className={`play-btn large-btn ${isPlaying ? 'active' : ''}`}
+              onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+              className="remote-control-btn speed-btn"
               disabled={!selectedScriptId}
-              style={{
-                width: '140px',
-                height: '140px',
-                fontSize: '22px',
-                fontWeight: 'bold',
-                backgroundColor: isPlaying ? '#f44336' : '#4CAF50',
-                color: 'white',
-                border: isPlaying ? '2px solid #d32f2f' : '2px solid #388E3C',
-                boxShadow: isPlaying ? '0 0 10px rgba(244, 67, 54, 0.5)' : '0 0 10px rgba(76, 175, 80, 0.5)',
-                borderRadius: '8px',
-                flex: '0 0 auto',
-                position: 'relative',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-              }}
             >
-              <div style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                opacity: 0.15,
-                pointerEvents: 'none',
-                zIndex: 1
-              }}>
-                {/* Play or Pause Icon SVG based on state */}
-                {isPlaying ? (
-                  <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                ) : (
-                  <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                )}
-              </div>
-              <span style={{ position: 'relative', zIndex: 2 }}>
-                {isPlaying ? 'PAUSE' : 'PLAY'}
-              </span>
+              -
             </button>
-            
-            {/* Direction button */}
+            <span className="remote-control-value">{speed.toFixed(2)}x</span>
             <button 
-              onClick={toggleDirection} 
-              className="direction-btn"
+              onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+              className="remote-control-btn speed-btn"
               disabled={!selectedScriptId}
-              style={{
-                width: '140px',
-                height: '140px',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                backgroundColor: '#2196F3',
-                color: 'white',
-                border: '2px solid #1976D2',
-                boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
-                borderRadius: '8px',
-                flex: '0 0 auto'
-              }}
             >
-              {direction === 'forward' ? '⬇️ Forward' : '⬆️ Backward'}
+              +
             </button>
-            
-            {/* Speed control (spinbox) */}
-            <div className="spinbox speed-spinbox" style={{ 
-              height: '140px', 
-              width: '100px',
-              flex: '0 0 auto'
-            }}>
-              <div className="spinbox-label" style={{ fontSize: '16px', padding: '3px 0' }}>Speed</div>
-              <button 
-                onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-                className="spinbox-up"
-                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
-                disabled={!selectedScriptId}
-              >
-                +
-              </button>
-              <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold', padding: '8px 0' }}>{speed.toFixed(2)}x</div>
-              <button 
-                onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-                className="spinbox-down"
-                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
-                disabled={!selectedScriptId}
-              >
-                -
-              </button>
-            </div>
-            
-            {/* Font size control (spinbox) */}
-            <div className="spinbox font-spinbox" style={{ 
-              height: '140px', 
-              width: '100px',
-              flex: '0 0 auto'
-            }}>
-              <div className="spinbox-label" style={{ fontSize: '16px', padding: '3px 0' }}>Font Size</div>
-              <button 
-                onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-                className="spinbox-up"
-                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
-                disabled={!selectedScriptId}
-              >
-                +
-              </button>
-              <div className="spinbox-value" style={{ fontSize: '18px', fontWeight: 'bold', padding: '8px 0' }}>{fontSize}px</div>
-              <button 
-                onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-                className="spinbox-down"
-                style={{ height: '35px', fontSize: '22px', fontWeight: 'bold' }}
-                disabled={!selectedScriptId}
-              >
-                -
-              </button>
-            </div>
           </div>
           
-          {/* Mirror mode toggle button */}
-          <div className="mirror-toggle-container" style={{ textAlign: 'center', margin: '20px 0' }}>
+          {/* Font size controls */}
+          <div className="remote-control-group">
             <button 
-              onClick={toggleMirrorMode} 
-              className={`mirror-btn ${isFlipped ? 'active' : ''}`}
+              onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+              className="remote-control-btn font-btn"
               disabled={!selectedScriptId}
-              style={{
-                width: '140px',
-                height: '60px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                backgroundColor: isFlipped ? '#9C27B0' : '#7B1FA2',
-                color: 'white',
-                border: isFlipped ? '2px solid #7B1FA2' : '2px solid #6A1B9A',
-                boxShadow: isFlipped ? '0 0 10px rgba(156, 39, 176, 0.5)' : 'none',
-                borderRadius: '8px',
-                position: 'relative',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-              }}
             >
-              <div style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                opacity: 0.2,
-                pointerEvents: 'none',
-                zIndex: 1
-              }}>
-                {/* Mirror Icon */}
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                  <path d="M9 12L7 12 12 17 17 12 15 12 12 15z" transform="rotate(90, 12, 12)"/>
-                </svg>
-              </div>
-              <span style={{ position: 'relative', zIndex: 2 }}>
-                {isFlipped ? 'Mirror: ON' : 'Mirror: OFF'}
-              </span>
+              -
+            </button>
+            <span className="remote-control-value">{fontSize}px</span>
+            <button 
+              onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+              className="remote-control-btn font-btn"
+              disabled={!selectedScriptId}
+            >
+              +
             </button>
           </div>
+          
+          {/* High DPI Mode Toggle */}
+          <button
+            onClick={() => setIsHighDPI(!isHighDPI)}
+            className={`remote-control-btn high-dpi-btn ${isHighDPI ? 'active' : ''}`}
+            title="Toggle High DPI mode for faster scrolling on high-resolution screens"
+          >
+            {isHighDPI ? 'High DPI: ON' : 'High DPI: OFF'}
+          </button>
+        </div>
+        
+        <div className="remote-header-right">
+          <div className={`connection-status ${connectionStatus}`}>
+            {connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
+          </div>
+          <Link to="/" className="nav-link">Home</Link>
         </div>
       </div>
       
-      <div className="remote-footer">
-        <Link to="/viewer" className="view-link">Open Viewer Mode</Link>
-        <Link to="/admin" className="admin-link">Open Admin Mode</Link>
-      </div>
+      {/* Control toggle button (always visible) */}
+      <button 
+        className="controls-toggle-btn"
+        onClick={toggleControls}
+      >
+        {showControls ? '▲ Hide Controls' : '▼ Show Controls'}
+      </button>
     </div>
   );
 };
