@@ -5,12 +5,10 @@ import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage, sendSearchPosition, registerMessageHandler } from '../services/websocket';
 import { connectToBluetoothDevice, disconnectBluetoothDevice, getBluetoothDeviceName } from '../services/bluetoothService';
 import { useSearchHandler } from '../hooks'; // Import the search handler hook
-import ScriptViewer from '../components/ScriptViewer';
-import ScriptPlayer from '../components/ScriptPlayer'; // Keep for backward compatibility
-import PreviewComponent from '../components/PreviewComponent';
 import ScriptEntryModal from '../components/ScriptEntryModal';
 import ScriptUploadModal from '../components/ScriptUploadModal';
 import SearchModal from '../components/SearchModal';
+import CharacterHighlighter from '../components/CharacterHighlighter';
 import '../styles.css';
 
 const AdminPage = () => {
@@ -20,7 +18,6 @@ const AdminPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   // Search modal state is now managed by the useSearchHandler hook
-  // Removed chapters state
   const [bluetoothStatus, setBluetoothStatus] = useState('disconnected');
   const [bluetoothDeviceName, setBluetoothDeviceName] = useState(null);
   // Directory handling removed for web version
@@ -38,9 +35,6 @@ const AdminPage = () => {
   const [fontSize, setFontSize] = useState(24);
   const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
   const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
-  const [storedNodeData, setStoredNodeData] = useState(null);
-  // Removed currentChapter state
-  // Removed currentPosition state since we're disabling position updates
   
   // State for tracking connected clients
   const [connectedClients, setConnectedClients] = useState({
@@ -111,8 +105,6 @@ const AdminPage = () => {
     }
   };
   
-  // Directory selection disabled for web version
-  
   // Load all scripts from the scripts directory
   const loadScripts = async () => {
     try {
@@ -182,438 +174,26 @@ const AdminPage = () => {
     }
   };
   
-  // Jump to search result handler - make sure we have access to the scriptPlayerRef
+  // Jump to search result handler (no viewer component to use)
   const jumpToSearchResult = (result) => {
     try {
-      console.log('AdminPage: Jump to search result handler called with player ref:', !!scriptPlayerRef.current);
-      hookJumpToSearchResult(result, scriptPlayerRef);
+      console.log('AdminPage: Jump to search result handler - sending to connected clients');
+      // Create a position data object based on the result
+      const positionData = {
+        text: result.line,
+        lineIndex: result.index,
+        fromSearch: true,
+        fromAdmin: true,
+        origin: 'admin'
+      };
+      
+      // Send to all clients using SEARCH_POSITION
+      sendSearchPosition(positionData);
     } catch (error) {
       console.error('Error jumping to search result:', error);
       alert('Error jumping to result: ' + error.message);
     }
   };
-  
-  // Handle script search using the hook
-  const handleScriptSearch = (searchTerm) => {
-    try {
-      // Use the hook's implementation
-      return hookHandleScriptSearch(searchTerm);
-    } catch (error) {
-      console.error('Search error:', error);
-      // Fallback to legacy implementation if hook fails
-      return legacyHandleScriptSearch(searchTerm);
-    }
-  };
-  
-  // Legacy search implementation (renamed but kept for fallback)
-  const legacyHandleScriptSearch = (searchTerm) => {
-    console.log('Search initiated for term:', searchTerm);
-    setSearchTerm(searchTerm);
-    
-    if (!selectedScript || !searchTerm) {
-      console.log('No script or search term provided');
-      return [];
-    }
-    
-    console.log('Selected script for search:', {
-      id: selectedScript.id,
-      title: selectedScript.title,
-      isHtml: selectedScript.id && (
-        selectedScript.id.toLowerCase().endsWith('.html') || 
-        selectedScript.id.toLowerCase().endsWith('.htm')
-      )
-    });
-    
-    // Check if this is an HTML script
-    const isHtmlScript = selectedScript.id && 
-      (selectedScript.id.toLowerCase().endsWith('.html') || 
-       selectedScript.id.toLowerCase().endsWith('.htm'));
-    
-    if (isHtmlScript) {
-      // For HTML scripts, we need to search the iframe content
-      const iframe = document.querySelector('#teleprompter-frame');
-      console.log('Search in HTML: iframe element found:', !!iframe);
-      
-      if (!iframe) {
-        console.error('Cannot search - iframe element not found');
-        alert('Cannot search - iframe not found. Please try again after the content has loaded.');
-        return;
-      }
-      
-      // Check if iframe is loaded
-      const isLoaded = iframe.dataset.loaded === 'true';
-      console.log('Is iframe marked as loaded:', isLoaded);
-      
-      if (!isLoaded) {
-        console.warn('Iframe not yet marked as fully loaded. Search might not work correctly.');
-      }
-      
-      if (!iframe.contentDocument) {
-        console.error('Cannot search - iframe contentDocument not accessible (possible cross-origin issue)');
-        alert('Cannot search - cannot access iframe content. This may be due to security restrictions.');
-        return;
-      }
-      
-      if (!iframe.contentDocument.body) {
-        console.error('Cannot search - iframe body not available');
-        alert('Cannot search - iframe content not fully loaded. Please try again in a moment.');
-        return;
-      }
-      
-      console.log('HTML content accessible, searching for:', searchTerm);
-      
-      try {
-        // Get all text nodes from the iframe
-        const textNodes = [];
-        
-        // Function to collect all text nodes from a document
-        const collectTextNodes = (element, nodes = []) => {
-          if (!element) return nodes;
-          
-          // Process all child nodes
-          for (let i = 0; i < element.childNodes.length; i++) {
-            const node = element.childNodes[i];
-            
-            // If it's a text node with content
-            if (node.nodeType === Node.TEXT_NODE) {
-              const text = node.nodeValue.trim();
-              if (text) {
-                nodes.push({
-                  text: text,
-                  node: node,
-                  index: nodes.length
-                });
-              }
-            } 
-            // If it's an element, recurse into its children
-            else if (node.nodeType === Node.ELEMENT_NODE) {
-              // Skip script and style elements
-              if (node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
-                collectTextNodes(node, nodes);
-              }
-            }
-          }
-          
-          return nodes;
-        };
-        
-        // Collect all text nodes in the document
-        const allTextNodes = collectTextNodes(iframe.contentDocument.body);
-        console.log(`Collected ${allTextNodes.length} text nodes using recursive approach`);
-        
-        // Try the TreeWalker approach as well
-        try {
-          const walkNodes = [];
-          const walk = document.createTreeWalker(
-            iframe.contentDocument.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-          );
-          
-          let node;
-          let index = 0;
-          while ((node = walk.nextNode())) {
-            const text = node.nodeValue.trim();
-            if (text) {
-              walkNodes.push({
-                text: text,
-                node: node,
-                index: index++
-              });
-            }
-          }
-          
-          console.log(`TreeWalker found ${walkNodes.length} text nodes`);
-          
-          // Use the method that found more nodes
-          if (walkNodes.length > allTextNodes.length) {
-            console.log('Using TreeWalker results as it found more nodes');
-            textNodes.push(...walkNodes);
-          } else {
-            console.log('Using recursive approach results');
-            textNodes.push(...allTextNodes);
-          }
-        } catch (walkError) {
-          console.warn('TreeWalker approach failed, using only recursive results:', walkError);
-          textNodes.push(...allTextNodes);
-        }
-        
-        console.log(`Found ${textNodes.length} text nodes in iframe content`);
-        if (textNodes.length === 0) {
-          console.warn('No text nodes found in iframe - iframe may not be fully loaded yet');
-          
-          // Fallback: If we can't find text nodes in the iframe, check if we have content in the script object
-          const fallbackContent = selectedScript.body || selectedScript.content || '';
-          if (fallbackContent) {
-            console.log('Using fallback: searching in script.body/content instead of iframe');
-            // Simple search implementation for fallback
-            const lines = fallbackContent.split('\n');
-            const fallbackResults = [];
-            
-            lines.forEach((line, index) => {
-              if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
-                console.log(`Fallback match found in line ${index}: "${line.substring(0, 30)}..."`);
-                fallbackResults.push({ 
-                  line, 
-                  index,
-                  isHtml: false  // Mark as non-HTML since we're using the text content
-                });
-              }
-            });
-            
-            console.log(`Fallback search complete. Found ${fallbackResults.length} matches`);
-            
-            // Return the results instead of setting state directly
-            const results = fallbackResults;
-            
-            // Open the search modal if we have results
-            if (results.length > 0) {
-              setIsSearchModalOpen(true);
-            } else {
-              alert(`No results found for "${searchTerm}" in script content`);
-            }
-            
-            return results;
-            return;
-          } else {
-            console.error('No fallback content available for search');
-            alert('Unable to search: content not accessible. Try again after the script fully loads.');
-            return;
-          }
-        }
-        
-        // Search in text nodes
-        const results = [];
-        const lowerSearchTerm = searchTerm.toLowerCase();
-        
-        textNodes.forEach((item) => {
-          if (item.text.toLowerCase().includes(lowerSearchTerm)) {
-            console.log(`Match found: "${item.text.substring(0, 30)}..."`);
-            results.push({
-              line: item.text,
-              index: item.index,
-              node: item.node,
-              isHtml: true
-            });
-          }
-        });
-        
-        console.log(`Search complete. Found ${results.length} matches for "${searchTerm}"`);
-        
-        // Return the results
-        if (results.length > 0) {
-          setIsSearchModalOpen(true);
-        } else {
-          alert(`No results found for "${searchTerm}"`);
-        }
-        
-        return results;
-      } catch (error) {
-        console.error('Error searching in HTML content:', error);
-        alert('Error searching in HTML content: ' + error.message);
-      }
-    } else {
-      // Regular text search for non-HTML scripts
-      // Get script content
-      const scriptContent = selectedScript.body || selectedScript.content || '';
-      if (!scriptContent) return;
-      
-      // Simple search implementation
-      const lines = scriptContent.split('\n');
-      const results = [];
-      
-      lines.forEach((line, index) => {
-        if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
-          results.push({ line, index, isHtml: false });
-        }
-      });
-      
-      // Return results instead of using state setter
-      if (results.length > 0) {
-        setIsSearchModalOpen(true);
-      } else {
-        alert(`No results found for "${searchTerm}"`);
-      }
-    }
-  };
-  
-  // Removed duplicate executeSearch - using the one from hook implementation
-  
-  // Reference to the script player component
-  const scriptPlayerRef = useRef(null);
-  
-  // Set up the position sending functionality
-  useEffect(() => {
-    console.log('⭐ [POSITION DEBUG] AdminPage: Setting up sendPosition function on scriptPlayerRef. Current ref:', scriptPlayerRef);
-    
-    // Create a position handler function and make it available globally
-    const handlePositionUpdate = (positionData) => {
-      console.log('⭐ [POSITION DEBUG] AdminPage: Sending manual scroll position to clients:', 
-        typeof positionData === 'object' ? positionData : { position: positionData });
-      
-      // If we received enhanced position data (object), use sendSearchPosition for better accuracy
-      if (typeof positionData === 'object' && positionData !== null) {
-        console.log('⭐ [POSITION DEBUG] Using enhanced SEARCH_POSITION message with text content:', 
-          positionData.text ? positionData.text.substring(0, 30) + '...' : 'none');
-        
-        // Update stored node data for rollback functionality
-        // This ensures the rollback button always has current position data
-        if (positionData.text) {
-          console.log('⭐ [POSITION DEBUG] Updating stored node data for rollback');
-          
-          // Enhance with rollback metadata
-          const nodeDataForRollback = {
-            ...positionData,
-            fromRollback: true,
-            timestamp: Date.now()
-          };
-          
-          // Store for rollback
-          setStoredNodeData(nodeDataForRollback);
-        }
-        
-        sendSearchPosition(positionData);
-      } else {
-        // Fallback to simple position value if we somehow got a number instead of an object
-        console.log('⭐ [POSITION DEBUG] Fallback: Using simple JUMP_TO_POSITION message');
-        sendControlMessage('JUMP_TO_POSITION', positionData);
-      }
-      
-      // Note: Visual feedback from preview header has been removed as part of UI cleanup
-    };
-    
-    // Set global callback for direct access from any component
-    window._sendPositionCallback = handlePositionUpdate;
-    
-    // Also set the callback on the ref if it's available
-    if (scriptPlayerRef.current) {
-      console.log('⭐ [POSITION DEBUG] Setting position handler on scriptPlayerRef.current');
-      // Support both new and legacy APIs
-      if (typeof scriptPlayerRef.current.setPositionHandler === 'function') {
-        scriptPlayerRef.current.setPositionHandler(handlePositionUpdate);
-      } else {
-        // Legacy API - assign method directly
-        scriptPlayerRef.current.sendPosition = handlePositionUpdate;
-      }
-      
-      // Debug current state of the ref
-      console.log('⭐ [POSITION DEBUG] AdminPage: Current ref state:', {
-        hasRef: !!scriptPlayerRef,
-        hasRefCurrent: !!scriptPlayerRef.current,
-        hasSendPosition: !!(scriptPlayerRef.current && scriptPlayerRef.current.sendPosition),
-        refProperties: Object.keys(scriptPlayerRef.current || {})
-      });
-    } else {
-      console.warn('⭐ [POSITION DEBUG] scriptPlayerRef.current is not available, only using global callback');
-    }
-    
-    // Set up a periodic position capture for rollback during playback
-    let positionCaptureInterval = null;
-    
-    // Start position capture when a script is selected
-    if (selectedScript) {
-      console.log('⭐ [POSITION DEBUG] Starting periodic position capture for rollback and position tracking');
-      
-      // Capture the position every 3 seconds
-      positionCaptureInterval = setInterval(() => {
-        try {
-          // Capture regardless of play state to ensure position is always tracked
-          // when debugging check play state
-          console.log('⭐ [POSITION DEBUG] Capturing position, play state:', isPlaying);
-          
-          // Get the iframe
-          const iframe = document.querySelector('#teleprompter-frame');
-          if (iframe && iframe.contentWindow && iframe.contentDocument) {
-            // Try to find the current visible dialog
-            const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
-            const viewportHeight = iframe.contentWindow.innerHeight;
-            const viewportCenter = scrollTop + (viewportHeight / 2);
-            
-            // Find dialog elements
-            const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-            
-            if (dialogElements.length > 0) {
-              // Find the closest dialog to viewport center
-              let closestElement = null;
-              let closestDistance = Infinity;
-              let closestIndex = -1;
-              
-              dialogElements.forEach((element, index) => {
-                const rect = element.getBoundingClientRect();
-                const elementTop = rect.top + scrollTop;
-                const elementCenter = elementTop + (rect.height / 2);
-                const distance = Math.abs(elementCenter - viewportCenter);
-                
-                if (distance < closestDistance && element.textContent.trim()) {
-                  closestDistance = distance;
-                  closestElement = element;
-                  closestIndex = index;
-                }
-              });
-              
-              // If we found a dialog element close to viewport, store it
-              if (closestElement && closestDistance < 500) {
-                // For rollback, we want to go BACK one dialog if possible
-                let rollbackElement = closestElement;
-                let rollbackIndex = closestIndex;
-                
-                // If we're not at the first dialog, go back one
-                if (closestIndex > 0) {
-                  rollbackElement = dialogElements[closestIndex - 1];
-                  rollbackIndex = closestIndex - 1;
-                }
-                
-                // Create node data for the rollback target
-                const nodeData = {
-                  type: rollbackElement.getAttribute('data-type') || rollbackElement.tagName.toLowerCase(),
-                  text: rollbackElement.textContent.trim().substring(0, 50),
-                  parentTag: rollbackElement.parentElement ? rollbackElement.parentElement.tagName : null,
-                  fromRollback: true,
-                  index: rollbackIndex,
-                  totalDialogs: dialogElements.length,
-                  attributes: {
-                    dataType: rollbackElement.getAttribute('data-type')
-                  }
-                };
-                
-                // Update the stored node data
-                setStoredNodeData(nodeData);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('⭐ [POSITION DEBUG] Error in periodic position capture:', e);
-        }
-      }, 3000); // Every 3 seconds is frequent enough but not too CPU intensive
-    }
-    
-    // Clean up when component unmounts
-    return () => {
-      // Clean up global callback
-      delete window._sendPositionCallback;
-      delete window._teleprompterPositionHandler;
-      
-      // Clean up interval
-      if (positionCaptureInterval) {
-        clearInterval(positionCaptureInterval);
-        positionCaptureInterval = null;
-      }
-      
-      // Clean up any highlight animations
-      try {
-        const iframe = document.querySelector('#teleprompter-frame');
-        if (iframe && iframe.contentDocument) {
-          const highlights = iframe.contentDocument.querySelectorAll('.teleprompter-highlight');
-          highlights.forEach(el => el.parentNode?.removeChild(el));
-        }
-      } catch (e) {
-        console.error('Error cleaning up highlights:', e);
-      }
-    };
-  }, [selectedScript, isPlaying]);
-  
-  // Removed duplicate jumpToSearchResult - using the one from hook implementation
   
   // Clear script selection
   const clearScriptSelection = () => {
@@ -622,9 +202,6 @@ const AdminPage = () => {
     // Clear local states
     setSelectedScriptId(null);
     setSelectedScript(null);
-    
-    // Reset stored node for rollback
-    setStoredNodeData(null);
     
     // Pause if playing
     if (isPlaying) {
@@ -675,9 +252,6 @@ const AdminPage = () => {
         console.log('Script loaded successfully:', script.title);
         setSelectedScriptId(script.id);
         setSelectedScript(script);
-        
-        // Reset stored node for rollback
-        setStoredNodeData(null);
         
         // Notify other clients
         sendControlMessage('LOAD_SCRIPT', script.id);
@@ -765,8 +339,6 @@ const AdminPage = () => {
           setSelectedScriptId(newScriptId);
           setSelectedScript(newScript);
           
-          // Removed chapters loading
-          
           // Notify other clients about the new script
           sendControlMessage('LOAD_SCRIPT', newScriptId);
         } else {
@@ -845,9 +417,6 @@ const AdminPage = () => {
         setConnectedClients(data.connectedClients);
       }
       
-      // No need to handle rollback button state anymore
-      // Removed currentChapter update
-      
       // Handle script selection changes from WebSocket
       if (data.currentScript === null && selectedScriptId !== null) {
         console.log('AdminPage: Clearing script selection due to WebSocket state update');
@@ -862,9 +431,6 @@ const AdminPage = () => {
             console.log('Script found, setting as selected:', script.title);
             setSelectedScriptId(script.id);
             setSelectedScript(script);
-            
-            // Reset stored node for rollback
-            setStoredNodeData(null);
           } else {
             console.error('AdminPage: Could not find script with ID:', data.currentScript);
           }
@@ -881,9 +447,6 @@ const AdminPage = () => {
           if (script) {
             setSelectedScriptId(script.id);
             setSelectedScript(script);
-            
-            // Reset stored node for rollback
-            setStoredNodeData(null);
           }
         } catch (error) {
           console.error('AdminPage: Error loading new script from state update:', error);
@@ -906,22 +469,12 @@ const AdminPage = () => {
     // Set local state first
     setIsPlaying(true);
     
-    // Inform the player that auto-scrolling is starting
-    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
-      console.log("[ANIMATION] Notifying ScriptPlayer that animation is starting");
-      scriptPlayerRef.current.setScrollAnimating(true);
-    }
-
-// Store current position for rollback when play is pressed
-    storeCurrentPositionForRollback();
-
     // Send WebSocket message with special metadata
     sendControlMessage('PLAY', {
       sourceId: "admin_direct_" + Date.now(),
       initiatingSender: false,
       noLoop: true
     });
-    
   };
   
   // Explicit pause function
@@ -937,191 +490,12 @@ const AdminPage = () => {
     // Set local state first
     setIsPlaying(false);
     
-    // Inform the player that auto-scrolling is stopping
-    if (scriptPlayerRef.current && scriptPlayerRef.current.setScrollAnimating) {
-      console.log("[ANIMATION] Notifying ScriptPlayer that animation is stopping");
-      scriptPlayerRef.current.setScrollAnimating(false);
-    }
-    
     // Send WebSocket message with special metadata 
     sendControlMessage('PAUSE', {
       sourceId: "admin_direct_" + Date.now(), 
       initiatingSender: true,
       noLoop: true
     });
-  };
-  
-  // Store current position for rollback
-  const storeCurrentPositionForRollback = () => {
-    try {
-      // Get the iframe or content container
-      const iframe = document.querySelector('#teleprompter-frame');
-      if (iframe && iframe.contentWindow && iframe.contentDocument) {
-        console.log('Finding dialog node for rollback storage');
-        
-        // Get current scroll position for viewport calculations
-        const scrollTop = iframe.contentWindow.scrollY || iframe.contentDocument.documentElement.scrollTop || 0;
-        const viewportTop = scrollTop;
-        const viewportHeight = iframe.contentWindow.innerHeight;
-        const viewportCenter = viewportTop + (viewportHeight / 2);
-        
-        // Update preview header to show position being captured
-        // Note: Visual feedback from preview header has been removed as part of UI cleanup
-        
-        // Capture all dialog elements for context
-        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-        console.log(`Found ${dialogElements.length} dialog elements with data-type attribute`);
-        
-        // If we have dialog elements, find the best one to store
-        if (dialogElements.length > 0) {
-          // Find the currently visible dialog - the one closest to viewport center
-          let currentDialogElement = null;
-          let currentDialogDistance = Infinity;
-          let currentDialogIndex = -1;
-          
-          // Find the current dialog closest to viewport center
-          dialogElements.forEach((element, index) => {
-            const rect = element.getBoundingClientRect();
-            const elementTop = rect.top + scrollTop;
-            const elementCenter = elementTop + (rect.height / 2);
-            
-            // Distance from element center to viewport center
-            const distance = Math.abs(elementCenter - viewportCenter);
-            
-            if (distance < currentDialogDistance && element.textContent.trim()) {
-              currentDialogDistance = distance;
-              currentDialogElement = element;
-              currentDialogIndex = index;
-            }
-          });
-          
-          // If we found a dialog element close to viewport, store it
-          if (currentDialogElement && currentDialogDistance < 500) {
-            console.log('[ROLLBACK] Found current dialog element:', {
-              text: currentDialogElement.textContent.substring(0, 30).trim(),
-              type: 'dialog element',
-              distance: currentDialogDistance,
-              index: currentDialogIndex
-            });
-            
-            // For rollback, we want to go BACK one dialog if possible
-            let rollbackElement = currentDialogElement;
-            let rollbackIndex = currentDialogIndex;
-            
-            // If we're not at the first dialog, go back one
-            if (currentDialogIndex > 0) {
-              rollbackElement = dialogElements[currentDialogIndex - 1];
-              rollbackIndex = currentDialogIndex - 1;
-              console.log('[ROLLBACK] Using previous dialog for rollback');
-            } else {
-              // We're at the first dialog, so we'll stay here
-              console.log('[ROLLBACK] Already at first dialog, using it for rollback');
-            }
-            
-            // Create node data for the rollback target
-            const nodeData = {
-              type: rollbackElement.getAttribute('data-type') || rollbackElement.tagName.toLowerCase(),
-              text: rollbackElement.textContent.trim().substring(0, 50),
-              parentTag: rollbackElement.parentElement ? rollbackElement.parentElement.tagName : null,
-              fromRollback: true,
-              index: rollbackIndex, // Store the index of this dialog
-              totalDialogs: dialogElements.length, // Store the total number of dialogs
-              // Add additional attributes to help identify the element
-              attributes: {
-                class: rollbackElement.getAttribute('class'),
-                id: rollbackElement.getAttribute('id'),
-                style: rollbackElement.getAttribute('style'),
-                dataType: rollbackElement.getAttribute('data-type')
-              }
-            };
-            
-            console.log('[ROLLBACK] Stored node data for rollback:', nodeData);
-            setStoredNodeData(nodeData);
-          } else {
-            // If we couldn't find a dialog close to viewport, use the first dialog
-            console.log('[ROLLBACK] No dialog close to viewport, using first dialog for rollback');
-            const firstDialog = dialogElements[0];
-            
-            const nodeData = {
-              type: firstDialog.getAttribute('data-type') || firstDialog.tagName.toLowerCase(),
-              text: firstDialog.textContent.trim().substring(0, 50),
-              parentTag: firstDialog.parentElement ? firstDialog.parentElement.tagName : null,
-              fromRollback: true,
-              index: 0, // First dialog
-              totalDialogs: dialogElements.length,
-              attributes: {
-                class: firstDialog.getAttribute('class'),
-                id: firstDialog.getAttribute('id'),
-                style: firstDialog.getAttribute('style'),
-                dataType: firstDialog.getAttribute('data-type')
-              }
-            };
-            
-            console.log('[ROLLBACK] Using first dialog for rollback:', nodeData);
-            setStoredNodeData(nodeData);
-          }
-        } else {
-          console.warn('[ROLLBACK] No dialog elements found, cannot create reliable rollback data');
-          setStoredNodeData(null);
-        }
-        
-        // Explicitly try to find the current dialog
-        try {
-          console.log("[PLAYBACK] Attempting to store starting position for playback");
-          // Find all dialog elements in the current view
-          const allDialogs = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-          if (allDialogs.length > 0) {
-            // Get the current scroll position
-            const scrollY = iframe.contentWindow.scrollY || 0;
-            
-            // Find which dialog is closest to the current view
-            let closestDialog = null;
-            let closestDistance = Infinity;
-            let dialogIndex = -1;
-            
-            allDialogs.forEach((dialog, idx) => {
-              const rect = dialog.getBoundingClientRect();
-              // Calculate absolute position
-              const dialogTop = rect.top + scrollY;
-              // Find distance to current scroll position
-              const distance = Math.abs(dialogTop - scrollY - 100); // 100px buffer from top
-              
-              if (distance < closestDistance) {
-                closestDistance = distance;
-                closestDialog = dialog;
-                dialogIndex = idx;
-              }
-            });
-            
-            if (closestDialog) {
-              console.log("[PLAYBACK] Explicitly storing position at playback start, dialog:", 
-                closestDialog.textContent.substring(0, 30));
-              
-              // Store the exact starting position data including the dialog index
-              const startPositionData = {
-                type: 'dialog',
-                text: closestDialog.textContent.trim().substring(0, 50),
-                index: dialogIndex,
-                totalDialogs: allDialogs.length,
-                fromRollback: true,
-                attributes: {
-                  dataType: 'dialog'
-                }
-              };
-              
-              // Store it for rollback
-              setStoredNodeData(startPositionData);
-              console.log("[PLAYBACK] Stored starting position at index:", dialogIndex);
-            }
-          }
-        } catch (posError) {
-          console.error("[PLAYBACK] Error storing starting position:", posError);
-        }
-      }
-    } catch (e) {
-      console.error('Error in rollback handling:', e);
-      setStoredNodeData(null);
-    }
   };
   
   const changeSpeed = (newSpeed) => {
@@ -1151,132 +525,6 @@ const AdminPage = () => {
     sendControlMessage('SET_FLIPPED', newFlippedState);
   };
   
-  // Handle rollback to stored node
-  const handleRollback = () => {
-    // If we're playing, pause playback first
-    if (isPlaying) {
-      console.log('[ROLLBACK] Pausing playback before rollback');
-      setIsPlaying(false);
-      sendControlMessage('PAUSE');
-    }
-    
-    // Check if we have stored data to use for rollback
-    if (storedNodeData) {
-      console.log('[ROLLBACK] Using stored position data:', storedNodeData);
-      
-      // Create the rollback data with the rollback flag
-      const rollbackData = {
-        ...storedNodeData,
-        fromRollback: true,
-        timestamp: Date.now() // Add timestamp to ensure uniqueness 
-      };
-      
-      // Apply to local preview first
-      if (scriptPlayerRef.current) {
-        console.log('[ROLLBACK] Applying to local preview via scriptPlayerRef');
-        // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
-        if (scriptPlayerRef.current.scrollToNode) {
-          scriptPlayerRef.current.scrollToNode(rollbackData);
-        } else if (scriptPlayerRef.current.jumpToPosition) {
-          scriptPlayerRef.current.jumpToPosition(rollbackData);
-        }
-      }
-      
-      // Send to all clients
-      sendSearchPosition(rollbackData);
-      
-      // Note: Visual feedback removed as part of UI cleanup
-      
-      return;
-    }
-    
-    // If no stored data is available, try to find the current dialog
-    console.log('[ROLLBACK] No stored node data, finding first dialog');
-    
-    // Find the iframe
-    const iframe = document.querySelector('#teleprompter-frame');
-    if (iframe && iframe.contentDocument) {
-      try {
-        // Get all dialog elements
-        const dialogElements = iframe.contentDocument.querySelectorAll('[data-type="dialog"]');
-        console.log(`[ROLLBACK] Found ${dialogElements.length} dialog elements`);
-        
-        if (dialogElements.length > 0) {
-          // Use the first dialog as a default
-          const firstDialog = dialogElements[0];
-          
-          // Create node data
-          const defaultData = {
-            type: 'dialog',
-            text: firstDialog.textContent.trim().substring(0, 50),
-            index: 0,
-            totalDialogs: dialogElements.length,
-            fromRollback: true,
-            attributes: {
-              dataType: 'dialog'
-            }
-          };
-          
-          console.log('[ROLLBACK] Using first dialog:', defaultData);
-          
-          // Apply to local preview
-          if (scriptPlayerRef.current) {
-            // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
-            if (scriptPlayerRef.current.scrollToNode) {
-              scriptPlayerRef.current.scrollToNode(defaultData);
-            } else if (scriptPlayerRef.current.jumpToPosition) {
-              scriptPlayerRef.current.jumpToPosition(defaultData);
-            }
-          } else {
-            // Scroll directly if needed
-            firstDialog.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center'
-            });
-          }
-          
-          // Send to all clients
-          sendSearchPosition(defaultData);
-          
-          // Store for future use
-          setStoredNodeData(defaultData);
-          
-          // Note: Visual feedback from preview header has been removed as part of UI cleanup
-          
-          return;
-        }
-      } catch (error) {
-        console.error('[ROLLBACK] Error finding dialogs:', error);
-      }
-    }
-    
-    // Absolute last resort - go to beginning
-    console.log('[ROLLBACK] No dialogs found, going to beginning of script');
-    
-    const defaultData = {
-      position: 0,
-      fromRollback: true,
-      text: "Beginning of script"
-    };
-    
-    // Apply to local preview
-    if (scriptPlayerRef.current) {
-      // Use scrollToNode (new API) or jumpToPosition (old API) depending on what's available
-      if (scriptPlayerRef.current.scrollToNode) {
-        scriptPlayerRef.current.scrollToNode(defaultData);
-      } else if (scriptPlayerRef.current.jumpToPosition) {
-        scriptPlayerRef.current.jumpToPosition(defaultData);
-      }
-    }
-    
-    // Send to all clients
-    sendSearchPosition(defaultData);
-    
-    // Note: Visual feedback removed as part of UI cleanup
-  };
-  
-  // Chapter functionality has been removed
-  
   // Bluetooth connection handlers
   const handleConnectBluetooth = async () => {
     try {
@@ -1296,17 +544,7 @@ const AdminPage = () => {
     setBluetoothStatus('disconnected');
     setBluetoothDeviceName(null);
   };
-  
-  // Handle position changes from the preview component
-  const handlePreviewPositionChange = (data) => {
-    // Only send position updates if we're not in playback mode
-    // This prevents loops during auto-scrolling
-    if (!isPlaying) {
-      // Send the position data to other clients
-      sendSearchPosition(data);
-    }
-  };
-  
+
   return (
     <div className="admin-page">
       <header className="admin-header">
@@ -1346,21 +584,6 @@ const AdminPage = () => {
               }}
             >
               {isPlaying ? '⏸️ Pause' : '▶️ Play'}
-            </button>
-            
-            {/* Rollback Button */}
-            <button 
-              onClick={handleRollback}
-              style={{
-                padding: '5px 15px',
-                backgroundColor: '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              ⏮️ Rollback
             </button>
             
             {/* Direction Button */}
@@ -1587,101 +810,42 @@ const AdminPage = () => {
           </div>
         </div>
         
+        {/* This is where the script viewer used to be - now removed to eliminate interference */}
         <div className="script-viewer-panel">
-          {selectedScript ? (
-            <>
-              <div className="script-header" style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '5px 0'
+          <div className="no-script-preview" style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+            backgroundColor: '#f5f5f5',
+            padding: '20px',
+            borderRadius: '5px'
+          }}>
+            <h3>Script Viewer Removed</h3>
+            <p>The viewer component has been removed from this page to prevent interference with the Remote and Viewer pages.</p>
+            <p>Please use the dedicated Viewer and Remote pages for script viewing:</p>
+            <div style={{ marginTop: '20px', display: 'flex', gap: '15px' }}>
+              <Link to="/viewer" className="nav-link" style={{ 
+                padding: '10px 20px', 
+                backgroundColor: '#2196F3', 
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '4px'
               }}>
-                {/* Aspect Ratio Controls */}
-                <div className="aspect-ratio-selector">
-                  <div className="radio-group">
-                    <label className={aspectRatio === '16/9' ? 'selected' : ''}>
-                      <input 
-                        type="radio" 
-                        name="aspectRatio" 
-                        value="16/9" 
-                        checked={aspectRatio === '16/9'} 
-                        onChange={() => changeAspectRatio('16/9')}
-                      />
-                      <span>16:9</span>
-                    </label>
-                    <label className={aspectRatio === '4/3' ? 'selected' : ''}>
-                      <input 
-                        type="radio" 
-                        name="aspectRatio" 
-                        value="4/3" 
-                        checked={aspectRatio === '4/3'} 
-                        onChange={() => changeAspectRatio('4/3')}
-                      />
-                      <span>4:3</span>
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Search Controls */}
-                <div className="search-container" style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '10px',
-                  maxWidth: '300px'
-                }}>
-                  <input
-                    type="text"
-                    className="search-input"
-                    placeholder="Search in script..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && executeSearch()}
-                    style={{ width: '180px' }}
-                  />
-                  <button className="search-button" onClick={executeSearch} style={{ whiteSpace: 'nowrap' }}>
-                    🔍 Search
-                    {searchResults.length > 0 && (
-                      <span className="search-count" style={{ marginLeft: '5px' }}>{searchResults.length}</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-              
-              {/* Search Results Modal */}
-              <SearchModal 
-                isOpen={isSearchModalOpen}
-                onClose={() => setIsSearchModalOpen(false)}
-                searchResults={searchResults}
-                onResultSelect={(result) => hookJumpToSearchResult(result, scriptPlayerRef)}
-                searchTerm={searchTerm}
-              />
-              
-              <div className="preview-container">
-                {/* Preview header removed to create cleaner UI */}
-                {selectedScript ? (
-                  <>
-                    <PreviewComponent
-                      ref={scriptPlayerRef}
-                      key={`preview-${selectedScript.id}`} 
-                      script={selectedScript}
-                      isPlaying={isPlaying}
-                      speed={speed}
-                      direction={direction}
-                      fontSize={fontSize} // Use a smaller preview font size
-                      aspectRatio={aspectRatio}
-                      onPositionChange={handlePreviewPositionChange}
-                    />
-                  </>
-                ) : (
-                  <div className="no-script-preview">No script selected</div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="no-script-selected">
-              <p>No script selected. Please select a script from the list or add a new one.</p>
+                Open Viewer
+              </Link>
+              <Link to="/remote" className="nav-link" style={{ 
+                padding: '10px 20px', 
+                backgroundColor: '#4CAF50', 
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '4px'
+              }}>
+                Open Remote
+              </Link>
             </div>
-          )}
+          </div>
         </div>
         
         <div className="admin-sidebar">
@@ -1768,6 +932,18 @@ const AdminPage = () => {
             </div>
           </div>
           
+          {/* Character Highlighting Panel */}
+          {selectedScriptId && (
+            <div className="character-highlight-panel" style={{ marginBottom: '20px' }}>
+              <CharacterHighlighter 
+                scriptId={selectedScriptId}
+                onHighlightChange={() => {
+                  console.log('Highlight changes applied');
+                }} 
+              />
+            </div>
+          )}
+          
           <div className="help-panel">
             <h3>Help</h3>
             <ul className="help-list">
@@ -1776,6 +952,9 @@ const AdminPage = () => {
               </li>
               <li>
                 <strong>Bluetooth Remote:</strong> Connect a compatible Bluetooth presentation remote to control the teleprompter.
+              </li>
+              <li>
+                <strong>Character Highlighting:</strong> Use the Character Highlighting tool to color-code different characters in your script. Click "Highlight 'Scream' in Green" for a quick semi-transparent highlight.
               </li>
             </ul>
           </div>
