@@ -9,6 +9,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { registerMessageHandler } from '../services/websocket';
 import fileSystemRepository from '../database/fileSystemRepository';
 import ViewerComponent from '../components/ViewerComponent'; 
+import HighlightRenderer from '../components/HighlightRenderer';
 import '../styles.css';
 
 const ViewerPage = ({ directScriptId }) => {
@@ -842,6 +843,8 @@ const ViewerPage = ({ directScriptId }) => {
             aspectRatio={aspectRatio}
             isFlipped={false} // Always pass false here to prevent double transformation
           />
+          
+          {/* HighlightRenderer is already included in ViewerComponent */}
         </div>
       </div>
     </div>

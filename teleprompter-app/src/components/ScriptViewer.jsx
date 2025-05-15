@@ -1,6 +1,7 @@
 // src/components/ScriptViewer.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import FountainViewer from './FountainViewer';
+import HighlightRenderer from './HighlightRenderer';
 
 const ScriptViewer = ({ fullScreen = false, currentScript = null }) => {
   const [loading, setLoading] = useState(true);
