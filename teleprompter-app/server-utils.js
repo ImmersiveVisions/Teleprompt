@@ -168,6 +168,41 @@ function handleMessage(message, sender) {
   console.log('Server received message:', message.type, message.action || '');
   
   switch (message.type) {
+    case 'HIGHLIGHT_CHARACTER_TOGGLE':
+      // Handle character highlight toggle
+      console.log('Character highlight toggle received:', message.data);
+      
+      // Forward to all clients
+      const toggleMessage = JSON.stringify({
+        type: 'HIGHLIGHT_CHARACTER_TOGGLE',
+        data: message.data
+      });
+      
+      connections.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client !== sender) {
+          client.send(toggleMessage);
+        }
+      });
+      return; // No need to broadcast state after this
+      
+    case 'HIGHLIGHT_UPDATE':
+      // Handle highlight update
+      console.log('Highlight update received:', 
+        message.data ? `scriptId: ${message.data.scriptId}, ${message.data.highlights ? message.data.highlights.length : 0} highlights` : 'No data');
+      
+      // Forward to all clients
+      const highlightMessage = JSON.stringify({
+        type: 'HIGHLIGHT_UPDATE',
+        data: message.data
+      });
+      
+      connections.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client !== sender) {
+          client.send(highlightMessage);
+        }
+      });
+      return; // No need to broadcast state after this
+      
     case 'SEARCH_POSITION':
       // New dedicated message type for search/scroll operations
       // Handle search position messages

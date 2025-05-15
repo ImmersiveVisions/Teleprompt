@@ -88,7 +88,7 @@ const initWebSocket = (statusCb) => {
       try {
         const message = JSON.parse(event.data);
         // Minimal logging to reduce console spam
-        if (message.type !== 'STATE_UPDATE') {
+        if (message.type !== 'STATE_UPDATE' && message.type !== 'LINE_SYNC_INFO') {
           console.log('===== [WS CLIENT] Received message:', message.type);
         }
         
@@ -98,6 +98,39 @@ const initWebSocket = (statusCb) => {
           if (message.data.isPlaying === true || message.data.isPlaying === false) {
             console.log(`===== [WS CLIENT] PLAY STATE CHANGE TO: ${message.data.isPlaying}`);
           }
+        }
+        
+        // Special handling for line sync information
+        if (message.type === 'LINE_SYNC_INFO' && message.data) {
+          // Import lazily to avoid circular dependencies
+          import('./lineSyncService').then(module => {
+            const lineSyncService = module.default;
+            lineSyncService.handleLineSyncMessage(message.data);
+          }).catch(err => {
+            console.error('Error importing lineSyncService:', err);
+          });
+        }
+        
+        // Special handling for highlight updates
+        if (message.type === 'HIGHLIGHT_UPDATE' && message.data) {
+          // Import lazily to avoid circular dependencies
+          import('./highlightService').then(module => {
+            const highlightService = module.default;
+            highlightService.handleHighlightUpdate(message.data);
+          }).catch(err => {
+            console.error('Error importing highlightService:', err);
+          });
+        }
+        
+        // Special handling for character highlight toggle
+        if (message.type === 'HIGHLIGHT_CHARACTER_TOGGLE' && message.data) {
+          // Import lazily to avoid circular dependencies
+          import('./highlightService').then(module => {
+            const highlightService = module.default;
+            highlightService.handleCharacterToggle(message.data);
+          }).catch(err => {
+            console.error('Error importing highlightService:', err);
+          });
         }
         
         // Dispatch message to all registered handlers without delay
@@ -130,7 +163,7 @@ const initWebSocket = (statusCb) => {
 
 /**
  * Send a control message over WebSocket
- * @param {string} action - Control action to perform
+ * @param {string} action - Control action to perform (including LINE_SYNC_INFO)
  * @param {*} value - Optional value for the action
  * @returns {boolean} - Whether the message was sent successfully
  */
@@ -181,7 +214,21 @@ const sendControlMessage = (action, value = null) => {
       }
     }
     
-    // Create the message
+    // Handle special message types
+    if (action === 'LINE_SYNC_INFO' || action === 'HIGHLIGHT_UPDATE' || action === 'HIGHLIGHT_CHARACTER_TOGGLE') {
+      try {
+        clientWs.send(JSON.stringify({
+          type: action, // Use the action as the message type
+          data: value
+        }));
+        return true;
+      } catch (err) {
+        console.error(`===== [WS CLIENT] Error sending ${action} message:`, err);
+        return false;
+      }
+    }
+    
+    // Create the message for standard control actions
     const message = JSON.stringify({
       type: 'CONTROL',
       action,
@@ -235,7 +282,21 @@ const sendSearchPosition = (data) => {
   }
   
   if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-    console.log('===== [WS CLIENT] Sending SEARCH_POSITION message');
+    // Determine message source based on the current page
+    let source = 'unknown';
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.includes('/admin')) {
+        source = 'admin';
+      } else if (window.location.pathname.includes('/viewer')) {
+        source = 'viewer';
+      } else if (window.location.pathname.includes('/remote')) {
+        source = 'remote';
+      } else if (window.location.pathname === '/' || window.location.pathname === '') {
+        source = 'admin'; // Default home page is admin
+      }
+    }
+    
+    console.log(`===== [WS CLIENT] Sending SEARCH_POSITION message from ${source}`);
     
     // Validate the data before sending - ensure position property exists
     let messageData = data;
@@ -248,14 +309,33 @@ const sendSearchPosition = (data) => {
       messageData = { ...data, position: 0 };
     }
     
+    // Add origin information to help with routing decisions
+    messageData.origin = source;
+    messageData.timestamp = Date.now();
+    
+    // Add appropriate flags based on origin
+    if (source === 'remote') {
+      messageData.fromRemote = true;
+      messageData.remoteSearch = !!data.fromSearch;
+      
+      // ENHANCED: For line-based navigation from remote
+      if (data.lineIndex !== undefined && data.totalLines) {
+        messageData.lineBasedNavigation = true;
+        console.log(`===== [WS CLIENT] Using LINE-BASED NAVIGATION: line ${data.lineIndex}/${data.totalLines}`);
+      }
+    } else if (source === 'admin') {
+      messageData.fromAdmin = true;
+      messageData.adminSearch = !!data.fromSearch;
+    }
+    
     // Add a flag to indicate this is an explicit search to avoid filtering at server
-    if (data.fromSearch || data.fromRollback || data._debug) {
+    if (data.fromSearch || data.fromRollback || data._debug || data.lineIndex !== undefined) {
       messageData._explicitSearch = true;
     }
     
     console.log('===== [WS CLIENT] Sending search position data:', 
       typeof messageData === 'object' 
-        ? `position: ${messageData.position}, text: ${messageData.text ? messageData.text.substring(0, 20) + '...' : 'none'}`
+        ? `origin: ${messageData.origin}, position: ${messageData.position}, text: ${messageData.text ? messageData.text.substring(0, 20) + '...' : 'none'}`
         : messageData
     );
     
@@ -267,7 +347,7 @@ const sendSearchPosition = (data) => {
     
     // Send and verify
     clientWs.send(message);
-    console.log('===== [WS CLIENT] SEARCH_POSITION message sent');
+    console.log(`===== [WS CLIENT] SEARCH_POSITION message sent from ${source}`);
   } else {
     console.warn('===== [WS CLIENT] WebSocket not connected, cannot send search position. Status:', getWebSocketStatus());
   }
