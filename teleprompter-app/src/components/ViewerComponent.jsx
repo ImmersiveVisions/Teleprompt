@@ -9,6 +9,7 @@ import useTeleprompterFontSize from '../hooks/useTeleprompterFontSize';
 import useIframeLoading from '../hooks/useIframeLoading';
 import useNodeNavigation from '../hooks/useNodeNavigation';
 import HighlightRenderer from './HighlightRenderer';
+import highlightService from '../services/highlightService';
 
 /**
  * ViewerComponent - A dedicated viewer that only receives control messages
@@ -33,6 +34,19 @@ const ViewerComponent = React.forwardRef((props, ref) => {
   const { isIframeLoaded, handleIframeLoad } = useIframeLoading(script, fontSize);
   const { animationRef } = useTeleprompterScroll(containerRef, isPlaying, speed, direction, script, isIframeLoaded);
   useTeleprompterFontSize(containerRef, fontSize, script, isIframeLoaded);
+  
+  // Set script content for auto-highlighting when script and iframe are loaded
+  useEffect(() => {
+    if (script && script.id && isIframeLoaded) {
+      const scriptFrame = document.getElementById('teleprompter-frame');
+      if (scriptFrame && scriptFrame.contentDocument) {
+        const content = scriptFrame.contentDocument.body.innerText || '';
+        if (content) {
+          highlightService.setScriptContent(script.id, content);
+        }
+      }
+    }
+  }, [script, isIframeLoaded]);
   
   // Log on render to debug ref issues
   console.log('ViewerComponent: Rendering with script =', script?.id || 'none');

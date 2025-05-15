@@ -19,6 +19,7 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
   const [colorPickerTarget, setColorPickerTarget] = useState(null);
   const [selectedColor, setSelectedColor] = useState('#33FF57'); // Default green
   const [colorOpacity, setColorOpacity] = useState(0.5); // Semi-transparent
+  const [enabledCharacters, setEnabledCharacters] = useState({});
   const colorPickerRef = useRef(null);
 
   // Load highlights for this script
@@ -38,6 +39,13 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
     // Get character-specific colors
     const charColors = highlightService.getAllCharacterColors();
     setCharacterColors(charColors);
+    
+    // Get enabled characters
+    const enabledChars = {};
+    highlightService.getEnabledCharacters().forEach(char => {
+      enabledChars[char.toLowerCase()] = true;
+    });
+    setEnabledCharacters(enabledChars);
   }, [scriptId]);
 
   // Initialize and load data
@@ -81,6 +89,21 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
         'scream': `rgba(51, 255, 87, ${opacity})` // This matches the rgba conversion inside highlightService
       }));
       
+      // Enable auto-highlighting for "Scream"
+      highlightService.toggleCharacterHighlight('Scream', true);
+      
+      // Also update the script content for auto-highlighting
+      if (scriptId) {
+        // Get script content from iframe
+        const scriptFrame = document.getElementById('teleprompter-frame');
+        if (scriptFrame && scriptFrame.contentDocument) {
+          const content = scriptFrame.contentDocument.body.innerText || '';
+          if (content) {
+            highlightService.setScriptContent(scriptId, content);
+          }
+        }
+      }
+      
       // Refresh highlights
       loadHighlights();
       
@@ -89,8 +112,14 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
         setCharacters(prev => [...prev, 'Scream']);
         setNewCharacter('');
       }
+      
+      // Update enabled characters state
+      setEnabledCharacters(prev => ({
+        ...prev,
+        'scream': true
+      }));
     }
-  }, [characters, loadHighlights]);
+  }, [characters, loadHighlights, scriptId]);
 
   // Add a new character
   const handleAddCharacter = () => {
@@ -188,6 +217,44 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
     loadHighlights();
   };
 
+  // Toggle character highlighting
+  const toggleCharacterHighlight = useCallback((character) => {
+    if (!character) return;
+    
+    const characterKey = character.toLowerCase();
+    const currentState = enabledCharacters[characterKey] || false;
+    const newState = !currentState;
+    
+    // Toggle in the service
+    highlightService.toggleCharacterHighlight(character, newState);
+    
+    // Update script content if enabling
+    if (newState && scriptId) {
+      // Get script content from iframe
+      const scriptFrame = document.getElementById('teleprompter-frame');
+      if (scriptFrame && scriptFrame.contentDocument) {
+        const content = scriptFrame.contentDocument.body.innerText || '';
+        if (content) {
+          highlightService.setScriptContent(scriptId, content);
+        }
+      }
+    }
+    
+    // Update local state
+    setEnabledCharacters(prev => ({
+      ...prev,
+      [characterKey]: newState
+    }));
+    
+    // Refresh highlights
+    loadHighlights();
+    
+    // Notify parent component
+    if (onHighlightChange) {
+      onHighlightChange(highlightService.getHighlights(scriptId));
+    }
+  }, [enabledCharacters, scriptId, loadHighlights, onHighlightChange]);
+
   // Handle text selection from the script
   const handleTextSelection = (data) => {
     if (!isSelectionMode || !selectedCharacter) return;
@@ -282,26 +349,35 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
   return (
     <div className="character-highlighter">
       <h3>Character Highlighting</h3>
+      <p style={{ marginBottom: '15px' }}>
+        Automatically highlight all instances of character names in the script with your selected colors.
+        Toggle highlighting on/off for each character.
+      </p>
       
       {/* Character Management */}
       <div className="character-manager">
         {/* Highlight Scream character button */}
-        <div className="scream-highlight-button" style={{ marginBottom: '10px' }}>
+        <div className="scream-highlight-button" style={{ marginBottom: '15px' }}>
           <button 
             onClick={setScreamHighlight}
             style={{
               backgroundColor: '#33FF57',
               color: 'black',
               opacity: 0.7,
-              padding: '5px 10px',
+              padding: '8px 15px',
               border: '1px solid #22AA44',
               borderRadius: '4px',
               cursor: 'pointer',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              width: '100%',
+              fontSize: '16px'
             }}
           >
             Highlight "Scream" in Green
           </button>
+          <p style={{ marginTop: '5px', fontSize: '12px', color: '#666' }}>
+            Quick option: This will highlight all instances of "Scream" in the script.
+          </p>
         </div>
         
         {/* Add new character */}
@@ -338,10 +414,20 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
               <span>{character}</span>
               <div className="character-actions">
                 <button 
+                  onClick={() => toggleCharacterHighlight(character)}
+                  className={enabledCharacters[character.toLowerCase()] ? 'active' : ''}
+                  style={{
+                    backgroundColor: enabledCharacters[character.toLowerCase()] ? '#28a745' : '#6c757d',
+                    color: 'white'
+                  }}
+                >
+                  {enabledCharacters[character.toLowerCase()] ? 'Enabled' : 'Disabled'}
+                </button>
+                <button 
                   onClick={() => handleSelectCharacter(character)}
                   className={selectedCharacter === character ? 'active' : ''}
                 >
-                  {selectedCharacter === character ? 'Selecting...' : 'Highlight'}
+                  {selectedCharacter === character ? 'Selecting...' : 'Manual'}
                 </button>
                 <button onClick={() => handleClearCharacterHighlights(character)}>
                   Clear
