@@ -4,6 +4,7 @@
 
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import fileSystemRepository from '../database/fileSystemRepository';
+import { sendSearchPosition } from '../services/websocket';
 import ViewerFrame from './ui/ViewerFrame';
 import HighlightRenderer from './HighlightRenderer';
 
@@ -18,13 +19,17 @@ const RemoteScriptViewer = forwardRef(({
   direction = 'forward',
   fontSize = 24,
   isFlipped = false,
-  isHighDPI = false // Add high DPI mode prop
+  isHighDPI = false, // Add high DPI mode prop
+  onPositionChange // Callback for position changes
 }, ref) => {
   const [script, setScript] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isIframeLoaded, setIsIframeLoaded] = useState(false);
   const containerRef = useRef(null);
   const animationRef = useRef(null);
+  const scrollTimeoutRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
+  const lastScrollPositionRef = useRef(0);
   
   // Expose methods to parent component via ref
   useImperativeHandle(ref, () => ({
@@ -297,6 +302,156 @@ const RemoteScriptViewer = forwardRef(({
     // Return cleanup function
     return cleanupAnimation;
   }, [isPlaying, speed, direction, script, isIframeLoaded, isHighDPI]);
+  
+  // Calculate the current line position based on scrolling
+  const calculateLinePosition = () => {
+    try {
+      if (!script || !isIframeLoaded) return null;
+      
+      const iframe = document.getElementById('teleprompter-frame');
+      if (!iframe || !iframe.contentDocument) return null;
+      
+      const scrollContainer = iframe.contentDocument.documentElement || iframe.contentDocument.body;
+      const scrollTop = scrollContainer.scrollTop;
+      const scrollHeight = scrollContainer.scrollHeight;
+      const clientHeight = iframe.contentWindow.innerHeight;
+      
+      // If the script content is available, calculate line position
+      const scriptContent = script.content || script.body || "";
+      if (scriptContent) {
+        const lines = scriptContent.split("\n");
+        const totalLines = lines.length;
+        
+        // Calculate the current line index based on scroll position
+        const scrollRatio = scrollTop / (scrollHeight - clientHeight);
+        const estimatedLineIndex = Math.round(scrollRatio * totalLines);
+        
+        // Find the actual visible line at the top of the viewport
+        let topLine = null;
+        try {
+          // Try to find elements that intersect with the top of the viewport
+          const paragraphs = Array.from(iframe.contentDocument.querySelectorAll('p, div, span, h1, h2, h3, h4, h5, h6'));
+          
+          if (paragraphs.length > 0) {
+            // Sort by their vertical position
+            const visibleElements = paragraphs
+              .filter(el => {
+                const rect = el.getBoundingClientRect();
+                // Element must be visible in the viewport (adjusted for iframe)
+                return rect.top >= 0 && rect.top <= clientHeight && rect.height > 0;
+              })
+              .sort((a, b) => {
+                const rectA = a.getBoundingClientRect();
+                const rectB = b.getBoundingClientRect();
+                return rectA.top - rectB.top;
+              });
+            
+            // Get the topmost visible element
+            if (visibleElements.length > 0) {
+              topLine = {
+                element: visibleElements[0],
+                text: visibleElements[0].textContent,
+                index: estimatedLineIndex
+              };
+            }
+          }
+        } catch (elemErr) {
+          console.error("Error finding visible elements:", elemErr);
+        }
+        
+        return {
+          lineIndex: estimatedLineIndex,
+          totalLines: totalLines,
+          position: scrollRatio,
+          topText: topLine ? topLine.text : null,
+          scrollTop,
+          scrollHeight,
+          lineBasedNavigation: true
+        };
+      }
+    } catch (error) {
+      console.error("Error calculating line position:", error);
+    }
+    
+    return null;
+  };
+  
+  // Handle scrolling events in the iframe content
+  useEffect(() => {
+    if (!isIframeLoaded || !script) return;
+    
+    const iframe = document.getElementById('teleprompter-frame');
+    if (!iframe || !iframe.contentWindow) return;
+    
+    // Handler for scroll events
+    const handleScroll = () => {
+      // Skip position updates during playback
+      if (isPlaying) return;
+      
+      // Clear any existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // Mark that user is scrolling
+      isUserScrollingRef.current = true;
+      
+      // Set a timeout to detect when scrolling stops
+      scrollTimeoutRef.current = setTimeout(() => {
+        isUserScrollingRef.current = false;
+        
+        // Calculate current line position
+        const positionData = calculateLinePosition();
+        if (positionData) {
+          // Add metadata for routing
+          const data = {
+            ...positionData,
+            origin: 'remote',
+            fromRemote: true,
+            manualScroll: true,
+            timestamp: Date.now()
+          };
+          
+          // Only send if the position has changed significantly
+          const newScrollTop = positionData.scrollTop;
+          if (Math.abs(newScrollTop - lastScrollPositionRef.current) > 50) {
+            lastScrollPositionRef.current = newScrollTop;
+            console.log('RemoteScriptViewer: Sending position update after manual scroll', data);
+            
+            // Send position via WebSocket
+            sendSearchPosition(data);
+            
+            // Call the callback if provided
+            if (typeof onPositionChange === 'function') {
+              onPositionChange(data);
+            }
+          }
+        }
+      }, 200); // Wait 200ms after scrolling stops
+    };
+    
+    // Add scroll listener to iframe content
+    try {
+      iframe.contentWindow.addEventListener('scroll', handleScroll, { passive: true });
+    } catch (error) {
+      console.error('Error adding scroll listener to iframe:', error);
+    }
+    
+    // Cleanup
+    return () => {
+      if (iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.removeEventListener('scroll', handleScroll);
+        } catch (error) {
+          // Silently handle cleanup errors
+        }
+      }
+      
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [isIframeLoaded, script, isPlaying, onPositionChange]);
   
   // Handler for iframe load event
   const handleIframeLoad = () => {

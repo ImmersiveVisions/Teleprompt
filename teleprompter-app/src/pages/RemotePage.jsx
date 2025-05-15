@@ -27,6 +27,7 @@ const RemotePage = () => {
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isHighDPI, setIsHighDPI] = useState(false); // Add high DPI mode toggle
   const [selectedScript, setSelectedScript] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Ref for the remote script viewer component
   const remoteViewerRef = useRef(null);
@@ -47,6 +48,19 @@ const RemotePage = () => {
   // Script validation helper - returns true if script has content
   const hasScriptContent = (script) => {
     return script && (!!script.content || !!script.body);
+  };
+  
+  // Handle position updates from the viewer component
+  const handlePositionChange = (positionData) => {
+    // This function is called when the remote viewer scrolls to send position updates
+    // The data is already being sent through websockets in the RemoteScriptViewer component
+    console.log('RemotePage: Position change detected', positionData);
+    
+    // Show syncing indicator briefly
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 1000); // Show indicator for 1 second
   };
   
   // Custom search handler for RemotePage (without iframe dependency)
@@ -492,8 +506,26 @@ const RemotePage = () => {
           fontSize={Math.max(12, fontSize - remoteScaleFactor)} // Apply scale factor with minimum size of 12px
           isFlipped={isFlipped}
           isHighDPI={isHighDPI}
+          onPositionChange={handlePositionChange} // Pass the position change handler
         />
       </div>
+      
+      {/* Add styles for syncing indicator */}
+      <style>
+        {`
+          .connection-status.syncing {
+            background-color: #ffc107;
+            color: #000;
+            animation: pulse 1s infinite;
+          }
+          
+          @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+          }
+        `}
+      </style>
       
       {/* Floating header with controls */}
       <div className="remote-floating-header visible">
@@ -600,8 +632,8 @@ const RemotePage = () => {
         </div>
         
         <div className="remote-header-right">
-          <div className={`connection-status ${connectionStatus}`}>
-            {connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
+          <div className={`connection-status ${connectionStatus} ${isSyncing ? 'syncing' : ''}`}>
+            {isSyncing ? 'Syncing...' : connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
           </div>
           <Link to="/" className="nav-link">Home</Link>
         </div>
