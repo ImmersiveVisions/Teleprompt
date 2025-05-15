@@ -810,42 +810,83 @@ const AdminPage = () => {
           </div>
         </div>
         
-        {/* This is where the script viewer used to be - now removed to eliminate interference */}
+        {/* This is where the script viewer used to be - now showing character highlighter */}
         <div className="script-viewer-panel">
-          <div className="no-script-preview" style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100%',
-            backgroundColor: '#f5f5f5',
-            padding: '20px',
-            borderRadius: '5px'
-          }}>
-            <h3>Script Viewer Removed</h3>
-            <p>The viewer component has been removed from this page to prevent interference with the Remote and Viewer pages.</p>
-            <p>Please use the dedicated Viewer and Remote pages for script viewing:</p>
-            <div style={{ marginTop: '20px', display: 'flex', gap: '15px' }}>
-              <Link to="/viewer" className="nav-link" style={{ 
-                padding: '10px 20px', 
-                backgroundColor: '#2196F3', 
-                color: 'white',
-                textDecoration: 'none',
-                borderRadius: '4px'
-              }}>
-                Open Viewer
-              </Link>
-              <Link to="/remote" className="nav-link" style={{ 
-                padding: '10px 20px', 
-                backgroundColor: '#4CAF50', 
-                color: 'white',
-                textDecoration: 'none',
-                borderRadius: '4px'
-              }}>
-                Open Remote
-              </Link>
+          {selectedScriptId ? (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              height: '100%',
+              backgroundColor: '#f5f5f5',
+              padding: '20px',
+              borderRadius: '5px'
+            }}>
+              <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>Character Highlighter</h3>
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <CharacterHighlighter 
+                  scriptId={selectedScriptId}
+                  onHighlightChange={() => {
+                    console.log('Highlight changes applied');
+                  }} 
+                />
+              </div>
+              <div style={{ marginTop: '20px', display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                <Link to="/viewer" className="nav-link" style={{ 
+                  padding: '10px 20px', 
+                  backgroundColor: '#2196F3', 
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px'
+                }}>
+                  Open Viewer
+                </Link>
+                <Link to="/remote" className="nav-link" style={{ 
+                  padding: '10px 20px', 
+                  backgroundColor: '#4CAF50', 
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px'
+                }}>
+                  Open Remote
+                </Link>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="no-script-preview" style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+              backgroundColor: '#f5f5f5',
+              padding: '20px',
+              borderRadius: '5px'
+            }}>
+              <h3>No Script Selected</h3>
+              <p>Please select a script to access the Character Highlighter.</p>
+              <p>Then use the dedicated Viewer and Remote pages for script viewing:</p>
+              <div style={{ marginTop: '20px', display: 'flex', gap: '15px' }}>
+                <Link to="/viewer" className="nav-link" style={{ 
+                  padding: '10px 20px', 
+                  backgroundColor: '#2196F3', 
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px'
+                }}>
+                  Open Viewer
+                </Link>
+                <Link to="/remote" className="nav-link" style={{ 
+                  padding: '10px 20px', 
+                  backgroundColor: '#4CAF50', 
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px'
+                }}>
+                  Open Remote
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="admin-sidebar">
@@ -932,17 +973,7 @@ const AdminPage = () => {
             </div>
           </div>
           
-          {/* Character Highlighting Panel */}
-          {selectedScriptId && (
-            <div className="character-highlight-panel" style={{ marginBottom: '20px' }}>
-              <CharacterHighlighter 
-                scriptId={selectedScriptId}
-                onHighlightChange={() => {
-                  console.log('Highlight changes applied');
-                }} 
-              />
-            </div>
-          )}
+          {/* Character Highlighting Panel moved to center panel */}
           
           <div className="help-panel">
             <h3>Help</h3>
@@ -954,7 +985,7 @@ const AdminPage = () => {
                 <strong>Bluetooth Remote:</strong> Connect a compatible Bluetooth presentation remote to control the teleprompter.
               </li>
               <li>
-                <strong>Character Highlighting:</strong> Use the Character Highlighting tool to color-code different characters in your script. Click "Highlight 'Scream' in Green" for a quick semi-transparent highlight.
+                <strong>Character Highlighting:</strong> Use the Character Highlighting tool in the center panel to color-code different characters in your script. Click "Highlight 'Scream' in Green" for a quick semi-transparent highlight.
               </li>
             </ul>
           </div>
