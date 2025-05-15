@@ -23,6 +23,7 @@ const RemotePage = () => {
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(24);
   const [isFlipped, setIsFlipped] = useState(false); // Mirror mode state
+  const [remoteScaleFactor] = useState(2); // Constant scale factor for remote view
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isHighDPI, setIsHighDPI] = useState(false); // Add high DPI mode toggle
   const [selectedScript, setSelectedScript] = useState(null);
@@ -191,8 +192,9 @@ const RemotePage = () => {
       setDirection(data.direction);
       // Make sure font size is a valid number before updating
       if (data.fontSize && typeof data.fontSize === 'number' && !isNaN(data.fontSize)) {
+        // We store the actual fontSize from the server, but display it smaller
         setFontSize(data.fontSize);
-        console.log('RemotePage: Updated font size to:', data.fontSize);
+        console.log('RemotePage: Updated font size to:', data.fontSize, '(displayed as:', data.fontSize - remoteScaleFactor, ')');
       }
       if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
       
@@ -487,7 +489,7 @@ const RemotePage = () => {
           isPlaying={isPlaying}
           speed={speed}
           direction={direction}
-          fontSize={fontSize}
+          fontSize={Math.max(12, fontSize - remoteScaleFactor)} // Apply scale factor with minimum size of 12px
           isFlipped={isFlipped}
           isHighDPI={isHighDPI}
         />
@@ -582,6 +584,9 @@ const RemotePage = () => {
             >
               +
             </button>
+            <span style={{ fontSize: '10px', marginLeft: '5px', color: '#888' }}>
+              (showing: {fontSize - remoteScaleFactor}px)
+            </span>
           </div>
           
           {/* High DPI Mode Toggle */}
