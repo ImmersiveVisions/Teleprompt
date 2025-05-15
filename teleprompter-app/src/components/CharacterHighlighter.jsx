@@ -132,13 +132,31 @@ const CharacterHighlighter = ({ scriptId, onHighlightChange }) => {
     }
     
     // Add to characters list
-    setCharacters([...characters, newCharacter.trim()]);
+    const characterName = newCharacter.trim();
+    setCharacters([...characters, characterName]);
+    
+    // Assign a default color
+    const defaultIndex = characters.length % 9 + 1;
+    const defaultColor = availableColors[`character${defaultIndex}`] || availableColors.default;
+    highlightService.setCharacterColor(characterName, defaultColor, 0.5);
+    
+    // Set script content for auto-highlighting
+    if (scriptId) {
+      // Get script content from iframe
+      const scriptFrame = document.getElementById('teleprompter-frame');
+      if (scriptFrame && scriptFrame.contentDocument) {
+        const content = scriptFrame.contentDocument.body.innerText || '';
+        if (content) {
+          highlightService.setScriptContent(scriptId, content);
+        }
+      }
+    }
     
     // Clear input
     setNewCharacter('');
     
     // Select the new character
-    setSelectedCharacter(newCharacter.trim());
+    setSelectedCharacter(characterName);
   };
 
   // Select a character for highlighting

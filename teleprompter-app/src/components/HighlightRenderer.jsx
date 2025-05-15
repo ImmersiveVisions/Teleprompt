@@ -78,6 +78,33 @@ const HighlightRenderer = ({
       // Generate CSS for highlighting
       let css = '';
       
+      // Character-based highlights - highlight all instances of a character name
+      const enabledCharacters = highlightService.getEnabledCharacters();
+      if (enabledCharacters.length > 0) {
+        // Create character-based highlighting CSS rules
+        enabledCharacters.forEach(character => {
+          const characterColor = highlightService.getCharacterColor(character);
+          if (characterColor) {
+            const characterClass = `char-highlight-${character.toLowerCase().replace(/\s+/g, '-')}`;
+            
+            // Add a CSS rule that will highlight all instances of this character's name
+            css += `.${characterClass} { 
+              background-color: ${characterColor}; 
+              color: ${getContrastColor(characterColor)};
+              padding: 2px 0;
+            }\n`;
+            
+            // Find all instances of the character name in the content
+            // This is done by searching for the character name with word boundaries
+            const characterName = character;
+            const regex = new RegExp(`\\b${characterName}\\b`, 'gi');
+            
+            // Apply highlighting to all text nodes containing the character name
+            highlightTextInIframe(iframe.contentDocument, contentElement, regex, characterClass);
+          }
+        });
+      }
+      
       // Position-based highlights - find DOM elements by position
       const allTextNodes = getAllTextNodes(contentElement);
       const contentRect = contentElement.getBoundingClientRect();
@@ -135,6 +162,32 @@ const HighlightRenderer = ({
     
     // Generate CSS for highlighting
     let css = '';
+    
+    // Character-based highlights - highlight all instances of a character name
+    const enabledCharacters = highlightService.getEnabledCharacters();
+    if (enabledCharacters.length > 0) {
+      // Create character-based highlighting CSS rules
+      enabledCharacters.forEach(character => {
+        const characterColor = highlightService.getCharacterColor(character);
+        if (characterColor) {
+          const characterClass = `char-highlight-${character.toLowerCase().replace(/\s+/g, '-')}`;
+          
+          // Add a CSS rule that will highlight all instances of this character's name
+          css += `.${characterClass} { 
+            background-color: ${characterColor}; 
+            color: ${getContrastColor(characterColor)};
+            padding: 2px 0;
+          }\n`;
+          
+          // Find all instances of the character name in the content
+          const characterName = character;
+          const regex = new RegExp(`\\b${characterName}\\b`, 'gi');
+          
+          // Apply highlighting to all text nodes containing the character name
+          highlightTextInIframe(document, contentElement, regex, characterClass);
+        }
+      });
+    }
     
     // Position-based highlights - find DOM elements by position
     const allTextNodes = getAllTextNodes(contentElement);
@@ -210,6 +263,63 @@ const HighlightRenderer = ({
     }
     
     return result;
+  };
+  
+  // Highlight text in iframe using regex pattern
+  const highlightTextInIframe = (doc, element, regex, className) => {
+    try {
+      // Get all text nodes
+      const textNodes = getAllTextNodes(element);
+      
+      // Process each text node
+      textNodes.forEach(textNode => {
+        const text = textNode.textContent;
+        
+        // Check if the text contains the pattern
+        if (!regex.test(text)) {
+          // Reset the regex lastIndex property
+          regex.lastIndex = 0;
+          return;
+        }
+        
+        // Reset the regex lastIndex property for a fresh search
+        regex.lastIndex = 0;
+        
+        // Create a document fragment to hold the highlighted text
+        const fragment = doc.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+        
+        // Find all matches
+        while ((match = regex.exec(text)) !== null) {
+          // Add the text before the match
+          if (match.index > lastIndex) {
+            fragment.appendChild(doc.createTextNode(text.substring(lastIndex, match.index)));
+          }
+          
+          // Create a span for the matched text with the highlight class
+          const highlightSpan = doc.createElement('span');
+          highlightSpan.className = className;
+          highlightSpan.textContent = match[0];
+          fragment.appendChild(highlightSpan);
+          
+          // Update the last index
+          lastIndex = match.index + match[0].length;
+        }
+        
+        // Add any remaining text
+        if (lastIndex < text.length) {
+          fragment.appendChild(doc.createTextNode(text.substring(lastIndex)));
+        }
+        
+        // Replace the original text node with the fragment
+        if (textNode.parentNode) {
+          textNode.parentNode.replaceChild(fragment, textNode);
+        }
+      });
+    } catch (error) {
+      console.error('Error highlighting text in iframe:', error);
+    }
   };
   
   // Find elements in a vertical range
@@ -292,11 +402,19 @@ const HighlightRenderer = ({
       }
     };
     
+    // Listen for character highlight toggles
+    const handleCharacterToggle = () => {
+      // Reapply highlights when character settings change
+      applyHighlights();
+    };
+    
     window.addEventListener('highlightsUpdated', handleHighlightUpdate);
+    window.addEventListener('characterHighlightToggled', handleCharacterToggle);
     
     // Clean up
     return () => {
       window.removeEventListener('highlightsUpdated', handleHighlightUpdate);
+      window.removeEventListener('characterHighlightToggled', handleCharacterToggle);
       removeHighlightStyles();
     };
   }, [enabled, scriptId]);

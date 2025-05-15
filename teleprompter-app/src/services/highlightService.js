@@ -409,6 +409,14 @@ class HighlightService {
       this.updateAutoHighlights(scriptId);
     }
     
+    // Dispatch event for UI updates
+    window.dispatchEvent(new CustomEvent('characterHighlightToggled', {
+      detail: {
+        character,
+        enabled
+      }
+    }));
+    
     return true;
   }
   
