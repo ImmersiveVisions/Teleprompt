@@ -12,7 +12,6 @@ import * as websocketService from '../services/websocket';
 
 // Make sure the websocket service is globally available
 if (typeof window !== 'undefined' && !window.websocketService) {
-  console.log('Manually assigning websocketService to window object');
   window.websocketService = websocketService;
 }
 
@@ -44,20 +43,16 @@ const RemotePage = () => {
     }
   }, [isSearchModalOpen]);
   
-  // Helper function to inspect script content (simplified)
-  const dumpScriptContent = () => {
-    if (!selectedScript) {
-      return;
-    }
-    // Script content validation only - no debug logging
-    return !!selectedScript.content || !!selectedScript.body;
+  // Script validation helper - returns true if script has content
+  const hasScriptContent = (script) => {
+    return script && (!!script.content || !!script.body);
   };
   
   // Custom search handler for RemotePage (without iframe dependency)
   const handleScriptSearch = (term) => {
     setSearchTerm(term);
 
-    if (!selectedScript || !term) {
+    if (!hasScriptContent(selectedScript) || !term) {
       setSearchResults([]);
       return;
     }
@@ -66,10 +61,6 @@ const RemotePage = () => {
       // Get script content to search through
       const scriptContent = selectedScript.content || selectedScript.body || "";
       
-      if (!scriptContent) {
-        setSearchResults([]);
-        return;
-      }
 
       // Simple search by lines for direct content
       const lines = scriptContent.split("\n");
@@ -198,7 +189,11 @@ const RemotePage = () => {
       setIsPlaying(data.isPlaying);
       setSpeed(data.speed);
       setDirection(data.direction);
-      setFontSize(data.fontSize);
+      // Make sure font size is a valid number before updating
+      if (data.fontSize && typeof data.fontSize === 'number' && !isNaN(data.fontSize)) {
+        setFontSize(data.fontSize);
+        console.log('RemotePage: Updated font size to:', data.fontSize);
+      }
       if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
       
       // If connection was just established, request full state
@@ -464,6 +459,7 @@ const RemotePage = () => {
   };
   
   const changeFontSize = (newSize) => {
+    console.log('RemotePage: Changing font size from', fontSize, 'to', newSize);
     setFontSize(newSize);
     sendControlMessage('SET_FONT_SIZE', newSize);
   };

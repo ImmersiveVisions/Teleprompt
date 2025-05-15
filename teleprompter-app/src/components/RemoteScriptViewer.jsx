@@ -4,7 +4,6 @@
 
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import fileSystemRepository from '../database/fileSystemRepository';
-import { sendSearchPosition } from '../services/websocket';
 import ViewerFrame from './ui/ViewerFrame';
 import HighlightRenderer from './HighlightRenderer';
 
@@ -164,6 +163,52 @@ const RemoteScriptViewer = forwardRef(({
     loadScript();
   }, [scriptId]);
   
+  // Add effect to update font size when it changes
+  useEffect(() => {
+    if (!script || !isIframeLoaded) return;
+    
+    const iframe = document.getElementById('teleprompter-frame');
+    if (!iframe || !iframe.contentDocument) return;
+    
+    try {
+      console.log('RemoteScriptViewer: Updating font size to', fontSize);
+      
+      // Apply font size to existing style element
+      const styleElement = iframe.contentDocument.getElementById('responsive-font-style') || 
+                         iframe.contentDocument.createElement('style');
+      styleElement.id = 'responsive-font-style';
+      styleElement.textContent = `
+        body {
+          background-color: black !important;
+          color: white !important;
+          font-family: 'Courier New', monospace !important;
+          font-size: ${fontSize}px !important;
+          line-height: 1.5 !important;
+          padding: 20px !important;
+          font-weight: bold !important;
+          margin: 0 !important;
+          scroll-behavior: smooth !important;
+        }
+        
+        /* Apply font size to all text elements */
+        body *, p, div, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
+          font-size: ${fontSize}px !important;
+        }
+      `;
+      
+      if (!styleElement.parentNode) {
+        iframe.contentDocument.head.appendChild(styleElement);
+      }
+      
+      // Also set direct style for immediate effect
+      if (iframe.contentDocument.body) {
+        iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+      }
+    } catch (error) {
+      console.error('Error updating font size:', error);
+    }
+  }, [fontSize, script, isIframeLoaded]);
+
   // Handle scrolling animation - matching ViewerComponent's scrolling implementation
   useEffect(() => {
     if (!containerRef.current || !script || !isIframeLoaded) return;
@@ -265,6 +310,7 @@ const RemoteScriptViewer = forwardRef(({
         if (iframe.contentDocument.body) {
           // Add a style element to ensure consistent styling with ViewerPage
           const styleElement = document.createElement('style');
+          styleElement.id = 'responsive-font-style'; // Add ID for easier updates
           styleElement.textContent = `
             body {
               background-color: black !important;

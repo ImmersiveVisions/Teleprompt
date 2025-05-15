@@ -6,9 +6,14 @@ const useFontSizeHandler = (containerRef, fontSize, script) => {
     // Only proceed if we have a script and container
     if (!script || !containerRef.current) return;
     
+    console.log('useFontSizeHandler: Applying font size', fontSize);
+    
     const container = containerRef.current;
     const iframe = container.querySelector('iframe');
-    if (!iframe) return;
+    if (!iframe) {
+      console.warn('useFontSizeHandler: No iframe found in container');
+      return;
+    }
     
     // Define our approaches to updating the font size
     const updateFontSizeMethods = [

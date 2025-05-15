@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import FountainViewer from '../FountainViewer';
+import useFontSizeHandler from '../../hooks/useFontSizeHandler';
 
 const ViewerFrame = ({
   script,
@@ -9,16 +10,17 @@ const ViewerFrame = ({
   handleIframeLoad,
   fontSize
 }) => {
-  // Calculate aspect ratio value as a number for calculations
-  const aspectRatioValue = aspectRatio === '16/9' ? 16/9 : 4/3;
-
-  if (!script) {
-    return <div className="no-script-message">No script loaded</div>;
-  }
+  // Apply font size changes using the hook
+  useFontSizeHandler(containerRef, fontSize, script);
   
+  // Always use 16:9 aspect ratio (no need for calculation variable)
+
   // Use useMemo to prevent infinite re-renders
   // The script should already have isFountain properly set by parent components
   const enhancedScript = useMemo(() => {
+    if (!script) return null;
+    if (!script.id) return null;
+    
     const enhanced = {
       ...script,
       // Only check script.id if isFountain is not already set
@@ -40,22 +42,31 @@ const ViewerFrame = ({
     return enhanced;
   }, [script]);
 
+  if (!script || !script.id) {
+    return <div className="no-script-message">No script loaded</div>;
+  }
+
+  if (!enhancedScript) {
+    return <div className="no-script-message">Unable to process script</div>;
+  }
+
   return (
     <div
       ref={containerRef}
       style={{
-        width: aspectRatio === '16/9' ? '100%' : 'calc(100vh * ' + aspectRatioValue + ')',
+        width: '100%',
         height: '100vh',
-        aspectRatio: aspectRatio,
+        aspectRatio: '16/9',
         overflow: 'hidden',
         backgroundColor: 'black',
         border: 'none',
         boxSizing: 'border-box',
         position: 'relative',
-        margin: '0 auto'
+        margin: '0 auto',
+        maxWidth: '177.78vh' /* 16:9 ratio */
       }}
       className="viewer-content-container"
-      data-aspect-ratio={aspectRatio}
+      data-aspect-ratio="16/9"
     >
       {/* Using enhanced script with consistent detection */}
       {enhancedScript.isFountain ? (
