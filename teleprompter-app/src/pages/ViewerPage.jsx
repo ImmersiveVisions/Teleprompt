@@ -179,7 +179,12 @@ const ViewerPage = ({ directScriptId }) => {
       const messageType = message.type === 'SYNC_POSITION' ? 'SYNC_POSITION' : 'SEARCH_POSITION';
       const logColor = message.type === 'SYNC_POSITION' ? '🟢' : '🟡';
       
-      console.log(`\n\n ${logColor} ${logColor} ${logColor} VIEWER RECEIVED ${messageType} MESSAGE ${logColor} ${logColor} ${logColor} \n\n`);
+      // Enhanced logging to identify where the message is coming from
+      const sourceInfo = message.data && message.data.origin ? 
+        ` FROM ${message.data.origin.toUpperCase()}` : '';
+      const remoteFlag = message.data && (message.data.fromRemote || message.data.remoteSearch) ? '📱' : '';
+      
+      console.log(`\n\n ${logColor} ${remoteFlag} ${logColor} VIEWER RECEIVED ${messageType}${sourceInfo} MESSAGE ${logColor} ${remoteFlag} ${logColor} \n\n`);
       console.log(`!!!! ViewerPage: Processing ${messageType} message !!!:`, 
         message.data ? JSON.stringify(message.data).substring(0, 100) + '...' : 'null');
       
@@ -187,6 +192,7 @@ const ViewerPage = ({ directScriptId }) => {
       window._lastPositionMessage = {
         type: messageType,
         timestamp: Date.now(),
+        fromRemote: !!(message.data && (message.data.fromRemote || message.data.remoteSearch || message.data.origin === 'remote')),
         data: message.data
       };
       
@@ -224,9 +230,39 @@ const ViewerPage = ({ directScriptId }) => {
         // Try direct DOM access (separate from ref methods)
         if (iframe && iframe.contentWindow) {
           try {
-            // Implement a direct scroll mechanism for quick testing
-            // This bypasses all the complicated node finding logic
-            if (typeof data.position === 'number') {
+            // Special handling for messages from RemotePage
+            const isFromRemote = data && (data.fromRemote || data.remoteSearch || data.origin === 'remote');
+            
+            if (isFromRemote) {
+              console.log('🔵 ViewerPage: Processing position from REMOTE page:', {
+                position: data.position,
+                absolutePosition: data.absolutePosition,
+                containerScrollHeight: data.containerScrollHeight,
+                lineIndex: data.lineIndex
+              });
+              
+              // For remote-originated messages, try using absolute position if available
+              let scrollTo = 0;
+              
+              if (data.absolutePosition !== undefined) {
+                // If we have absolute position data, use that directly
+                scrollTo = data.absolutePosition;
+                console.log(`🔵 ViewerPage: Using absolute position: ${scrollTo}px`);
+              } else if (typeof data.position === 'number') {
+                // Fallback to scaled position
+                const scrollHeight = iframe.contentDocument.body.scrollHeight;
+                scrollTo = Math.floor(data.position * scrollHeight);
+                console.log(`🔵 ViewerPage: Using scaled position: ${scrollTo}px of ${scrollHeight}px total`);
+              }
+              
+              // Actually do the scroll
+              iframe.contentWindow.scrollTo({
+                top: scrollTo,
+                behavior: 'smooth'
+              });
+            } 
+            // Standard direct position scrolling for non-remote messages
+            else if (typeof data.position === 'number') {
               const scrollHeight = iframe.contentDocument.body.scrollHeight;
               const scrollTo = Math.floor(data.position * scrollHeight);
               console.log(`Direct scrolling to position ${scrollTo}px of ${scrollHeight}px total`);
@@ -237,7 +273,7 @@ const ViewerPage = ({ directScriptId }) => {
                 behavior: 'smooth'
               });
               
-              // Create a highlight to show the scroll position
+              // Create a highlight to show the scroll position for non-remote scrolling
               try {
                 const highlight = iframe.contentDocument.createElement('div');
                 highlight.className = 'direct-scroll-highlight';

@@ -533,12 +533,48 @@ const uploadScript = (file) => {
   });
 };
 
+// Get full script content - used when script object doesn't have content
+const getScriptContent = (id) => {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('getScriptContent called with ID:', id);
+      
+      // Make sure we have a valid ID
+      if (id === undefined || id === null) {
+        console.error('Invalid script ID provided to getScriptContent:', id);
+        return resolve(null);
+      }
+      
+      // Use getScriptById to retrieve the full script with content
+      getScriptById(id)
+        .then(script => {
+          if (script) {
+            console.log(`getScriptContent: Successfully loaded script ${id}, has content:`, 
+              !!(script.content || script.body));
+            resolve(script);
+          } else {
+            console.warn(`getScriptContent: No script found with ID ${id}`);
+            resolve(null);
+          }
+        })
+        .catch(error => {
+          console.error('Error in getScriptContent:', error);
+          reject(error);
+        });
+    } catch (error) {
+      console.error('Error in getScriptContent:', error);
+      reject(error);
+    }
+  });
+};
+
 // Export the file-based repository functions
 export default {
   setScriptsDirectory,
   getScriptsDirectory,
   getAllScripts,
   getScriptById,
+  getScriptContent, // Add the new method
   addScript,
   updateScript,
   deleteScript,
