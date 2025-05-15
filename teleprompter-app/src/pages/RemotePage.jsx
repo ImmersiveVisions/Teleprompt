@@ -21,7 +21,7 @@ const RemotePage = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
-  const [fontSize, setFontSize] = useState(24);
+  const [fontSize, setFontSize] = useState(40);
   const [isFlipped, setIsFlipped] = useState(false); // Mirror mode state
   const [remoteScaleFactor] = useState(2); // Constant scale factor for remote view
   const [connectionStatus, setConnectionStatus] = useState('connecting');

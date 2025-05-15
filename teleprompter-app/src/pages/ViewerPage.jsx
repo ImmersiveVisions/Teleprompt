@@ -20,7 +20,7 @@ const ViewerPage = ({ directScriptId }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
-  const [fontSize, setFontSize] = useState(46); // Start with a larger font size for better readability
+  const [fontSize, setFontSize] = useState(40); // Set font size to standard 40px
   // Always use 16:9 aspect ratio with no option to change
   const aspectRatio = '16/9';
   const [isFlipped, setIsFlipped] = useState(false); // For mirror mode

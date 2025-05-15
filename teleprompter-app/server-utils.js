@@ -17,7 +17,7 @@ let sharedState = {
   speed: 1.0, // Keep at 1.0 as default for moderate speed
   isPlaying: false,
   direction: 'forward',
-  fontSize: 24,
+  fontSize: 40,
   aspectRatio: '16/9', // Default to 16:9 widescreen
   isFlipped: false, // Mirror mode for teleprompter
   connectedClients: {
