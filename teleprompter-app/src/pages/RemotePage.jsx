@@ -7,6 +7,15 @@ import RemoteScriptViewer from '../components/RemoteScriptViewer';
 import SearchModal from '../components/SearchModal';
 import '../styles.css';
 
+// Import websocket service directly to ensure it's loaded
+import * as websocketService from '../services/websocket';
+
+// Make sure the websocket service is globally available
+if (typeof window !== 'undefined' && !window.websocketService) {
+  console.log('Manually assigning websocketService to window object');
+  window.websocketService = websocketService;
+}
+
 const RemotePage = () => {
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
@@ -27,39 +36,28 @@ const RemotePage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
-  // Debug helper function to inspect script content
+  // Reset search state when modal is opened
+  useEffect(() => {
+    if (isSearchModalOpen) {
+      setSearchTerm("");
+      setSearchResults([]);
+    }
+  }, [isSearchModalOpen]);
+  
+  // Helper function to inspect script content (simplified)
   const dumpScriptContent = () => {
     if (!selectedScript) {
-      console.log("dumpScriptContent: No script selected");
       return;
     }
-    
-    const content = selectedScript.content || selectedScript.body || "";
-    console.log("Script content dump:");
-    console.log("- ID:", selectedScript.id);
-    console.log("- Title:", selectedScript.title);
-    console.log("- Content length:", content.length);
-    console.log("- First 200 chars:", content.substring(0, 200));
-    console.log("- Content type:", typeof content);
-    console.log("- Keys:", Object.keys(selectedScript));
-    
-    // Check if script is loaded in viewer
-    if (remoteViewerRef.current) {
-      console.log("- Viewer ref exists");
-    } else {
-      console.log("- No viewer ref");
-    }
+    // Script content validation only - no debug logging
+    return !!selectedScript.content || !!selectedScript.body;
   };
   
   // Custom search handler for RemotePage (without iframe dependency)
   const handleScriptSearch = (term) => {
-    // Dump script content for debugging
-    dumpScriptContent();
-    console.log("RemotePage: Search initiated for term:", term);
     setSearchTerm(term);
 
     if (!selectedScript || !term) {
-      console.log("RemotePage: No script or search term provided");
       setSearchResults([]);
       return;
     }
@@ -67,17 +65,8 @@ const RemotePage = () => {
     try {
       // Get script content to search through
       const scriptContent = selectedScript.content || selectedScript.body || "";
-      console.log("RemotePage: Script for search:", {
-        id: selectedScript.id,
-        title: selectedScript.title,
-        contentLength: scriptContent ? scriptContent.length : 0,
-        content: scriptContent ? scriptContent.substring(0, 100) + "..." : "NONE",
-        hasContent: !!scriptContent,
-        selectedScriptKeys: Object.keys(selectedScript)
-      });
       
       if (!scriptContent) {
-        console.error("RemotePage: Cannot search - script has no content");
         setSearchResults([]);
         return;
       }
@@ -88,7 +77,6 @@ const RemotePage = () => {
 
       lines.forEach((line, index) => {
         if (line.toLowerCase().includes(term.toLowerCase())) {
-          console.log(`RemotePage: Match found in line ${index}: "${line.substring(0, 30)}..."`);
           results.push({
             line,
             index,
@@ -97,7 +85,6 @@ const RemotePage = () => {
         }
       });
 
-      console.log(`RemotePage: Search complete. Found ${results.length} matches for "${term}"`);
       setSearchResults(results);
 
       // Open the search modal if we have results
@@ -105,64 +92,79 @@ const RemotePage = () => {
         setIsSearchModalOpen(true);
       }
     } catch (error) {
-      console.error("RemotePage: Error searching in script content:", error);
+      console.error("Error searching in script content:", error);
       setSearchResults([]);
     }
   };
   
-  // Jump to search result function
+  // Jump to search result function - line-based navigation
   const jumpToSearchResult = (result) => {
     if (!selectedScript || !remoteViewerRef.current) {
-      console.error("RemotePage: Cannot jump to search result - no script or viewer reference");
       return;
     }
     
-    console.log(`RemotePage: Jumping to result at line ${result.index}`);
-    
     try {
-      // Calculate position as percentage through the script
+      // Get the raw data we need - just line number and total lines
       const lineIndex = result.index;
       const scriptContent = selectedScript.content || selectedScript.body || "";
       const lines = scriptContent.split("\n");
+      const totalLines = lines.length;
       
-      // Build a richer data object to help with scrolling alignment
-      const resultData = {
-        // Text content for finding the actual text
-        text: result.line,
-        
-        // Line index for direct position calculation
-        lineIndex: lineIndex,
-        
-        // Calculate the normalized position (0-1) for the target line
-        position: lineIndex / lines.length,
-        
-        // Count chars up to this line for character position
-        characterPosition: lines.slice(0, lineIndex).reduce((sum, line) => sum + line.length + 1, 0),
-        
-        // Total lines and characters for context
-        totalLines: lines.length,
-        totalChars: scriptContent.length,
-        
-        // Mark as from search for filtering
+      // Create the data object needed for positioning with line-based navigation
+      // Add +1 to lineIndex to fix off-by-one issue
+      const adjustedLineIndex = lineIndex + 1;
+      const jumpData = {
+        lineIndex: adjustedLineIndex,
+        totalLines: totalLines,
+        // Add flags for message routing
+        origin: 'remote',
+        fromRemote: true,
         fromSearch: true,
-        
-        // Include entire line for context
-        lineContent: result.line
+        // Critical: Use line-based navigation
+        lineBasedNavigation: true,
+        // Add position value for backward compatibility
+        position: adjustedLineIndex / totalLines,
+        // Add timestamp to prevent deduplication
+        timestamp: Date.now()
       };
       
-      console.log('RemotePage: Calculated search position data:', {
-        lineIndex: resultData.lineIndex,
-        position: resultData.position.toFixed(4),
-        textPreview: resultData.text.substring(0, 30) + '...'
-      });
+      // Calculate absolute position for fallback methods
+      try {
+        const iframe = document.getElementById('teleprompter-frame');
+        if (iframe && iframe.contentDocument) {
+          const scrollHeight = iframe.contentDocument.body.scrollHeight;
+          // Use adjusted line index here too
+          const lineRatio = adjustedLineIndex / totalLines;
+          const targetPosition = Math.floor(lineRatio * scrollHeight);
+          jumpData.absolutePosition = targetPosition;
+        }
+      } catch (domErr) {
+        // Ignore DOM errors silently
+      }
       
-      // Use the scrollToNode method we added to RemoteScriptViewer
-      remoteViewerRef.current.scrollToNode(resultData);
+      // Send WebSocket message for viewer synchronization
+      try {
+        if (window.websocketService && typeof window.websocketService.sendSearchPosition === 'function') {
+          window.websocketService.sendSearchPosition(jumpData);
+        } else {
+          // Use imported function as fallback
+          sendSearchPosition(jumpData);
+        }
+      } catch (wsError) {
+        // Ignore WebSocket errors silently
+      }
+      
+      // Call scrollToNode to navigate locally
+      remoteViewerRef.current.scrollToNode(jumpData);
       
       // Close the search modal after jumping
       setIsSearchModalOpen(false);
+      
+      // Reset search term to allow new searches
+      setSearchTerm("");
+      setSearchResults([]);
     } catch (error) {
-      console.error("RemotePage: Error jumping to search result:", error);
+      // Silently handle errors
     }
   };
 
@@ -472,7 +474,17 @@ const RemotePage = () => {
   return (
     <div className="remote-page-fullscreen">
       {/* Fullscreen script viewer */}
-      <div className="remote-script-fullscreen-container">
+      <div className="remote-script-fullscreen-container" style={{
+        width: '100%',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        maxWidth: '100vw',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
         <RemoteScriptViewer 
           ref={remoteViewerRef}
           scriptId={selectedScriptId}
@@ -507,7 +519,12 @@ const RemotePage = () => {
         <div className="remote-header-controls">
           {/* Search button */}
           <button
-            onClick={() => setIsSearchModalOpen(true)}
+            onClick={() => {
+              // Reset search state and open modal
+              setSearchTerm("");
+              setSearchResults([]);
+              setIsSearchModalOpen(true);
+            }}
             className="remote-control-btn search-btn"
             disabled={!selectedScriptId}
             title="Search in script"
@@ -593,11 +610,15 @@ const RemotePage = () => {
       {/* Search Modal */}
       <SearchModal
         isOpen={isSearchModalOpen}
-        onClose={() => setIsSearchModalOpen(false)}
+        onClose={() => {
+          setIsSearchModalOpen(false);
+          setSearchTerm("");
+          setSearchResults([]);
+        }}
         searchResults={searchResults}
         onResultSelect={(result) => {
-          // Call jumpToSearchResult with the viewer ref
-          jumpToSearchResult(result, remoteViewerRef);
+          // Call jumpToSearchResult with the selected result
+          jumpToSearchResult(result);
         }}
         searchTerm={searchTerm}
       />
@@ -608,7 +629,11 @@ const RemotePage = () => {
           <div className="search-input-modal">
             <div className="modal-header">
               <h2>Search in Script</h2>
-              <button onClick={() => setIsSearchModalOpen(false)} className="close-btn">×</button>
+              <button onClick={() => {
+                setIsSearchModalOpen(false);
+                setSearchTerm("");
+                setSearchResults([]);
+              }} className="close-btn">×</button>
             </div>
             <div className="search-input-container">
               <input

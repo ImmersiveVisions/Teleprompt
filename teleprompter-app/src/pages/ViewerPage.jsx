@@ -21,7 +21,8 @@ const ViewerPage = ({ directScriptId }) => {
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(46); // Start with a larger font size for better readability
-  const [aspectRatio, setAspectRatio] = useState('16/9'); // Default to 16:9
+  // Always use 16:9 aspect ratio with no option to change
+  const aspectRatio = '16/9';
   const [isFlipped, setIsFlipped] = useState(false); // For mirror mode
   
   // Reference to the teleprompter viewer component
@@ -230,36 +231,272 @@ const ViewerPage = ({ directScriptId }) => {
         // Try direct DOM access (separate from ref methods)
         if (iframe && iframe.contentWindow) {
           try {
-            // Special handling for messages from RemotePage
+            // Special handling for messages from RemotePage or AdminPage
             const isFromRemote = data && (data.fromRemote || data.remoteSearch || data.origin === 'remote');
+            const isFromAdmin = data && (data.fromAdmin || data.adminSearch || data.origin === 'admin');
             
-            if (isFromRemote) {
-              console.log('🔵 ViewerPage: Processing position from REMOTE page:', {
-                position: data.position,
-                absolutePosition: data.absolutePosition,
-                containerScrollHeight: data.containerScrollHeight,
-                lineIndex: data.lineIndex
-              });
-              
-              // For remote-originated messages, try using absolute position if available
-              let scrollTo = 0;
-              
-              if (data.absolutePosition !== undefined) {
-                // If we have absolute position data, use that directly
-                scrollTo = data.absolutePosition;
-                console.log(`🔵 ViewerPage: Using absolute position: ${scrollTo}px`);
-              } else if (typeof data.position === 'number') {
-                // Fallback to scaled position
-                const scrollHeight = iframe.contentDocument.body.scrollHeight;
-                scrollTo = Math.floor(data.position * scrollHeight);
-                console.log(`🔵 ViewerPage: Using scaled position: ${scrollTo}px of ${scrollHeight}px total`);
+            // Handle position messages from any source
+            if (isFromRemote || isFromAdmin || data.fromSearch === true) {
+              // Log based on source
+              if (isFromRemote) {
+                console.log('🔵 ViewerPage: Processing position from REMOTE page:', {
+                  position: data.position,
+                  absolutePosition: data.absolutePosition,
+                  containerScrollHeight: data.containerScrollHeight,
+                  lineIndex: data.lineIndex
+                });
+              } else if (isFromAdmin) {
+                console.log('🟢 ViewerPage: Processing position from ADMIN page:', {
+                  position: data.position,
+                  text: data.text ? data.text.substring(0, 30) + '...' : 'none'
+                });
+              } else {
+                console.log('🟡 ViewerPage: Processing search position from unknown source:', {
+                  position: data.position,
+                  text: data.text ? data.text.substring(0, 30) + '...' : 'none'
+                });
               }
               
-              // Actually do the scroll
-              iframe.contentWindow.scrollTo({
-                top: scrollTo,
-                behavior: 'smooth'
-              });
+              // Try using text search first, if available
+              let didScrollToText = false;
+              
+              if (data.text && iframe.contentDocument.body) {
+                try {
+                  // Try to find the text in the document
+                  const searchText = data.text.trim().toLowerCase();
+                  const allElements = iframe.contentDocument.body.querySelectorAll('*');
+                  let foundElement = null;
+                  
+                  // First try exact matches
+                  for (let i = 0; i < allElements.length; i++) {
+                    const element = allElements[i];
+                    if (element.innerText && element.innerText.toLowerCase().includes(searchText)) {
+                      foundElement = element;
+                      break;
+                    }
+                  }
+                  
+                  if (foundElement) {
+                    const rect = foundElement.getBoundingClientRect();
+                    const elementTop = rect.top + iframe.contentWindow.scrollY;
+                    
+                    // Scroll to the element
+                    iframe.contentWindow.scrollTo({
+                      top: elementTop - (iframe.contentWindow.innerHeight / 2) + (rect.height / 2),
+                      behavior: 'smooth'
+                    });
+                    
+                    console.log(`ViewerPage: Found text element and scrolled to position: ${elementTop}px`);
+                    didScrollToText = true;
+                    
+                    // Highlight the element
+                    foundElement.style.backgroundColor = 'rgba(255, 165, 0, 0.3)';
+                    foundElement.style.transition = 'background-color 2s ease-out';
+                    
+                    // Remove highlight after a delay
+                    setTimeout(() => {
+                      foundElement.style.backgroundColor = '';
+                    }, 2000);
+                  }
+                } catch (textSearchErr) {
+                  console.error('Error searching for text:', textSearchErr);
+                }
+              }
+              
+              // If we didn't find by text, use position data
+              if (!didScrollToText) {
+                // ULTRA AGGRESSIVE NAVIGATION for line-based positioning
+                let scrollTo = 0;
+                
+                if (data.lineBasedNavigation && data.lineIndex !== undefined && data.totalLines) {
+                  // Line-based navigation gets highest priority
+                  const scrollHeight = iframe.contentDocument.body.scrollHeight;
+                  const lineRatio = data.lineIndex / data.totalLines;
+                  scrollTo = Math.floor(lineRatio * scrollHeight);
+                  
+                  console.log(`ViewerPage: 🔴 ULTRA AGGRESSIVE NAVIGATION to line ${data.lineIndex}/${data.totalLines}`);
+                  console.log(`ViewerPage: Line ratio ${lineRatio.toFixed(4)} maps to position ${scrollTo}px`);
+                  
+                  // BRUTE FORCE APPROACH: Multiple positioning methods with aggressive visual feedback
+                  
+                  // Method 1: Direct DOM manipulation 
+                  console.log('Method 1: Direct scrollTop');
+                  iframe.contentDocument.body.scrollTop = scrollTo;
+                  iframe.contentDocument.documentElement.scrollTop = scrollTo;
+                  
+                  // Method 2: window.scrollTo with immediate positioning
+                  console.log('Method 2: Window scrollTo (immediate)');
+                  iframe.contentWindow.scrollTo({
+                    top: scrollTo,
+                    behavior: 'auto'  // Use immediate mode for more reliability
+                  });
+                  
+                  // Method 3: Create multiple visual indicators
+                  try {
+                    // Clean up any existing markers first
+                    const existingMarkers = iframe.contentDocument.querySelectorAll('.line-position-marker, .search-position-marker');
+                    existingMarkers.forEach(marker => {
+                      if (marker.parentNode) marker.parentNode.removeChild(marker);
+                    });
+                    
+                    // Method 3a: Create a blinking attention-grabbing marker
+                    console.log('Method 3: Creating attention-grabbing markers');
+                    
+                    // Add style for animations
+                    const style = iframe.contentDocument.createElement('style');
+                    style.textContent = `
+                      @keyframes pulse-animation {
+                        0% { opacity: 0.9; background-color: rgba(255, 0, 0, 0.8); }
+                        50% { opacity: 0.5; background-color: rgba(255, 255, 0, 0.8); }
+                        100% { opacity: 0.9; background-color: rgba(255, 0, 0, 0.8); }
+                      }
+                      
+                      @keyframes border-pulse {
+                        0% { border-color: red; }
+                        50% { border-color: yellow; }
+                        100% { border-color: red; }
+                      }
+                    `;
+                    iframe.contentDocument.head.appendChild(style);
+                    
+                    // Create the main position marker
+                    const highlight = iframe.contentDocument.createElement('div');
+                    highlight.className = 'line-position-marker';
+                    highlight.style.cssText = `
+                      position: absolute;
+                      left: 0;
+                      width: 100%;
+                      height: 100px;
+                      background-color: rgba(255, 0, 0, 0.7);
+                      border-top: 5px solid red;
+                      border-bottom: 5px solid red;
+                      top: ${scrollTo - 50}px;
+                      z-index: 10000;
+                      pointer-events: none;
+                      animation: pulse-animation 1s infinite, border-pulse 1s infinite;
+                    `;
+                    iframe.contentDocument.body.appendChild(highlight);
+                    
+                    // Create a line number indicator
+                    const textMarker = iframe.contentDocument.createElement('div');
+                    textMarker.className = 'search-position-marker';
+                    textMarker.style.cssText = `
+                      position: absolute;
+                      left: 50%;
+                      transform: translateX(-50%);
+                      top: ${scrollTo}px;
+                      padding: 5px 15px;
+                      background-color: black;
+                      color: white;
+                      border: 2px solid yellow;
+                      border-radius: 20px;
+                      font-weight: bold;
+                      z-index: 10001;
+                      pointer-events: none;
+                      text-align: center;
+                      font-size: 16px;
+                    `;
+                    // Display line number with +1 for 1-based display
+                    textMarker.innerText = `Line ${data.lineIndex}`;
+                    iframe.contentDocument.body.appendChild(textMarker);
+                    
+                    // Method 3c: Use scrollIntoView on the marker
+                    console.log('Method 3c: Using scrollIntoView on marker - at top 20%');
+                    highlight.scrollIntoView({
+                      block: 'start',  // Position at start of viewport with slight offset
+                      behavior: 'auto' // Immediate positioning
+                    });
+                    
+                    // Method 4: Position at top 20% of the viewport instead of center
+                    console.log('Method 4: Positioning in top 20% of viewport');
+                    
+                    // First immediate positioning
+                    const viewportHeight = iframe.contentWindow.innerHeight;
+                    // Position at top 20% instead of center
+                    const topPosition = scrollTo - (viewportHeight * 0.2);
+                    
+                    iframe.contentWindow.scrollTo({
+                      top: topPosition > 0 ? topPosition : 0,
+                      behavior: 'auto'
+                    });
+                    
+                    // Second attempt after a brief delay
+                    setTimeout(() => {
+                      console.log('Method 4b: Secondary positioning attempt');
+                      iframe.contentWindow.scrollTo({
+                        top: topPosition > 0 ? topPosition : 0,
+                        behavior: 'auto'
+                      });
+                      
+                      // Method 5: Final attempt with force refresh
+                      setTimeout(() => {
+                        console.log('Method 5: Final forced refresh with scrollTo');
+                        iframe.contentWindow.scrollTo({
+                          top: topPosition > 0 ? topPosition : 0,
+                          behavior: 'auto'
+                        });
+                        
+                        // Create a debug overlay for monitoring
+                        try {
+                          const debugOverlay = iframe.contentDocument.createElement('div');
+                          debugOverlay.style.cssText = `
+                            position: fixed;
+                            top: 10px;
+                            right: 10px;
+                            background: rgba(0,0,0,0.8);
+                            color: lime;
+                            padding: 5px;
+                            z-index: 10002;
+                            font-size: 12px;
+                            border: 1px solid lime;
+                          `;
+                          debugOverlay.innerHTML = `
+                            <div>Line: ${data.lineIndex}/${data.totalLines}</div>
+                            <div>Position: ${scrollTo}px</div>
+                            <div>Top 20%: ${topPosition}px</div>
+                            <div>Ratio: ${lineRatio.toFixed(4)}</div>
+                          `;
+                          iframe.contentDocument.body.appendChild(debugOverlay);
+                          
+                          // Remove debug overlay after a delay
+                          setTimeout(() => {
+                            if (debugOverlay.parentNode) debugOverlay.parentNode.removeChild(debugOverlay);
+                          }, 7000);
+                        } catch (debugErr) {
+                          console.error('Error creating debug overlay:', debugErr);
+                        }
+                      }, 100);
+                    }, 200);
+                    
+                    // Remove markers after delay
+                    setTimeout(() => {
+                      if (highlight.parentNode) highlight.parentNode.removeChild(highlight);
+                      if (textMarker.parentNode) textMarker.parentNode.removeChild(textMarker);
+                      if (style.parentNode) style.parentNode.removeChild(style);
+                    }, 8000); // Longer visibility time
+                  } catch (markerErr) {
+                    console.error('Error creating line markers:', markerErr);
+                  }
+                }
+                // For absolute position data
+                else if (data.absolutePosition !== undefined) {
+                  // If we have absolute position data, use that directly
+                  scrollTo = data.absolutePosition;
+                  console.log(`ViewerPage: Using absolute position: ${scrollTo}px`);
+                } 
+                // Fallback to scaled position
+                else if (typeof data.position === 'number') {
+                  const scrollHeight = iframe.contentDocument.body.scrollHeight;
+                  scrollTo = Math.floor(data.position * scrollHeight);
+                  console.log(`ViewerPage: Using scaled position: ${scrollTo}px of ${scrollHeight}px total`);
+                }
+                
+                // Actually do the scroll for non-line-based navigation
+                iframe.contentWindow.scrollTo({
+                  top: scrollTo,
+                  behavior: 'smooth'
+                });
+              }
             } 
             // Standard direct position scrolling for non-remote messages
             else if (typeof data.position === 'number') {
@@ -314,7 +551,8 @@ const ViewerPage = ({ directScriptId }) => {
           
           if (typeof viewerRef.current.scrollToNode === 'function') {
             try {
-              console.log('ViewerPage: Calling scrollToNode with data:', data);
+              // Log complete data to help with debugging
+              console.log('🎯 ViewerPage: Calling scrollToNode with COMPLETE data:', JSON.stringify(data));
               const success = viewerRef.current.scrollToNode(data);
               console.log('ViewerPage: Node navigation result:', success ? 'successful' : 'failed');
               
@@ -485,7 +723,7 @@ const ViewerPage = ({ directScriptId }) => {
       if (data.speed !== undefined) setSpeed(data.speed);
       if (data.direction !== undefined) setDirection(data.direction);
       if (data.fontSize !== undefined) setFontSize(data.fontSize);
-      if (data.aspectRatio !== undefined) setAspectRatio(data.aspectRatio);
+      // Aspect ratio is now fixed at 16:9
       if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
     }
   };

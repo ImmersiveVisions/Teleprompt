@@ -29,10 +29,9 @@ const RemoteScriptViewer = forwardRef(({
   
   // Expose methods to parent component via ref
   useImperativeHandle(ref, () => ({
-    // Method to scroll to a specific node/position
+    // Method to scroll to a specific node/position using line-based navigation
     scrollToNode: (data) => {
       if (!containerRef.current || !script) {
-        console.error('RemoteScriptViewer: Cannot scroll - container or content not available');
         return false;
       }
 
@@ -40,237 +39,78 @@ const RemoteScriptViewer = forwardRef(({
         // Get the iframe element directly
         const iframe = document.getElementById('teleprompter-frame');
         if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
-          console.error('RemoteScriptViewer: Cannot scroll - iframe not accessible');
           return false;
         }
         
+        // Get scroll container
         const scrollContainer = iframe.contentDocument.body || iframe.contentDocument.documentElement;
-        let targetPosition;
-        
-        // Clean up any existing animation
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        
-        // Get container dimensions for calculations
-        const containerHeight = scrollContainer.clientHeight;
         const containerScrollHeight = scrollContainer.scrollHeight;
         
-        let textPosition = -1;
-        
-        // Check if we have search text to find within the content
-        if (data && typeof data === 'object' && data.text) {
-          console.log(`RemoteScriptViewer: Searching for text: "${data.text.substring(0, 30)}..."`);
+        // Determine if we have line index information
+        if (data && typeof data === 'object' && data.lineIndex !== undefined && data.totalLines) {
+          // Calculate position as pure ratio of document height
+          const lineRatio = data.lineIndex / data.totalLines;
+          const targetPosition = lineRatio * containerScrollHeight;
           
-          // For more accurate positioning, use the lineIndex if available
-          if (data.lineIndex !== undefined && data.lineIndex >= 0) {
-            // We have a line index, so we need to find the line
-            console.log(`RemoteScriptViewer: Using line index ${data.lineIndex} for positioning`);
+          // Method 1: Direct scrolling for immediate positioning
+          scrollContainer.scrollTop = targetPosition;
+          
+          // Method 2: Use window scrollTo for backup
+          iframe.contentWindow.scrollTo({
+            top: targetPosition,
+            behavior: 'auto'
+          });
+          
+          // Add a subtle highlight marker
+          try {
+            // Clean up any existing markers
+            const existingMarkers = iframe.contentDocument.querySelectorAll('.search-position-marker');
+            existingMarkers.forEach(el => {
+              if (el.parentNode) el.parentNode.removeChild(el);
+            });
             
-            // Find all text nodes in the document
-            const textNodes = [];
-            const walk = document.createTreeWalker(
-              scrollContainer,
-              NodeFilter.SHOW_TEXT,
-              null,
-              false
-            );
-            
-            let node;
-            let allText = '';
-            while (node = walk.nextNode()) {
-              const text = node.nodeValue.trim();
-              if (text) {
-                allText += text + '\n';
-                textNodes.push({
-                  node: node,
-                  text: text
-                });
-              }
-            }
-            
-            // Split text into lines
-            const lines = allText.split('\n');
-            
-            // Ensure we have the line
-            if (data.lineIndex < lines.length) {
-              // Find the line in the DOM
-              let foundNode = null;
-              for (const nodeInfo of textNodes) {
-                if (nodeInfo.text.includes(data.text) || 
-                    (data.lineContent && nodeInfo.text.includes(data.lineContent))) {
-                  foundNode = nodeInfo.node;
-                  break;
-                }
-              }
-              
-              if (foundNode) {
-                // Get the element position
-                const range = document.createRange();
-                range.selectNodeContents(foundNode);
-                const rect = range.getBoundingClientRect();
-                const nodePosition = rect.top + iframe.contentWindow.scrollY;
-                
-                // Position the text at the center of the viewport
-                textPosition = nodePosition;
-              }
-            }
-          }
-          
-          // If we didn't find using line index, try searching for the text
-          if (textPosition === -1) {
-            // Fallback: Search through text nodes for the given content
-            const searchText = data.text.trim().toLowerCase();
-            const allElements = iframe.contentDocument.body.querySelectorAll('*');
-            let foundElement = null;
-            
-            for (let i = 0; i < allElements.length; i++) {
-              const element = allElements[i];
-              if (element.innerText && element.innerText.toLowerCase().includes(searchText)) {
-                foundElement = element;
-                break;
-              }
-            }
-            
-            if (foundElement) {
-              const rect = foundElement.getBoundingClientRect();
-              textPosition = rect.top + iframe.contentWindow.scrollY;
-            }
-          }
-        }
-        
-        // Now determine the final target position
-        if (textPosition >= 0) {
-          // We found a matching text position - center it in the viewport
-          targetPosition = Math.max(0, textPosition - (containerHeight / 2));
-          console.log(`RemoteScriptViewer: Using text position ${textPosition}px, centering to ${targetPosition}px`);
-        } else {
-          // Use normal position calculation as a fallback
-          if (typeof data === 'number') {
-            // Simple percentage position (0-1)
-            targetPosition = data * containerScrollHeight;
-          } else if (data && typeof data === 'object') {
-            // Complex position object
-            if (data.position !== undefined) {
-              // Normalized position (0-1)
-              targetPosition = data.position * containerScrollHeight;
-            } else if (data.absolutePosition !== undefined) {
-              // Absolute pixel position
-              targetPosition = data.absolutePosition;
-            } else if (data.characterPosition !== undefined && data.totalChars) {
-              // Character position scaled to container height
-              targetPosition = (data.characterPosition / data.totalChars) * containerScrollHeight;
-            } else {
-              console.error('RemoteScriptViewer: Invalid position data:', data);
-              return false;
-            }
-          } else {
-            console.error('RemoteScriptViewer: Invalid scroll data:', data);
-            return false;
-          }
-        }
-        
-        // Ensure position is within bounds
-        targetPosition = Math.max(0, Math.min(containerScrollHeight - containerHeight, targetPosition));
-        
-        console.log(`RemoteScriptViewer: Scrolling to position ${targetPosition}px/${containerScrollHeight}px`);
-        
-        // Smooth scroll to position
-        iframe.contentWindow.scrollTo({
-          top: targetPosition,
-          behavior: 'smooth'
-        });
-        
-        // Send this position to viewers (broadcast)
-        const normalizedPosition = targetPosition / (containerScrollHeight > 0 ? containerScrollHeight : 1);
-        console.log(`RemoteScriptViewer: Broadcasting position ${normalizedPosition.toFixed(4)} to viewers`);
-        
-        // Create a more comprehensive position object to ensure accurate positioning in viewers
-        const searchData = {
-          // Standard normalized position (always include for backward compatibility)
-          position: normalizedPosition,
-          
-          // Enhanced positioning information
-          absolutePosition: targetPosition,
-          containerHeight: containerHeight,
-          containerScrollHeight: containerScrollHeight,
-          
-          // Text content for searching
-          text: data?.text?.substring(0, 100),
-          lineIndex: data?.lineIndex,
-          lineContent: data?.lineContent,
-          
-          // Special flags
-          fromSearch: true,
-          fromRemote: true, // Flag to identify as coming from remote
-          origin: 'remote', // Identify source clearly
-          remoteSearch: true, // Additional flag for filtering
-          
-          // Debugging information
-          timestamp: Date.now(),
-          source: 'remote-search'
-        };
-        
-        sendSearchPosition(searchData);
-        
-        // Highlight the area for better visibility
-        try {
-          // Create a temporary highlight element
-          const highlight = document.createElement('div');
-          highlight.className = 'search-result-highlight';
-          highlight.style.cssText = `
-            position: absolute;
-            left: 0;
-            width: 100%;
-            height: 50px;
-            background-color: rgba(255, 165, 0, 0.3);
-            border-top: 2px solid orange;
-            border-bottom: 2px solid orange;
-            z-index: 1000;
-            pointer-events: none;
-            animation: pulse-highlight 2s ease-in-out;
-          `;
-          
-          // Add animation if it doesn't exist
-          if (!document.getElementById('highlight-keyframes')) {
-            const keyframes = document.createElement('style');
-            keyframes.id = 'highlight-keyframes';
-            keyframes.textContent = `
-              @keyframes pulse-highlight {
-                0% { opacity: 0; }
-                25% { opacity: 1; }
-                75% { opacity: 1; }
-                100% { opacity: 0; }
-              }
+            // Create a subtle highlight
+            const marker = document.createElement('div');
+            marker.className = 'search-position-marker';
+            marker.style.cssText = `
+              position: absolute;
+              left: 0;
+              width: 100%;
+              height: 80px;
+              background-color: rgba(255, 165, 0, 0.3);
+              border-top: 2px solid orange;
+              border-bottom: 2px solid orange;
+              top: ${targetPosition - 40}px;
+              z-index: 1000;
+              pointer-events: none;
             `;
-            document.head.appendChild(keyframes);
+            scrollContainer.appendChild(marker);
+            
+            // Position the target in the top 20% of the viewport
+            setTimeout(() => {
+              const viewportHeight = iframe.contentWindow.innerHeight;
+              // Calculate position to show result in top 20% of screen
+              const topPosition = targetPosition - (viewportHeight * 0.2);
+              
+              iframe.contentWindow.scrollTo({
+                top: topPosition > 0 ? topPosition : 0,
+                behavior: 'smooth'
+              });
+            }, 50);
+            
+            // Remove marker after a delay
+            setTimeout(() => {
+              if (marker.parentNode) marker.parentNode.removeChild(marker);
+            }, 3000);
+          } catch (markErr) {
+            // Silently ignore marker errors
           }
           
-          // Position it at the target scroll position - centered in the viewport
-          const highlightPosition = textPosition >= 0 ? textPosition - 25 : targetPosition;
-          highlight.style.top = `${highlightPosition}px`;
-          
-          // Append it to the container
-          if (iframe.contentDocument.body.style.position !== 'relative') {
-            iframe.contentDocument.body.style.position = 'relative';
-          }
-          iframe.contentDocument.body.appendChild(highlight);
-          
-          // Remove after animation completes
-          setTimeout(() => {
-            if (highlight.parentNode) {
-              highlight.parentNode.removeChild(highlight);
-            }
-          }, 2000);
-        } catch (highlightErr) {
-          console.error('Error creating highlight:', highlightErr);
-          // Non-critical error, continue
+          return true;
+        } else {
+          return false;
         }
-        
-        return true;
       } catch (error) {
-        console.error('RemoteScriptViewer: Error scrolling to position:', error);
         return false;
       }
     }
@@ -291,27 +131,16 @@ const RemoteScriptViewer = forwardRef(({
           // If no content is available, try to get full content
           if (!content && scriptObj.id) {
             try {
-              console.log(`RemoteScriptViewer: No content found, trying to load full content for ${scriptObj.id}`);
               const fullScript = await fileSystemRepository.getScriptContent(scriptObj.id);
               
               if (fullScript && (fullScript.content || fullScript.body)) {
                 scriptObj.content = fullScript.content || fullScript.body;
                 content = scriptObj.content;
-                console.log(`RemoteScriptViewer: Loaded full content, length: ${content.length}`);
               }
             } catch (contentError) {
-              console.error(`RemoteScriptViewer: Error loading full content: ${contentError}`);
+              // Silently handle content loading errors
             }
           }
-          
-          // Debug the script content
-          console.log('RemoteScriptViewer: Loading script:', {
-            id: scriptObj.id,
-            title: scriptObj.title,
-            contentLength: content.length,
-            content: content.substring(0, 100) + "...",
-            keys: Object.keys(scriptObj)
-          });
           
           // Check if this is a fountain or HTML file
           const isFountain = scriptObj.id.toLowerCase().endsWith('.fountain') ||
@@ -324,11 +153,9 @@ const RemoteScriptViewer = forwardRef(({
           scriptObj.isHtml = isHtml;
           
           setScript(scriptObj);
-        } else {
-          console.error('Script not found with ID:', scriptId);
         }
       } catch (error) {
-        console.error('Error loading script:', error);
+        // Silently handle script loading errors
       } finally {
         setIsLoading(false);
       }
@@ -344,7 +171,6 @@ const RemoteScriptViewer = forwardRef(({
     // Get the iframe
     const iframe = document.getElementById('teleprompter-frame');
     if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
-      console.error('RemoteScriptViewer: Cannot find iframe for animation');
       return;
     }
     
@@ -389,14 +215,6 @@ const RemoteScriptViewer = forwardRef(({
       const remainingScroll = Math.abs(targetPos - startPos);
       const scrollDuration = Math.max(1000, Math.round((remainingScroll / adjustedSpeed) * 1000));
       
-      console.log('RemoteScriptViewer: Starting auto-scroll:', {
-        startPos,
-        targetPos,
-        scrollHeight,
-        duration: scrollDuration,
-        speed
-      });
-      
       // Start the animation with smooth interpolation
       const startTime = performance.now();
       
@@ -428,7 +246,7 @@ const RemoteScriptViewer = forwardRef(({
       animationRef.current = requestAnimationFrame(animateScroll);
       
     } catch (error) {
-      console.error('RemoteScriptViewer: Error in auto-scroll effect:', error);
+      // Silently handle animation errors
     }
     
     // Return cleanup function
@@ -437,7 +255,6 @@ const RemoteScriptViewer = forwardRef(({
   
   // Handler for iframe load event
   const handleIframeLoad = () => {
-    console.log('RemoteScriptViewer: Iframe loaded');
     setIsIframeLoaded(true);
     
     // Apply consistent styling to match the ViewerComponent
@@ -446,30 +263,6 @@ const RemoteScriptViewer = forwardRef(({
       if (iframe && iframe.contentDocument) {
         // Apply styles to iframe body for consistency
         if (iframe.contentDocument.body) {
-          // Set up script inspection function to log what script elements are present
-          setTimeout(() => {
-            try {
-              const doc = iframe.contentDocument;
-              // Find paragraphs with padding-left or text-align to identify potential script elements
-              const scriptElements = doc.querySelectorAll('p[style*="padding-left"], p[style*="text-align"]');
-              console.log(`RemoteScriptViewer: Found ${scriptElements.length} potential script elements`);
-              
-              if (scriptElements.length > 0) {
-                // Log a few examples
-                const examples = Array.from(scriptElements).slice(0, 5);
-                examples.forEach((el, i) => {
-                  console.log(`Element ${i}:`, {
-                    style: el.getAttribute('style'),
-                    textContent: el.textContent.substring(0, 30) + (el.textContent.length > 30 ? '...' : ''),
-                    classList: Array.from(el.classList)
-                  });
-                });
-              }
-            } catch (err) {
-              console.error('Error inspecting script elements:', err);
-            }
-          }, 1000);
-          
           // Add a style element to ensure consistent styling with ViewerPage
           const styleElement = document.createElement('style');
           styleElement.textContent = `
@@ -482,6 +275,8 @@ const RemoteScriptViewer = forwardRef(({
               padding: 20px !important;
               font-weight: bold !important;
               margin: 0 !important;
+              /* Add smooth scrolling for better search experience */
+              scroll-behavior: smooth !important;
             }
             
             /* CRITICAL FIX: Do NOT set text-align: center on body to prevent conflicting styles.
@@ -571,17 +366,14 @@ const RemoteScriptViewer = forwardRef(({
           iframe.contentDocument.body.style.fontFamily = 'Courier New, monospace';
           iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
           iframe.contentDocument.body.style.lineHeight = '1.5';
-          // REMOVED: iframe.contentDocument.body.style.textAlign = 'center';
           iframe.contentDocument.body.style.padding = '20px';
           iframe.contentDocument.body.style.fontWeight = 'bold';
           iframe.contentDocument.body.style.margin = '0';
           
-          // Create a function to apply script element styling directly
+          // Apply styling directly to script elements based on their attributes
           setTimeout(() => {
             try {
-              // Apply styling directly to script elements based on their attributes
               const allParagraphs = iframe.contentDocument.querySelectorAll('p');
-              console.log(`RemoteScriptViewer: Found ${allParagraphs.length} paragraphs to check for script elements`);
               
               allParagraphs.forEach(p => {
                 const style = p.getAttribute('style') || '';
@@ -600,7 +392,6 @@ const RemoteScriptViewer = forwardRef(({
                   p.style.textAlign = 'center';
                   p.style.marginBottom = '0';
                   p.style.backgroundColor = 'rgba(255, 215, 0, 0.1)';
-                  console.log('Applied CHARACTER NAME styling to:', p.textContent.substring(0, 30));
                 }
                 
                 // Dialog text
@@ -610,7 +401,6 @@ const RemoteScriptViewer = forwardRef(({
                   p.style.textAlign = 'center';
                   p.style.marginTop = '0';
                   p.style.marginBottom = '1em';
-                  console.log('Applied DIALOG styling to:', p.textContent.substring(0, 30));
                 }
                 
                 // Parentheticals
@@ -624,7 +414,6 @@ const RemoteScriptViewer = forwardRef(({
                   p.style.textAlign = 'center';
                   p.style.marginTop = '0';
                   p.style.marginBottom = '0';
-                  console.log('Applied PARENTHETICAL styling to:', p.textContent.substring(0, 30));
                 }
                 
                 // Scene headings
@@ -634,7 +423,6 @@ const RemoteScriptViewer = forwardRef(({
                   p.style.textAlign = 'center';
                   p.style.marginTop = '1.5em';
                   p.style.marginBottom = '0.5em';
-                  console.log('Applied SCENE HEADING styling to:', p.textContent.substring(0, 30));
                 }
                 
                 // Transitions
@@ -648,7 +436,6 @@ const RemoteScriptViewer = forwardRef(({
                   p.style.textAlign = 'center';
                   p.style.marginTop = '1em';
                   p.style.marginBottom = '1em';
-                  console.log('Applied TRANSITION styling to:', p.textContent.substring(0, 30));
                 }
                 
                 // Default text alignment for other elements
@@ -658,7 +445,7 @@ const RemoteScriptViewer = forwardRef(({
               });
               
             } catch (err) {
-              console.error('Error applying direct styling to script elements:', err);
+              // Silently ignore styling errors
             }
           }, 1500); // Delay to ensure content is fully loaded
           
@@ -667,7 +454,7 @@ const RemoteScriptViewer = forwardRef(({
         }
       }
     } catch (error) {
-      console.error('RemoteScriptViewer: Error applying styles to iframe:', error);
+      // Silently ignore errors
     }
   };
   
