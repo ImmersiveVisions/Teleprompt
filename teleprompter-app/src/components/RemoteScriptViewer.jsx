@@ -5,6 +5,8 @@
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import fileSystemRepository from '../database/fileSystemRepository';
 import { sendSearchPosition } from '../services/websocket';
+import ViewerFrame from './ui/ViewerFrame';
+import HighlightRenderer from './HighlightRenderer';
 
 /**
  * RemoteScriptViewer - A simplified script viewer for the Remote page
@@ -19,9 +21,9 @@ const RemoteScriptViewer = forwardRef(({
   isFlipped = false,
   isHighDPI = false // Add high DPI mode prop
 }, ref) => {
-  const [scriptContent, setScriptContent] = useState(null);
-  const [scriptTitle, setScriptTitle] = useState('');
+  const [script, setScript] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isIframeLoaded, setIsIframeLoaded] = useState(false);
   const containerRef = useRef(null);
   const animationRef = useRef(null);
   
@@ -29,13 +31,20 @@ const RemoteScriptViewer = forwardRef(({
   useImperativeHandle(ref, () => ({
     // Method to scroll to a specific node/position
     scrollToNode: (data) => {
-      if (!containerRef.current || !scriptContent) {
+      if (!containerRef.current || !script) {
         console.error('RemoteScriptViewer: Cannot scroll - container or content not available');
         return false;
       }
 
       try {
-        const scrollContainer = containerRef.current;
+        // Get the iframe element directly
+        const iframe = document.getElementById('teleprompter-frame');
+        if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+          console.error('RemoteScriptViewer: Cannot scroll - iframe not accessible');
+          return false;
+        }
+        
+        const scrollContainer = iframe.contentDocument.body || iframe.contentDocument.documentElement;
         let targetPosition;
         
         // Clean up any existing animation
@@ -48,101 +57,86 @@ const RemoteScriptViewer = forwardRef(({
         const containerHeight = scrollContainer.clientHeight;
         const containerScrollHeight = scrollContainer.scrollHeight;
         
-        // Find the search text in the container if available
         let textPosition = -1;
-        let targetElement = null;
         
         // Check if we have search text to find within the content
         if (data && typeof data === 'object' && data.text) {
           console.log(`RemoteScriptViewer: Searching for text: "${data.text.substring(0, 30)}..."`);
           
-          // Try to find the text directly in the content
-          // We're using a simple approach by creating temp divs for each line
-          // and measuring their heights to estimate position
-          const lines = scriptContent.split('\n');
-          const searchText = data.text.trim().toLowerCase();
-          
           // For more accurate positioning, use the lineIndex if available
-          if (data.lineIndex !== undefined && data.lineIndex >= 0 && data.lineIndex < lines.length) {
-            // We have the exact line index, so use that for most accurate positioning
+          if (data.lineIndex !== undefined && data.lineIndex >= 0) {
+            // We have a line index, so we need to find the line
             console.log(`RemoteScriptViewer: Using line index ${data.lineIndex} for positioning`);
             
-            // Create a temporary container to measure text height
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = `
-              position: absolute;
-              top: -9999px;
-              left: -9999px;
-              width: ${scrollContainer.clientWidth}px;
-              font-size: ${fontSize}px;
-              font-family: ${window.getComputedStyle(scrollContainer).fontFamily};
-              white-space: pre-wrap;
-              visibility: hidden;
-            `;
-            document.body.appendChild(tempDiv);
+            // Find all text nodes in the document
+            const textNodes = [];
+            const walk = document.createTreeWalker(
+              scrollContainer,
+              NodeFilter.SHOW_TEXT,
+              null,
+              false
+            );
             
-            // Calculate height of preceding text
-            let heightBefore = 0;
-            for (let i = 0; i < data.lineIndex; i++) {
-              tempDiv.textContent = lines[i];
-              heightBefore += tempDiv.clientHeight;
+            let node;
+            let allText = '';
+            while (node = walk.nextNode()) {
+              const text = node.nodeValue.trim();
+              if (text) {
+                allText += text + '\n';
+                textNodes.push({
+                  node: node,
+                  text: text
+                });
+              }
             }
             
-            // Now calculate the height of the target line
-            tempDiv.textContent = lines[data.lineIndex];
-            const lineHeight = tempDiv.clientHeight;
+            // Split text into lines
+            const lines = allText.split('\n');
             
-            // Clean up
-            document.body.removeChild(tempDiv);
-            
-            // Position in the middle of the line
-            textPosition = heightBefore + (lineHeight / 2);
-            
-            console.log(`RemoteScriptViewer: Calculated text position at ${textPosition}px`);
-          } else {
-            // If we don't have a specific line index, search through content
-            console.log(`RemoteScriptViewer: Searching content for text: "${searchText}"`);
-            
-            // Find matching lines and their positions
-            let currentHeight = 0;
-            let foundMatch = false;
-            
-            // Create a temporary container to measure text height
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = `
-              position: absolute;
-              top: -9999px;
-              left: -9999px;
-              width: ${scrollContainer.clientWidth}px;
-              font-size: ${fontSize}px;
-              font-family: ${window.getComputedStyle(scrollContainer).fontFamily};
-              white-space: pre-wrap;
-              visibility: hidden;
-            `;
-            document.body.appendChild(tempDiv);
-            
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              
-              // Check if this line contains our search text
-              if (!foundMatch && line.toLowerCase().includes(searchText)) {
-                foundMatch = true;
-                textPosition = currentHeight;
-                console.log(`RemoteScriptViewer: Found matching text at line ${i}, height: ${currentHeight}px`);
-                
-                // Calculate the position in the middle of the line
-                tempDiv.textContent = line;
-                const lineHeight = tempDiv.clientHeight;
-                textPosition += (lineHeight / 2);
+            // Ensure we have the line
+            if (data.lineIndex < lines.length) {
+              // Find the line in the DOM
+              let foundNode = null;
+              for (const nodeInfo of textNodes) {
+                if (nodeInfo.text.includes(data.text) || 
+                    (data.lineContent && nodeInfo.text.includes(data.lineContent))) {
+                  foundNode = nodeInfo.node;
+                  break;
+                }
               }
               
-              // Add this line's height to our running total
-              tempDiv.textContent = line;
-              currentHeight += tempDiv.clientHeight;
+              if (foundNode) {
+                // Get the element position
+                const range = document.createRange();
+                range.selectNodeContents(foundNode);
+                const rect = range.getBoundingClientRect();
+                const nodePosition = rect.top + iframe.contentWindow.scrollY;
+                
+                // Position the text at the center of the viewport
+                textPosition = nodePosition;
+              }
+            }
+          }
+          
+          // If we didn't find using line index, try searching for the text
+          if (textPosition === -1) {
+            // Fallback: Search through text nodes for the given content
+            const searchText = data.text.trim().toLowerCase();
+            const allElements = iframe.contentDocument.body.querySelectorAll('*');
+            let foundElement = null;
+            
+            for (let i = 0; i < allElements.length; i++) {
+              const element = allElements[i];
+              if (element.innerText && element.innerText.toLowerCase().includes(searchText)) {
+                foundElement = element;
+                break;
+              }
             }
             
-            // Clean up
-            document.body.removeChild(tempDiv);
+            if (foundElement) {
+              const rect = foundElement.getBoundingClientRect();
+              textPosition = rect.top + iframe.contentWindow.scrollY;
+            }
           }
         }
         
@@ -183,7 +177,7 @@ const RemoteScriptViewer = forwardRef(({
         console.log(`RemoteScriptViewer: Scrolling to position ${targetPosition}px/${containerScrollHeight}px`);
         
         // Smooth scroll to position
-        scrollContainer.scrollTo({
+        iframe.contentWindow.scrollTo({
           top: targetPosition,
           behavior: 'smooth'
         });
@@ -258,10 +252,10 @@ const RemoteScriptViewer = forwardRef(({
           highlight.style.top = `${highlightPosition}px`;
           
           // Append it to the container
-          if (scrollContainer.style.position !== 'relative') {
-            scrollContainer.style.position = 'relative';
+          if (iframe.contentDocument.body.style.position !== 'relative') {
+            iframe.contentDocument.body.style.position = 'relative';
           }
-          scrollContainer.appendChild(highlight);
+          iframe.contentDocument.body.appendChild(highlight);
           
           // Remove after animation completes
           setTimeout(() => {
@@ -289,21 +283,20 @@ const RemoteScriptViewer = forwardRef(({
       
       setIsLoading(true);
       try {
-        const script = await fileSystemRepository.getScriptById(scriptId);
-        if (script) {
-          setScriptTitle(script.title);
-          
+        const scriptObj = await fileSystemRepository.getScriptById(scriptId);
+        if (scriptObj) {
           // Get script content safely
-          let content = script.content || script.body || "";
+          let content = scriptObj.content || scriptObj.body || "";
           
           // If no content is available, try to get full content
-          if (!content && script.id) {
+          if (!content && scriptObj.id) {
             try {
-              console.log(`RemoteScriptViewer: No content found, trying to load full content for ${script.id}`);
-              const fullScript = await fileSystemRepository.getScriptContent(script.id);
+              console.log(`RemoteScriptViewer: No content found, trying to load full content for ${scriptObj.id}`);
+              const fullScript = await fileSystemRepository.getScriptContent(scriptObj.id);
               
               if (fullScript && (fullScript.content || fullScript.body)) {
-                content = fullScript.content || fullScript.body;
+                scriptObj.content = fullScript.content || fullScript.body;
+                content = scriptObj.content;
                 console.log(`RemoteScriptViewer: Loaded full content, length: ${content.length}`);
               }
             } catch (contentError) {
@@ -313,14 +306,24 @@ const RemoteScriptViewer = forwardRef(({
           
           // Debug the script content
           console.log('RemoteScriptViewer: Loading script:', {
-            id: script.id,
-            title: script.title,
+            id: scriptObj.id,
+            title: scriptObj.title,
             contentLength: content.length,
             content: content.substring(0, 100) + "...",
-            keys: Object.keys(script)
+            keys: Object.keys(scriptObj)
           });
           
-          setScriptContent(content);
+          // Check if this is a fountain or HTML file
+          const isFountain = scriptObj.id.toLowerCase().endsWith('.fountain') ||
+                            (scriptObj.fileExtension && scriptObj.fileExtension.toLowerCase() === 'fountain');
+          const isHtml = scriptObj.id.toLowerCase().endsWith('.html') || 
+                         scriptObj.id.toLowerCase().endsWith('.htm');
+          
+          // Add these properties to the script object
+          scriptObj.isFountain = isFountain;
+          scriptObj.isHtml = isHtml;
+          
+          setScript(scriptObj);
         } else {
           console.error('Script not found with ID:', scriptId);
         }
@@ -336,7 +339,14 @@ const RemoteScriptViewer = forwardRef(({
   
   // Handle scrolling animation - matching ViewerComponent's scrolling implementation
   useEffect(() => {
-    if (!containerRef.current || !scriptContent) return;
+    if (!containerRef.current || !script || !isIframeLoaded) return;
+    
+    // Get the iframe
+    const iframe = document.getElementById('teleprompter-frame');
+    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+      console.error('RemoteScriptViewer: Cannot find iframe for animation');
+      return;
+    }
     
     // Cleanup previous animation
     const cleanupAnimation = () => {
@@ -355,14 +365,14 @@ const RemoteScriptViewer = forwardRef(({
     }
     
     try {
-      const scrollContainer = containerRef.current;
+      const scrollContainer = iframe.contentDocument.documentElement;
       
       // Calculate scrolling parameters
       const scrollHeight = scrollContainer.scrollHeight;
-      const clientHeight = scrollContainer.clientHeight;
+      const clientHeight = iframe.contentWindow.innerHeight;
       
       // Get current position
-      const startPos = scrollContainer.scrollTop || 0;
+      const startPos = iframe.contentWindow.scrollY || 0;
       
       // Calculate target position based on direction
       const targetPos = direction === 'forward' ? 
@@ -404,7 +414,7 @@ const RemoteScriptViewer = forwardRef(({
         const currentPos = startPos + (targetPos - startPos) * progress;
         
         // Set scroll position
-        scrollContainer.scrollTop = currentPos;
+        iframe.contentWindow.scrollTo(0, currentPos);
         
         // Continue if not done and still playing
         if (progress < 1 && isPlaying) {
@@ -423,7 +433,243 @@ const RemoteScriptViewer = forwardRef(({
     
     // Return cleanup function
     return cleanupAnimation;
-  }, [isPlaying, speed, direction, scriptContent]);
+  }, [isPlaying, speed, direction, script, isIframeLoaded, isHighDPI]);
+  
+  // Handler for iframe load event
+  const handleIframeLoad = () => {
+    console.log('RemoteScriptViewer: Iframe loaded');
+    setIsIframeLoaded(true);
+    
+    // Apply consistent styling to match the ViewerComponent
+    try {
+      const iframe = document.getElementById('teleprompter-frame');
+      if (iframe && iframe.contentDocument) {
+        // Apply styles to iframe body for consistency
+        if (iframe.contentDocument.body) {
+          // Set up script inspection function to log what script elements are present
+          setTimeout(() => {
+            try {
+              const doc = iframe.contentDocument;
+              // Find paragraphs with padding-left or text-align to identify potential script elements
+              const scriptElements = doc.querySelectorAll('p[style*="padding-left"], p[style*="text-align"]');
+              console.log(`RemoteScriptViewer: Found ${scriptElements.length} potential script elements`);
+              
+              if (scriptElements.length > 0) {
+                // Log a few examples
+                const examples = Array.from(scriptElements).slice(0, 5);
+                examples.forEach((el, i) => {
+                  console.log(`Element ${i}:`, {
+                    style: el.getAttribute('style'),
+                    textContent: el.textContent.substring(0, 30) + (el.textContent.length > 30 ? '...' : ''),
+                    classList: Array.from(el.classList)
+                  });
+                });
+              }
+            } catch (err) {
+              console.error('Error inspecting script elements:', err);
+            }
+          }, 1000);
+          
+          // Add a style element to ensure consistent styling with ViewerPage
+          const styleElement = document.createElement('style');
+          styleElement.textContent = `
+            body {
+              background-color: black !important;
+              color: white !important;
+              font-family: 'Courier New', monospace !important;
+              font-size: ${fontSize}px !important;
+              line-height: 1.5 !important;
+              padding: 20px !important;
+              font-weight: bold !important;
+              margin: 0 !important;
+            }
+            
+            /* CRITICAL FIX: Do NOT set text-align: center on body to prevent conflicting styles.
+               Instead, we'll set it element by element only where needed */
+            
+            /* SCRIPT ELEMENTS - Specific selectors with highest specificity
+               to override any other styles already present in the DOM */
+            
+            /* CHARACTER NAMES - SCRIPT ELEMENTS */
+            body p[style*="padding-left: 166pt"],
+            body p[style*="padding-left: 165pt"],
+            body p[style*="padding-left: 178pt"],
+            body p[style*="padding-left: 142pt"],
+            body p[style*="padding-left: 40pt"],
+            body p[style*="padding-left: 84pt"],
+            body p[style*="padding-left: 65pt"],
+            body p[style*="padding-left: 77pt"] {
+              color: #FFD700 !important; /* Gold color for character names */
+              font-weight: bold !important;
+              text-align: center !important; 
+              margin-bottom: 0 !important;
+              background-color: rgba(255, 215, 0, 0.1) !important; /* Subtle highlight for debugging */
+            }
+            
+            /* DIALOG TEXT - SCRIPT ELEMENTS */
+            body p[style*="padding-left: 94pt"],
+            body p[style*="padding-left: 93pt"] {
+              color: white !important;
+              text-align: center !important;
+              margin-top: 0 !important;
+              margin-bottom: 1em !important;
+            }
+            
+            /* PARENTHETICALS - SCRIPT ELEMENTS */
+            body p[style*="padding-left: 123pt"],
+            body p[style*="padding-left: 129pt"],
+            body p[style*="padding-left: 121pt"],
+            body p[style*="padding-left: 122pt"],
+            body p[style*="padding-left: 136pt"] {
+              color: #BBBBBB !important; /* Light gray for parentheticals */
+              font-style: italic !important;
+              text-align: center !important;
+              margin-top: 0 !important;
+              margin-bottom: 0 !important;
+            }
+            
+            /* SCENE HEADINGS - SCRIPT ELEMENTS */
+            body p[style*="padding-left: 22pt"] {
+              color: #ADD8E6 !important; /* Light blue for scene headings */
+              font-weight: bold !important;
+              text-align: center !important;
+              margin-top: 1.5em !important;
+              margin-bottom: 0.5em !important;
+            }
+            
+            /* TRANSITIONS - SCRIPT ELEMENTS */
+            body p[style*="text-align: right"],
+            body p:contains("CUT TO:"),
+            body p:contains("FADE TO:"),
+            body p:contains("DISSOLVE TO:") {
+              color: #FFA07A !important; /* Light salmon for transitions */
+              font-weight: bold !important;
+              text-transform: uppercase !important;
+              text-align: center !important;
+              margin-top: 1em !important;
+              margin-bottom: 1em !important;
+            }
+            
+            /* Additional catch-all selectors for common screenplay elements
+               - Adding maximum specificity with body prefix */
+            body p[style*="margin-left"],
+            body [class*="character"],
+            body [class*="Character"], 
+            body [data-type="dialog"],
+            body [data-type="character"],
+            body [class*="dialog"], 
+            body [class*="scene"] { 
+              text-align: center !important;
+            }
+          `;
+          
+          iframe.contentDocument.head.appendChild(styleElement);
+          
+          // Also set direct styles for immediate effect, but DO NOT set textAlign globally
+          iframe.contentDocument.body.style.backgroundColor = 'black';
+          iframe.contentDocument.body.style.color = 'white';
+          iframe.contentDocument.body.style.fontFamily = 'Courier New, monospace';
+          iframe.contentDocument.body.style.fontSize = `${fontSize}px`;
+          iframe.contentDocument.body.style.lineHeight = '1.5';
+          // REMOVED: iframe.contentDocument.body.style.textAlign = 'center';
+          iframe.contentDocument.body.style.padding = '20px';
+          iframe.contentDocument.body.style.fontWeight = 'bold';
+          iframe.contentDocument.body.style.margin = '0';
+          
+          // Create a function to apply script element styling directly
+          setTimeout(() => {
+            try {
+              // Apply styling directly to script elements based on their attributes
+              const allParagraphs = iframe.contentDocument.querySelectorAll('p');
+              console.log(`RemoteScriptViewer: Found ${allParagraphs.length} paragraphs to check for script elements`);
+              
+              allParagraphs.forEach(p => {
+                const style = p.getAttribute('style') || '';
+                
+                // Character names
+                if (style.includes('padding-left: 166pt') || 
+                    style.includes('padding-left: 165pt') ||
+                    style.includes('padding-left: 178pt') ||
+                    style.includes('padding-left: 142pt') ||
+                    style.includes('padding-left: 40pt') ||
+                    style.includes('padding-left: 84pt') ||
+                    style.includes('padding-left: 65pt') ||
+                    style.includes('padding-left: 77pt')) {
+                  p.style.color = '#FFD700';
+                  p.style.fontWeight = 'bold';
+                  p.style.textAlign = 'center';
+                  p.style.marginBottom = '0';
+                  p.style.backgroundColor = 'rgba(255, 215, 0, 0.1)';
+                  console.log('Applied CHARACTER NAME styling to:', p.textContent.substring(0, 30));
+                }
+                
+                // Dialog text
+                else if (style.includes('padding-left: 94pt') || 
+                         style.includes('padding-left: 93pt')) {
+                  p.style.color = 'white';
+                  p.style.textAlign = 'center';
+                  p.style.marginTop = '0';
+                  p.style.marginBottom = '1em';
+                  console.log('Applied DIALOG styling to:', p.textContent.substring(0, 30));
+                }
+                
+                // Parentheticals
+                else if (style.includes('padding-left: 123pt') ||
+                         style.includes('padding-left: 129pt') ||
+                         style.includes('padding-left: 121pt') ||
+                         style.includes('padding-left: 122pt') ||
+                         style.includes('padding-left: 136pt')) {
+                  p.style.color = '#BBBBBB';
+                  p.style.fontStyle = 'italic';
+                  p.style.textAlign = 'center';
+                  p.style.marginTop = '0';
+                  p.style.marginBottom = '0';
+                  console.log('Applied PARENTHETICAL styling to:', p.textContent.substring(0, 30));
+                }
+                
+                // Scene headings
+                else if (style.includes('padding-left: 22pt')) {
+                  p.style.color = '#ADD8E6';
+                  p.style.fontWeight = 'bold';
+                  p.style.textAlign = 'center';
+                  p.style.marginTop = '1.5em';
+                  p.style.marginBottom = '0.5em';
+                  console.log('Applied SCENE HEADING styling to:', p.textContent.substring(0, 30));
+                }
+                
+                // Transitions
+                else if (style.includes('text-align: right') ||
+                         p.textContent.includes('CUT TO:') ||
+                         p.textContent.includes('FADE TO:') ||
+                         p.textContent.includes('DISSOLVE TO:')) {
+                  p.style.color = '#FFA07A';
+                  p.style.fontWeight = 'bold';
+                  p.style.textTransform = 'uppercase';
+                  p.style.textAlign = 'center';
+                  p.style.marginTop = '1em';
+                  p.style.marginBottom = '1em';
+                  console.log('Applied TRANSITION styling to:', p.textContent.substring(0, 30));
+                }
+                
+                // Default text alignment for other elements
+                else {
+                  p.style.textAlign = 'left';
+                }
+              });
+              
+            } catch (err) {
+              console.error('Error applying direct styling to script elements:', err);
+            }
+          }, 1500); // Delay to ensure content is fully loaded
+          
+          // Mark the iframe as loaded with a data attribute
+          iframe.dataset.loaded = 'true';
+        }
+      }
+    } catch (error) {
+      console.error('RemoteScriptViewer: Error applying styles to iframe:', error);
+    }
+  };
   
   if (isLoading) {
     return (
@@ -436,7 +682,7 @@ const RemoteScriptViewer = forwardRef(({
     );
   }
   
-  if (!scriptContent) {
+  if (!script) {
     return (
       <div className="no-script-message" style={{ 
         color: 'white', 
@@ -451,13 +697,12 @@ const RemoteScriptViewer = forwardRef(({
     );
   }
   
-  // Use the same aspect ratio as the ViewerComponent (16:9)
-  const aspectRatio = '16/9'; 
-  const aspectRatioValue = 16/9;
+  // Always use 16:9 aspect ratio with no option to change
+  const aspectRatio = '16/9';
   
   return (
     <div 
-      className="teleprompter-viewer"
+      className="teleprompter-viewer screenplay-container"
       style={{ 
         backgroundColor: 'black',
         color: 'white',
@@ -476,30 +721,33 @@ const RemoteScriptViewer = forwardRef(({
         transform: isFlipped ? 'scaleX(-1)' : 'none'
       }}
     >
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100vh',
-          aspectRatio: aspectRatio,
-          overflow: 'auto',
-          backgroundColor: 'black',
-          padding: '20px',
-          fontSize: `${fontSize}px`,
-          lineHeight: '1.5',
-          whiteSpace: 'pre-wrap',
-          fontFamily: 'Courier New, monospace',
-          color: 'white',
-          textAlign: 'center',
-          fontWeight: 'bold',
-          margin: '0 auto',
-          border: 'none',
-          boxSizing: 'border-box'
-        }}
-        className="viewer-content-container"
-        data-aspect-ratio={aspectRatio}
-      >
-        {scriptContent}
+      {/* Apply similar styles as ViewerPage for consistency */}
+      <div style={{
+        width: '100%',
+        height: '100%',
+        maxWidth: '100vw',
+        maxHeight: '100vh',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
+        <ViewerFrame
+          script={script}
+          containerRef={containerRef}
+          aspectRatio={aspectRatio}
+          isIframeLoaded={isIframeLoaded}
+          handleIframeLoad={handleIframeLoad}
+          fontSize={fontSize}
+        />
+        
+        {/* Character highlighting */}
+        {script && script.id && isIframeLoaded && (
+          <HighlightRenderer
+            scriptId={script.id}
+            containerId="teleprompter-frame"
+            contentSelector="body"
+            enabled={true}
+          />
+        )}
       </div>
     </div>
   );

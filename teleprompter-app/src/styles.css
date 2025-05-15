@@ -1146,16 +1146,84 @@ input, select, textarea {
   min-height: 200px; /* Ensure it's always visible */
 }
 
-/* Special styling for 4:3 full screen containers */
-.viewer-page .script-content-container[data-aspect-ratio="4/3"],
-.remote-page-fullscreen .viewer-content-container[data-aspect-ratio="4/3"] {
+/* Force consistent styling for all viewer containers to use 16:9 */
+.viewer-content-container,
+.remote-script-fullscreen-container .viewer-content-container,
+.viewer-page .script-content-container,
+.remote-page-fullscreen .viewer-content-container,
+.screenplay-container .viewer-content-container {
+  width: 100% !important;
+  max-width: 177.78vh !important; /* 16:9 ratio */
   margin: 0 auto !important;
   height: 100vh !important;
-  max-height: 100vh !important;
+  aspect-ratio: 16/9 !important;
+  overflow: hidden !important;
+  position: relative !important;
 }
 
-/* Special styling for 16:9 containers to match viewer */
-.viewer-content-container[data-aspect-ratio="16/9"] {
+/* New screenplay container class to ensure script elements get proper styling */
+.screenplay-container * p[style*="padding-left: 166pt"],
+.screenplay-container * p[style*="padding-left: 165pt"],
+.screenplay-container * p[style*="padding-left: 178pt"],
+.screenplay-container * p[style*="padding-left: 142pt"],
+.screenplay-container * p[style*="padding-left: 40pt"],
+.screenplay-container * p[style*="padding-left: 84pt"],
+.screenplay-container * p[style*="padding-left: 65pt"],
+.screenplay-container * p[style*="padding-left: 77pt"] {
+  color: #FFD700 !important; /* Gold color for character names */
+  font-weight: bold !important;
+  text-align: center !important;
+  margin-bottom: 0 !important;
+  background-color: rgba(255, 215, 0, 0.1) !important; /* Subtle highlight for debugging */
+}
+
+/* Dialog text - direct styling for all screenplay containers */
+.screenplay-container * p[style*="padding-left: 94pt"],
+.screenplay-container * p[style*="padding-left: 93pt"] {
+  color: white !important;
+  text-align: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 1em !important;
+}
+
+/* Parentheticals in dialog - direct styling for all screenplay containers */
+.screenplay-container * p[style*="padding-left: 123pt"],
+.screenplay-container * p[style*="padding-left: 129pt"],
+.screenplay-container * p[style*="padding-left: 121pt"],
+.screenplay-container * p[style*="padding-left: 122pt"],
+.screenplay-container * p[style*="padding-left: 136pt"] {
+  color: #BBBBBB !important; /* Light gray for parentheticals */
+  font-style: italic !important;
+  text-align: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Scene headings - direct styling for all screenplay containers */
+.screenplay-container * p[style*="padding-left: 22pt"] {
+  color: #ADD8E6 !important; /* Light blue for scene headings */
+  font-weight: bold !important;
+  text-align: center !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.5em !important;
+}
+
+/* Transitions - direct styling for all screenplay containers */
+.screenplay-container * p[style*="text-align: right"],
+.screenplay-container * p:contains("CUT TO:"),
+.screenplay-container * p:contains("FADE TO:"),
+.screenplay-container * p:contains("DISSOLVE TO:") {
+  color: #FFA07A !important; /* Light salmon for transitions */
+  font-weight: bold !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  margin-top: 1em !important;
+  margin-bottom: 1em !important;
+}
+
+/* Special styling for all containers to match 16:9 properly */
+.viewer-content-container[data-aspect-ratio="16/9"],
+.script-content-container[data-aspect-ratio="16/9"] {
   width: 100% !important;
   max-width: 177.78vh !important; /* 16:9 ratio */
   margin: 0 auto !important;
@@ -1166,36 +1234,54 @@ input, select, textarea {
   text-align: center;
 }
 
-/* Film script specific styling */
-.html-content p[style*="padding-left: 166pt"],
-.html-content p[style*="padding-left: 165pt"],
-.html-content p[style*="padding-left: 178pt"],
-.html-content p[style*="padding-left: 142pt"],
-.html-content p[style*="padding-left: 40pt"],
-.html-content p[style*="padding-left: 84pt"],
-.html-content p[style*="padding-left: 65pt"],
-.html-content p[style*="padding-left: 77pt"] {
+/* Film script specific styling - applied to all script containers */
+
+/* Shared stylesheet for all screenplay elements in any container */
+html body .html-content p[style*="padding-left: 166pt"],
+html body .html-content p[style*="padding-left: 165pt"],
+html body .html-content p[style*="padding-left: 178pt"],
+html body .html-content p[style*="padding-left: 142pt"],
+html body .html-content p[style*="padding-left: 40pt"],
+html body .html-content p[style*="padding-left: 84pt"],
+html body .html-content p[style*="padding-left: 65pt"],
+html body .html-content p[style*="padding-left: 77pt"],
+html body #teleprompter-frame p[style*="padding-left: 166pt"],
+html body #teleprompter-frame p[style*="padding-left: 165pt"],
+html body #teleprompter-frame p[style*="padding-left: 178pt"],
+html body #teleprompter-frame p[style*="padding-left: 142pt"],
+html body #teleprompter-frame p[style*="padding-left: 40pt"],
+html body #teleprompter-frame p[style*="padding-left: 84pt"],
+html body #teleprompter-frame p[style*="padding-left: 65pt"],
+html body #teleprompter-frame p[style*="padding-left: 77pt"] {
   color: #FFD700 !important; /* Gold color for character names */
   font-weight: bold !important;
   text-align: center !important;
   margin-bottom: 0 !important;
+  background-color: rgba(255, 215, 0, 0.1) !important; /* Subtle highlight for debugging */
 }
 
-/* Dialog text */
-.html-content p[style*="padding-left: 94pt"],
-.html-content p[style*="padding-left: 93pt"] {
+/* Dialog text - Apply to ALL script containers */
+html body .html-content p[style*="padding-left: 94pt"],
+html body .html-content p[style*="padding-left: 93pt"],
+html body #teleprompter-frame p[style*="padding-left: 94pt"],
+html body #teleprompter-frame p[style*="padding-left: 93pt"] {
   color: white !important;
   text-align: center !important;
   margin-top: 0 !important;
   margin-bottom: 1em !important;
 }
 
-/* Parentheticals in dialog */
-.html-content p[style*="padding-left: 123pt"],
-.html-content p[style*="padding-left: 129pt"],
-.html-content p[style*="padding-left: 121pt"],
-.html-content p[style*="padding-left: 122pt"],
-.html-content p[style*="padding-left: 136pt"] {
+/* Parentheticals in dialog - Apply to ALL script containers */
+html body .html-content p[style*="padding-left: 123pt"],
+html body .html-content p[style*="padding-left: 129pt"],
+html body .html-content p[style*="padding-left: 121pt"],
+html body .html-content p[style*="padding-left: 122pt"],
+html body .html-content p[style*="padding-left: 136pt"],
+html body #teleprompter-frame p[style*="padding-left: 123pt"],
+html body #teleprompter-frame p[style*="padding-left: 129pt"],
+html body #teleprompter-frame p[style*="padding-left: 121pt"],
+html body #teleprompter-frame p[style*="padding-left: 122pt"],
+html body #teleprompter-frame p[style*="padding-left: 136pt"] {
   color: #BBBBBB !important; /* Light gray for parentheticals */
   font-style: italic !important;
   text-align: center !important;
@@ -1203,8 +1289,9 @@ input, select, textarea {
   margin-bottom: 0 !important;
 }
 
-/* Scene headings */
-.html-content p[style*="padding-left: 22pt"] {
+/* Scene headings - Apply to ALL script containers */
+html body .html-content p[style*="padding-left: 22pt"],
+html body #teleprompter-frame p[style*="padding-left: 22pt"] {
   color: #ADD8E6 !important; /* Light blue for scene headings */
   font-weight: bold !important;
   text-align: center !important;
@@ -1212,8 +1299,15 @@ input, select, textarea {
   margin-bottom: 0.5em !important;
 }
 
-/* Transitions */
-.html-content p[style*="text-align: right"] {
+/* Transitions - Apply to ALL script containers */
+html body .html-content p[style*="text-align: right"],
+html body .html-content p:contains("CUT TO:"),
+html body .html-content p:contains("FADE TO:"),
+html body .html-content p:contains("DISSOLVE TO:"),
+html body #teleprompter-frame p[style*="text-align: right"],
+html body #teleprompter-frame p:contains("CUT TO:"),
+html body #teleprompter-frame p:contains("FADE TO:"),
+html body #teleprompter-frame p:contains("DISSOLVE TO:") {
   color: #FFA07A !important; /* Light salmon for transitions */
   font-weight: bold !important;
   text-transform: uppercase !important;
@@ -1782,7 +1876,18 @@ input, select, textarea {
 
 .search-input-container {
   display: flex;
-  padding: 15px;
+  padding: 15px 15px 10px 15px;
+}
+
+.search-status {
+  padding: 0 15px 15px 15px;
+}
+
+.search-status .no-results {
+  color: #ff6b6b;
+  margin: 0;
+  font-size: 14px;
+  text-align: left;
 }
 
 .search-input {

@@ -8,6 +8,7 @@ import useTeleprompterScroll from '../hooks/useTeleprompterScroll';
 import useTeleprompterFontSize from '../hooks/useTeleprompterFontSize';
 import useIframeLoading from '../hooks/useIframeLoading';
 import useNodeNavigation from '../hooks/useNodeNavigation';
+import HighlightRenderer from './HighlightRenderer';
 
 /**
  * ViewerComponent - A dedicated viewer that only receives control messages
@@ -83,7 +84,7 @@ const ViewerComponent = React.forwardRef((props, ref) => {
   
   return (
     <div 
-      className="teleprompter-viewer"
+      className="teleprompter-viewer screenplay-container"
       style={{ 
         backgroundColor: 'black',
         color: 'white',
@@ -124,6 +125,16 @@ const ViewerComponent = React.forwardRef((props, ref) => {
         handleIframeLoad={handleIframeLoad}
         fontSize={fontSize}
       />
+      
+      {/* Character highlighting */}
+      {script && script.id && isIframeLoaded && (
+        <HighlightRenderer
+          scriptId={script.id}
+          containerId="teleprompter-frame"
+          contentSelector="body"
+          enabled={true}
+        />
+      )}
     </div>
   );
 });
