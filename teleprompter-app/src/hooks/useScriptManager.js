@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import fileSystemRepository from '../database/fileSystemRepository';
 import { sendControlMessage } from '../services/websocket';
 
@@ -109,10 +109,11 @@ const useScriptManager = () => {
             (script.id.toLowerCase().endsWith('.fountain') || 
              (script.fileExtension && script.fileExtension.toLowerCase() === 'fountain'))) {
           // Only create a new object if the fountain flag needs to be changed
-          script = {
+          const updatedScript = {
             ...script,
             isFountain: true
           };
+          script = updatedScript;
         }
         
         console.log('Script loaded successfully:', script.title);

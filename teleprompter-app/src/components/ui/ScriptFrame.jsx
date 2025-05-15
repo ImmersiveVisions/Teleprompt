@@ -12,20 +12,12 @@ const ScriptFrame = ({
   // Calculate aspect ratio value as a number for calculations
   const aspectRatioValue = aspectRatio === "16/9" ? 16 / 9 : 4 / 3;
 
-  if (!script) {
-    return <div className="no-script-message">No script selected</div>;
-  }
-
-  // Verify script has required properties
-  if (!script.id) {
-    return (
-      <div className="no-script-message">Script is missing ID property</div>
-    );
-  }
-  
   // Use useMemo to prevent infinite re-renders
   // The script should already have isFountain properly set by parent components
   const enhancedScript = useMemo(() => {
+    if (!script) return null;
+    if (!script.id) return null;
+    
     const enhanced = {
       ...script,
       // Only check script.id if isFountain is not already set
@@ -46,6 +38,14 @@ const ScriptFrame = ({
     
     return enhanced;
   }, [script]);
+
+  if (!script || !script.id) {
+    return <div className="no-script-message">{!script ? "No script selected" : "Script is missing ID property"}</div>;
+  }
+
+  if (!enhancedScript) {
+    return <div className="no-script-message">Unable to process script</div>;
+  }
 
   return (
     <div

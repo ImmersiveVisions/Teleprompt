@@ -417,6 +417,13 @@ class HighlightService {
       }
     }));
     
+    // Broadcast to all clients via WebSocket
+    sendControlMessage('HIGHLIGHT_CHARACTER_TOGGLE', {
+      character,
+      enabled,
+      color: this.getCharacterColor(character)
+    });
+    
     return true;
   }
   
@@ -550,6 +557,49 @@ class HighlightService {
       detail: {
         scriptId: data.scriptId,
         highlights: data.highlights
+      }
+    }));
+  }
+  
+  /**
+   * Handle character highlight toggle from WebSocket
+   * @param {Object} data Character toggle data
+   * @param {string} data.character Character name
+   * @param {boolean} data.enabled Whether highlighting is enabled
+   * @param {string} data.color Character color
+   */
+  handleCharacterToggle(data) {
+    if (!this.enabled || !data || !data.character) return;
+    
+    console.log('Received character highlight toggle via WebSocket:', data);
+    
+    // Update character color if provided
+    if (data.color) {
+      const colorMatch = data.color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+      if (colorMatch) {
+        const [_, r, g, b, a] = colorMatch;
+        // Convert back to hex
+        const hex = `#${parseInt(r).toString(16).padStart(2, '0')}${parseInt(g).toString(16).padStart(2, '0')}${parseInt(b).toString(16).padStart(2, '0')}`;
+        this.setCharacterColor(data.character, hex, parseFloat(a));
+      } else if (data.color.startsWith('#')) {
+        this.setCharacterColor(data.character, data.color, 1);
+      }
+    }
+    
+    // Update enabled state without broadcasting back to avoid loops
+    const characterKey = data.character.toLowerCase();
+    this.enabledCharacters.set(characterKey, data.enabled);
+    
+    // Update highlights for all scripts
+    for (const scriptId of this.scriptContent.keys()) {
+      this.updateAutoHighlights(scriptId);
+    }
+    
+    // Dispatch local event for UI updates
+    window.dispatchEvent(new CustomEvent('characterHighlightToggled', {
+      detail: {
+        character: data.character,
+        enabled: data.enabled
       }
     }));
   }
