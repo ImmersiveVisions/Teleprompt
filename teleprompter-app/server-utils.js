@@ -203,10 +203,22 @@ function handleMessage(message, sender) {
         message.data.position = 0;
       }
       
-      console.log('Forwarding SEARCH_POSITION message to clients:', 
-        typeof message.data === 'object' 
-          ? `position: ${message.data.position}, text: ${message.data.text ? message.data.text.substring(0, 20) + '...' : 'none'}`
-          : message.data);
+      // Enhanced logging for SEARCH_POSITION messages
+      let logData = message.data;
+      if (typeof logData === 'object') {
+        // Extract the most relevant information for debugging
+        console.log('📌 SERVER: Forwarding SEARCH_POSITION message:', {
+          position: logData.position,
+          lineIndex: logData.lineIndex,
+          totalLines: logData.totalLines,
+          origin: logData.origin,
+          fromRemote: logData.fromRemote,
+          lineBasedNavigation: logData.lineBasedNavigation,
+          timestamp: logData.timestamp
+        });
+      } else {
+        console.log('📌 SERVER: Forwarding SEARCH_POSITION message (simple):', logData);
+      }
       
       // Forward search position to all clients without storing in shared state
       const searchMessage = JSON.stringify({

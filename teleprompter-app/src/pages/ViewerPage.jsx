@@ -185,6 +185,18 @@ const ViewerPage = ({ directScriptId }) => {
         ` FROM ${message.data.origin.toUpperCase()}` : '';
       const remoteFlag = message.data && (message.data.fromRemote || message.data.remoteSearch) ? '📱' : '';
       
+      // EXTRA DEBUG for remote messages
+      if (message.data && (message.data.fromRemote || message.data.origin === 'remote')) {
+        console.log(`🔍🔍 VIEWER RECEIVED REMOTE POSITION UPDATE:`, {
+          lineIndex: message.data.lineIndex,
+          totalLines: message.data.totalLines,
+          position: message.data.position,
+          manualScroll: message.data.manualScroll,
+          lineBasedNavigation: message.data.lineBasedNavigation,
+          timestamp: message.data.timestamp
+        });
+      }
+      
       console.log(`\n\n ${logColor} ${remoteFlag} ${logColor} VIEWER RECEIVED ${messageType}${sourceInfo} MESSAGE ${logColor} ${remoteFlag} ${logColor} \n\n`);
       console.log(`!!!! ViewerPage: Processing ${messageType} message !!!:`, 
         message.data ? JSON.stringify(message.data).substring(0, 100) + '...' : 'null');
@@ -309,6 +321,17 @@ const ViewerPage = ({ directScriptId }) => {
                 let scrollTo = 0;
                 
                 if (data.lineBasedNavigation && data.lineIndex !== undefined && data.totalLines) {
+                  // Special handling for remote-originated messages
+                  if (data.origin === 'remote' || data.fromRemote) {
+                    console.log(`🚨🚨 ViewerPage: SPECIAL HANDLING FOR REMOTE SCROLL EVENT`, {
+                      lineIndex: data.lineIndex,
+                      totalLines: data.totalLines,
+                      fromRemote: data.fromRemote,
+                      manualScroll: data.manualScroll,
+                      timestamp: data.timestamp
+                    });
+                  }
+                  
                   // Line-based navigation gets highest priority
                   const scrollHeight = iframe.contentDocument.body.scrollHeight;
                   const lineRatio = data.lineIndex / data.totalLines;
@@ -362,19 +385,31 @@ const ViewerPage = ({ directScriptId }) => {
                     // Create the main position marker
                     const highlight = iframe.contentDocument.createElement('div');
                     highlight.className = 'line-position-marker';
+                    
+                    // Special styling for remote-originated updates
+                    const isFromRemote = data.origin === 'remote' || data.fromRemote;
+                    const bgColor = isFromRemote ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
+                    const borderColor = isFromRemote ? 'blue' : 'red';
+                    const label = isFromRemote ? '📱 REMOTE SYNC 📱' : 'POSITION';
+                    
                     highlight.style.cssText = `
                       position: absolute;
                       left: 0;
                       width: 100%;
                       height: 100px;
-                      background-color: rgba(255, 0, 0, 0.7);
-                      border-top: 5px solid red;
-                      border-bottom: 5px solid red;
+                      background-color: ${bgColor};
+                      border-top: 5px solid ${borderColor};
+                      border-bottom: 5px solid ${borderColor};
                       top: ${scrollTo - 50}px;
                       z-index: 10000;
                       pointer-events: none;
                       animation: pulse-animation 1s infinite, border-pulse 1s infinite;
                     `;
+                    
+                    // Add a label for remote updates
+                    if (isFromRemote) {
+                      highlight.innerHTML = `<div style="color: white; font-weight: bold; text-align: center; margin-top: 40px;">${label}</div>`;
+                    }
                     iframe.contentDocument.body.appendChild(highlight);
                     
                     // Create a line number indicator

@@ -418,8 +418,24 @@ const RemoteScriptViewer = forwardRef(({
             lastScrollPositionRef.current = newScrollTop;
             console.log('RemoteScriptViewer: Sending position update after manual scroll', data);
             
-            // Send position via WebSocket
-            sendSearchPosition(data);
+            // Add more debugging information to help trace the issue
+            console.log('🚀 RemoteScriptViewer: Sending SEARCH_POSITION with data:', {
+              lineIndex: data.lineIndex,
+              totalLines: data.totalLines,
+              position: data.position,
+              origin: data.origin,
+              fromRemote: data.fromRemote,
+              lineBasedNavigation: data.lineBasedNavigation,
+              timestamp: data.timestamp
+            });
+            
+            // Send position via WebSocket - ensure this happens
+            try {
+              sendSearchPosition(data);
+              console.log('✅ RemoteScriptViewer: Successfully called sendSearchPosition');
+            } catch (error) {
+              console.error('❌ RemoteScriptViewer: Error sending position update:', error);
+            }
             
             // Call the callback if provided
             if (typeof onPositionChange === 'function') {
