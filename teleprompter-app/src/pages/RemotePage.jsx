@@ -37,6 +37,9 @@ const RemotePage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
+  // State for script selection popup
+  const [isScriptPopupOpen, setIsScriptPopupOpen] = useState(false);
+  
   // Reset search state when modal is opened
   useEffect(() => {
     if (isSearchModalOpen) {
@@ -513,9 +516,10 @@ const RemotePage = () => {
         />
       </div>
       
-      {/* Add styles for syncing indicator */}
+      {/* Add styles for vertical controls and syncing indicator */}
       <style>
         {`
+          /* Syncing indicator animation */
           .connection-status.syncing {
             background-color: #ffc107;
             color: #000;
@@ -527,120 +531,416 @@ const RemotePage = () => {
             50% { opacity: 1; }
             100% { opacity: 0.7; }
           }
+
+          /* Vertical side controls styling */
+          .remote-side-controls {
+            position: fixed;
+            right: 0;
+            top: 0;
+            height: 100vh;
+            width: 70px;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 0;
+            z-index: 1000;
+            gap: 10px;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.5);
+          }
+
+          .remote-side-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #2a2a2a;
+            color: white;
+            border: 2px solid #444;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 0;
+          }
+
+          .remote-side-btn:hover {
+            background-color: #444;
+            transform: scale(1.05);
+          }
+
+          .remote-side-btn:active {
+            transform: scale(0.95);
+          }
+
+          .remote-side-btn.active {
+            background-color: #0062cc;
+            border-color: #0056b3;
+          }
+
+          .remote-side-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #333;
+          }
+
+          .remote-side-control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            margin: 5px 0;
+            width: 100%;
+          }
+
+          .remote-side-label {
+            color: #ccc;
+            font-size: 12px;
+            font-weight: bold;
+          }
+
+          .remote-side-value {
+            color: white;
+            font-size: 14px;
+            min-height: 20px;
+            text-align: center;
+          }
+
+          .remote-side-footer {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+          }
+
+          .connection-status {
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 10px;
+            background-color: #333;
+            color: white;
+            text-align: center;
+          }
+
+          .connection-status.connected {
+            background-color: #28a745;
+          }
+
+          .connection-status.connecting {
+            background-color: #ffc107;
+            color: #212529;
+          }
+
+          .remote-home-link {
+            text-decoration: none;
+            color: white;
+            font-size: 24px;
+            margin-bottom: 10px;
+          }
+
+          /* Script Selection Popup Styles */
+          .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+          }
+
+          .script-selection-modal {
+            background-color: #222;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            animation: fadeIn 0.3s ease-out;
+          }
+
+          @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+          }
+
+          .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #333;
+            border-bottom: 1px solid #444;
+          }
+
+          .modal-header h2 {
+            margin: 0;
+            color: white;
+            font-size: 18px;
+          }
+
+          .close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            margin: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+          }
+
+          .close-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+          }
+
+          .script-list-container {
+            padding: 10px;
+            overflow-y: auto;
+            max-height: calc(80vh - 60px);
+          }
+
+          .script-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+          }
+
+          .script-item {
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background-color: #2a2a2a;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+          }
+
+          .script-item:hover {
+            background-color: #3a3a3a;
+          }
+
+          .script-item.selected {
+            background-color: #0062cc;
+          }
+
+          .script-title {
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 85%;
+          }
+
+          .script-type {
+            font-size: 18px;
+            opacity: 0.7;
+          }
+
+          .no-scripts-message {
+            color: #aaa;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+          }
         `}
       </style>
       
-      {/* Floating header with controls */}
-      <div className="remote-floating-header visible">
-        <div className="remote-header-left">
-          <select 
-            className="remote-script-select"
-            value={selectedScriptId || ''} 
-            onChange={(e) => handleScriptSelect(e.target.value)}
-            disabled={scripts.length === 0}
-          >
-            <option value="" disabled>Select a script...</option>
-            <option value="none">No script (clear selection)</option>
-            {scripts.map(script => (
-              <option key={script.id} value={script.id}>
-                {script.title}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Vertical side controls */}
+      <div className="remote-side-controls">
+        {/* Script selection icon button */}
+        <button
+          onClick={() => setIsScriptPopupOpen(!isScriptPopupOpen)}
+          className={`remote-side-btn script-select-btn ${isScriptPopupOpen ? 'active' : ''}`}
+          title="Select Script"
+        >
+          📄
+        </button>
         
-        <div className="remote-header-controls">
-          {/* Search button */}
-          <button
-            onClick={() => {
-              // Reset search state and open modal
-              setSearchTerm("");
-              setSearchResults([]);
-              setIsSearchModalOpen(true);
-            }}
-            className="remote-control-btn search-btn"
-            disabled={!selectedScriptId}
-            title="Search in script"
-          >
-            🔍
-          </button>
-          
-          {/* Play/Pause button */}
+        {/* Search button */}
+        <button
+          onClick={() => {
+            // Reset search state and open modal
+            setSearchTerm("");
+            setSearchResults([]);
+            setIsSearchModalOpen(true);
+          }}
+          className="remote-side-btn search-btn"
+          disabled={!selectedScriptId}
+          title="Search in script"
+        >
+          🔍
+        </button>
+        
+        {/* Play/Pause button */}
+        <button 
+          onClick={togglePlay} 
+          className={`remote-side-btn play-btn ${isPlaying ? 'active' : ''}`}
+          disabled={!selectedScriptId}
+          title={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? '⏸' : '▶'}
+        </button>
+        
+        {/* Direction button */}
+        <button 
+          onClick={toggleDirection} 
+          className="remote-side-btn direction-btn"
+          disabled={!selectedScriptId}
+          title={direction === 'forward' ? "Scrolling Down" : "Scrolling Up"}
+        >
+          {direction === 'forward' ? '⬇️' : '⬆️'}
+        </button>
+        
+        {/* Speed controls */}
+        <div className="remote-side-control-group">
+          <span className="remote-side-label">Speed</span>
           <button 
-            onClick={togglePlay} 
-            className={`remote-control-btn play-btn ${isPlaying ? 'active' : ''}`}
+            onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+            className="remote-side-btn speed-btn"
             disabled={!selectedScriptId}
+            title="Decrease Speed"
           >
-            {isPlaying ? '⏸' : '▶'}
+            -
           </button>
-          
-          {/* Direction button */}
+          <span className="remote-side-value">{speed.toFixed(2)}x</span>
           <button 
-            onClick={toggleDirection} 
-            className="remote-control-btn direction-btn"
+            onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+            className="remote-side-btn speed-btn"
             disabled={!selectedScriptId}
+            title="Increase Speed"
           >
-            {direction === 'forward' ? '⬇️' : '⬆️'}
-          </button>
-          
-          {/* Speed controls */}
-          <div className="remote-control-group">
-            <button 
-              onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-              className="remote-control-btn speed-btn"
-              disabled={!selectedScriptId}
-            >
-              -
-            </button>
-            <span className="remote-control-value">{speed.toFixed(2)}x</span>
-            <button 
-              onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-              className="remote-control-btn speed-btn"
-              disabled={!selectedScriptId}
-            >
-              +
-            </button>
-          </div>
-          
-          {/* Font size controls */}
-          <div className="remote-control-group">
-            <button 
-              onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-              className="remote-control-btn font-btn"
-              disabled={!selectedScriptId}
-            >
-              -
-            </button>
-            <span className="remote-control-value">{fontSize}px</span>
-            <button 
-              onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-              className="remote-control-btn font-btn"
-              disabled={!selectedScriptId}
-            >
-              +
-            </button>
-            <span style={{ fontSize: '10px', marginLeft: '5px', color: '#888' }}>
-              (showing: {fontSize - remoteScaleFactor}px)
-            </span>
-          </div>
-          
-          {/* High DPI Mode Toggle */}
-          <button
-            onClick={() => setIsHighDPI(!isHighDPI)}
-            className={`remote-control-btn high-dpi-btn ${isHighDPI ? 'active' : ''}`}
-            title="Toggle High DPI mode for faster scrolling on high-resolution screens"
-          >
-            {isHighDPI ? 'High DPI: ON' : 'High DPI: OFF'}
+            +
           </button>
         </div>
         
-        <div className="remote-header-right">
+        {/* Font size controls */}
+        <div className="remote-side-control-group">
+          <span className="remote-side-label">Font</span>
+          <button 
+            onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+            className="remote-side-btn font-btn"
+            disabled={!selectedScriptId}
+            title="Decrease Font Size"
+          >
+            -
+          </button>
+          <span className="remote-side-value">{fontSize - remoteScaleFactor}px</span>
+          <button 
+            onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+            className="remote-side-btn font-btn"
+            disabled={!selectedScriptId}
+            title="Increase Font Size"
+          >
+            +
+          </button>
+        </div>
+        
+        {/* High DPI Mode Toggle */}
+        <button
+          onClick={() => setIsHighDPI(!isHighDPI)}
+          className={`remote-side-btn dpi-btn ${isHighDPI ? 'active' : ''}`}
+          title="Toggle High DPI mode for faster scrolling on high-resolution screens"
+        >
+          {isHighDPI ? 'HQ ON' : 'HQ OFF'}
+        </button>
+        
+        {/* Fullscreen toggle button */}
+        <button
+          onClick={() => {
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(err => {
+                console.warn('Error attempting to enable fullscreen:', err);
+              });
+            } else {
+              if (document.exitFullscreen) {
+                document.exitFullscreen();
+              }
+            }
+          }}
+          className="remote-side-btn fullscreen-btn"
+          title="Toggle Fullscreen"
+        >
+          🔍+
+        </button>
+        
+        {/* Home link and connection status at bottom */}
+        <div className="remote-side-footer">
           <div className={`connection-status ${connectionStatus} ${isSyncing ? 'syncing' : ''}`}>
-            {isSyncing ? 'Syncing...' : connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
+            {isSyncing ? 'Syncing' : connectionStatus === 'connected' ? 'Online' : 'Connecting'}
           </div>
-          <Link to="/" className="nav-link">Home</Link>
+          <Link to="/" className="remote-home-link" title="Go to Home">🏠</Link>
         </div>
       </div>
+      
+      {/* Script Selection Popup Modal */}
+      {isScriptPopupOpen && (
+        <div className="modal-overlay" onClick={() => setIsScriptPopupOpen(false)}>
+          <div className="script-selection-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Select Script</h2>
+              <button 
+                onClick={() => setIsScriptPopupOpen(false)} 
+                className="close-btn"
+              >
+                ×
+              </button>
+            </div>
+            <div className="script-list-container">
+              {scripts.length === 0 ? (
+                <div className="no-scripts-message">No scripts available</div>
+              ) : (
+                <ul className="script-list">
+                  <li 
+                    className={`script-item ${selectedScriptId === null ? 'selected' : ''}`}
+                    onClick={() => {
+                      handleScriptSelect('none');
+                      setIsScriptPopupOpen(false);
+                    }}
+                  >
+                    <span className="script-title">Clear Selection</span>
+                  </li>
+                  {scripts.map(script => (
+                    <li 
+                      key={script.id} 
+                      className={`script-item ${selectedScriptId === script.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        handleScriptSelect(script.id);
+                        setIsScriptPopupOpen(false);
+                      }}
+                    >
+                      <span className="script-title">{script.title}</span>
+                      <span className="script-type">
+                        {script.id.toLowerCase().endsWith('.fountain') ? '🎬' : 
+                         script.id.toLowerCase().endsWith('.html') ? '📝' : '📄'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       
       
       {/* Search Modal */}
