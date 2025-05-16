@@ -538,12 +538,12 @@ const RemotePage = () => {
             left: 0;
             top: 0;
             height: 100vh;
-            width: 60px;
+            width: 70px;
             background-color: rgba(0, 0, 0, 0.75);
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 15px 0;
+            padding: 15px 10px;
             z-index: 1000;
             gap: 15px;
             box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
@@ -554,12 +554,12 @@ const RemotePage = () => {
             right: 0;
             top: 0;
             height: 100vh;
-            width: 60px;
+            width: 70px;
             background-color: rgba(0, 0, 0, 0.75);
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 15px 0;
+            padding: 15px 10px;
             z-index: 1000;
             gap: 15px;
             box-shadow: -2px 0 10px rgba(0, 0, 0, 0.5);
@@ -817,6 +817,21 @@ const RemotePage = () => {
           📄
         </button>
         
+        {/* Mirror mode toggle for viewer */}
+        <button
+          onClick={() => {
+            // Toggle mirror mode
+            // Send a control message to update mirror state
+            sendControlMessage('SET_FLIPPED', !isFlipped);
+            // Update local state
+            setIsFlipped(!isFlipped);
+          }}
+          className={`remote-control-btn squared-btn mirror-btn ${isFlipped ? 'active' : ''}`}
+          title="Toggle Mirror Mode (for viewer only)"
+        >
+          🪞
+        </button>
+        
         {/* Fullscreen toggle button */}
         <button
           onClick={() => {
@@ -849,20 +864,6 @@ const RemotePage = () => {
       
       {/* Right side controls - Playback and script-dependent controls */}
       <div className="remote-right-controls">
-        {/* Mirror mode toggle for viewer */}
-        <button
-          onClick={() => {
-            // Toggle mirror mode
-            // Send a control message to update mirror state
-            sendControlMessage('SET_MIRROR', !isFlipped);
-            // Update local state
-            setIsFlipped(!isFlipped);
-          }}
-          className={`remote-control-btn squared-btn mirror-btn ${isFlipped ? 'active' : ''}`}
-          title="Toggle Mirror Mode (for viewer only)"
-        >
-          🪞
-        </button>
         
         {/* Search button */}
         <button
