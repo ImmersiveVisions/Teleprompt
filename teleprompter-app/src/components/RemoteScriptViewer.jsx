@@ -722,7 +722,7 @@ const RemoteScriptViewer = forwardRef(({
         padding: 0,
         border: 'none',
         boxSizing: 'border-box',
-        transform: isFlipped ? 'scaleX(-1)' : 'none'
+        transform: 'none' // Always disable mirror mode on remote viewer
       }}
     >
       {/* Apply similar styles as ViewerPage for consistency */}

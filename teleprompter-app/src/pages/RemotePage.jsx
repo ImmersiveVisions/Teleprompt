@@ -22,7 +22,7 @@ const RemotePage = () => {
   const [speed, setSpeed] = useState(1);
   const [direction, setDirection] = useState('forward');
   const [fontSize, setFontSize] = useState(40);
-  const [isFlipped, setIsFlipped] = useState(false); // Mirror mode state
+  const [isFlipped, setIsFlipped] = useState(false); // Mirror mode is always disabled on remote
   const [remoteScaleFactor] = useState(2); // Constant scale factor for remote view
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isHighDPI, setIsHighDPI] = useState(false); // Add high DPI mode toggle
@@ -210,7 +210,10 @@ const RemotePage = () => {
         setFontSize(data.fontSize);
         console.log('RemotePage: Updated font size to:', data.fontSize, '(displayed as:', data.fontSize - remoteScaleFactor, ')');
       }
-      if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
+      // Ignore the mirror mode state for the remote display
+      // if (data.isFlipped !== undefined) setIsFlipped(data.isFlipped);
+      // Always set isFlipped to false for remote mode
+      setIsFlipped(false);
       
       // If connection was just established, request full state
       if (connectionStatus === 'connecting') {
