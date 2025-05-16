@@ -532,27 +532,42 @@ const RemotePage = () => {
             100% { opacity: 0.7; }
           }
 
-          /* Vertical side controls styling */
-          .remote-side-controls {
+          /* Left & Right side controls styling */
+          .remote-left-controls {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            width: 60px;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px 0;
+            z-index: 1000;
+            gap: 15px;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+          }
+          
+          .remote-right-controls {
             position: fixed;
             right: 0;
             top: 0;
             height: 100vh;
-            width: 70px;
-            background-color: rgba(0, 0, 0, 0.7);
+            width: 60px;
+            background-color: rgba(0, 0, 0, 0.75);
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 10px 0;
+            padding: 15px 0;
             z-index: 1000;
-            gap: 10px;
+            gap: 15px;
             box-shadow: -2px 0 10px rgba(0, 0, 0, 0.5);
           }
 
-          .remote-side-btn {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
+          .remote-control-btn {
+            width: 45px;
+            height: 45px;
             background-color: #2a2a2a;
             color: white;
             border: 2px solid #444;
@@ -563,29 +578,53 @@ const RemotePage = () => {
             cursor: pointer;
             transition: all 0.2s ease;
             padding: 0;
+            text-decoration: none;
+          }
+          
+          .squared-btn {
+            border-radius: 8px;
           }
 
-          .remote-side-btn:hover {
+          .remote-control-btn:hover {
             background-color: #444;
-            transform: scale(1.05);
+            border-color: #666;
           }
 
-          .remote-side-btn:active {
+          .remote-control-btn:active {
             transform: scale(0.95);
           }
 
-          .remote-side-btn.active {
+          .remote-control-btn.active {
             background-color: #0062cc;
             border-color: #0056b3;
           }
 
-          .remote-side-btn:disabled {
+          .remote-control-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             background-color: #333;
           }
+          
+          .mirror-btn.active {
+            background-color: #6610f2;
+            border-color: #520dc2;
+          }
+          
+          .mirror-btn {
+            background-color: #343a40;
+          }
+          
+          .play-btn.active {
+            background-color: #dc3545;
+            border-color: #bd2130;
+          }
+          
+          .play-btn:not(.active) {
+            background-color: #28a745;
+            border-color: #1e7e34;
+          }
 
-          .remote-side-control-group {
+          .remote-control-group {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -593,36 +632,44 @@ const RemotePage = () => {
             margin: 5px 0;
             width: 100%;
           }
-
-          .remote-side-label {
-            color: #ccc;
-            font-size: 12px;
-            font-weight: bold;
-          }
-
-          .remote-side-value {
-            color: white;
-            font-size: 14px;
-            min-height: 20px;
-            text-align: center;
-          }
-
-          .remote-side-footer {
-            margin-top: auto;
+          
+          .remote-control-buttons {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
-            width: 100%;
+            gap: 5px;
+          }
+
+          .remote-control-label {
+            color: #ccc;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+
+          .remote-control-value {
+            color: white;
+            font-size: 12px;
+            min-height: 16px;
+            text-align: center;
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            padding: 2px 4px;
+            min-width: 40px;
           }
 
           .connection-status {
-            font-size: 10px;
-            padding: 4px 8px;
-            border-radius: 10px;
+            font-size: 9px;
+            padding: 3px 6px;
+            border-radius: 8px;
             background-color: #333;
             color: white;
             text-align: center;
+            margin-top: auto;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: bold;
           }
 
           .connection-status.connected {
@@ -632,13 +679,6 @@ const RemotePage = () => {
           .connection-status.connecting {
             background-color: #ffc107;
             color: #212529;
-          }
-
-          .remote-home-link {
-            text-decoration: none;
-            color: white;
-            font-size: 24px;
-            margin-bottom: 10px;
           }
 
           /* Script Selection Popup Styles */
@@ -765,103 +805,16 @@ const RemotePage = () => {
         `}
       </style>
       
-      {/* Vertical side controls */}
-      <div className="remote-side-controls">
+      {/* Split left-right layout controls */}
+      {/* Left side controls - Always visible essential controls */}
+      <div className="remote-left-controls">
         {/* Script selection icon button */}
         <button
           onClick={() => setIsScriptPopupOpen(!isScriptPopupOpen)}
-          className={`remote-side-btn script-select-btn ${isScriptPopupOpen ? 'active' : ''}`}
+          className={`remote-control-btn squared-btn script-select-btn ${isScriptPopupOpen ? 'active' : ''}`}
           title="Select Script"
         >
           📄
-        </button>
-        
-        {/* Search button */}
-        <button
-          onClick={() => {
-            // Reset search state and open modal
-            setSearchTerm("");
-            setSearchResults([]);
-            setIsSearchModalOpen(true);
-          }}
-          className="remote-side-btn search-btn"
-          disabled={!selectedScriptId}
-          title="Search in script"
-        >
-          🔍
-        </button>
-        
-        {/* Play/Pause button */}
-        <button 
-          onClick={togglePlay} 
-          className={`remote-side-btn play-btn ${isPlaying ? 'active' : ''}`}
-          disabled={!selectedScriptId}
-          title={isPlaying ? "Pause" : "Play"}
-        >
-          {isPlaying ? '⏸' : '▶'}
-        </button>
-        
-        {/* Direction button */}
-        <button 
-          onClick={toggleDirection} 
-          className="remote-side-btn direction-btn"
-          disabled={!selectedScriptId}
-          title={direction === 'forward' ? "Scrolling Down" : "Scrolling Up"}
-        >
-          {direction === 'forward' ? '⬇️' : '⬆️'}
-        </button>
-        
-        {/* Speed controls */}
-        <div className="remote-side-control-group">
-          <span className="remote-side-label">Speed</span>
-          <button 
-            onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
-            className="remote-side-btn speed-btn"
-            disabled={!selectedScriptId}
-            title="Decrease Speed"
-          >
-            -
-          </button>
-          <span className="remote-side-value">{speed.toFixed(2)}x</span>
-          <button 
-            onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
-            className="remote-side-btn speed-btn"
-            disabled={!selectedScriptId}
-            title="Increase Speed"
-          >
-            +
-          </button>
-        </div>
-        
-        {/* Font size controls */}
-        <div className="remote-side-control-group">
-          <span className="remote-side-label">Font</span>
-          <button 
-            onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
-            className="remote-side-btn font-btn"
-            disabled={!selectedScriptId}
-            title="Decrease Font Size"
-          >
-            -
-          </button>
-          <span className="remote-side-value">{fontSize - remoteScaleFactor}px</span>
-          <button 
-            onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
-            className="remote-side-btn font-btn"
-            disabled={!selectedScriptId}
-            title="Increase Font Size"
-          >
-            +
-          </button>
-        </div>
-        
-        {/* High DPI Mode Toggle */}
-        <button
-          onClick={() => setIsHighDPI(!isHighDPI)}
-          className={`remote-side-btn dpi-btn ${isHighDPI ? 'active' : ''}`}
-          title="Toggle High DPI mode for faster scrolling on high-resolution screens"
-        >
-          {isHighDPI ? 'HQ ON' : 'HQ OFF'}
         </button>
         
         {/* Fullscreen toggle button */}
@@ -877,19 +830,131 @@ const RemotePage = () => {
               }
             }
           }}
-          className="remote-side-btn fullscreen-btn"
+          className="remote-control-btn squared-btn fullscreen-btn"
           title="Toggle Fullscreen"
         >
           🔍+
         </button>
         
-        {/* Home link and connection status at bottom */}
-        <div className="remote-side-footer">
-          <div className={`connection-status ${connectionStatus} ${isSyncing ? 'syncing' : ''}`}>
-            {isSyncing ? 'Syncing' : connectionStatus === 'connected' ? 'Online' : 'Connecting'}
-          </div>
-          <Link to="/" className="remote-home-link" title="Go to Home">🏠</Link>
+        {/* Home link */}
+        <Link to="/" className="remote-control-btn squared-btn home-btn" title="Go to Home">
+          🏠
+        </Link>
+        
+        {/* Connection status */}
+        <div className={`connection-status ${connectionStatus} ${isSyncing ? 'syncing' : ''}`}>
+          {isSyncing ? 'Sync' : connectionStatus === 'connected' ? 'Online' : 'Connecting'}
         </div>
+      </div>
+      
+      {/* Right side controls - Playback and script-dependent controls */}
+      <div className="remote-right-controls">
+        {/* Mirror mode toggle for viewer */}
+        <button
+          onClick={() => {
+            // Toggle mirror mode
+            // Send a control message to update mirror state
+            sendControlMessage('SET_MIRROR', !isFlipped);
+            // Update local state
+            setIsFlipped(!isFlipped);
+          }}
+          className={`remote-control-btn squared-btn mirror-btn ${isFlipped ? 'active' : ''}`}
+          title="Toggle Mirror Mode (for viewer only)"
+        >
+          🪞
+        </button>
+        
+        {/* Search button */}
+        <button
+          onClick={() => {
+            // Reset search state and open modal
+            setSearchTerm("");
+            setSearchResults([]);
+            setIsSearchModalOpen(true);
+          }}
+          className="remote-control-btn squared-btn search-btn"
+          disabled={!selectedScriptId}
+          title="Search in script"
+        >
+          🔍
+        </button>
+      
+        {/* Play/Pause button */}
+        <button 
+          onClick={togglePlay} 
+          className={`remote-control-btn squared-btn play-btn ${isPlaying ? 'active' : ''}`}
+          disabled={!selectedScriptId}
+          title={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? '⏸' : '▶'}
+        </button>
+        
+        {/* Direction button */}
+        <button 
+          onClick={toggleDirection} 
+          className="remote-control-btn squared-btn direction-btn"
+          disabled={!selectedScriptId}
+          title={direction === 'forward' ? "Scrolling Down" : "Scrolling Up"}
+        >
+          {direction === 'forward' ? '⬇️' : '⬆️'}
+        </button>
+        
+        {/* Speed controls */}
+        <div className="remote-control-group">
+          <span className="remote-control-label">Speed</span>
+          <div className="remote-control-buttons">
+            <button 
+              onClick={() => changeSpeed(Math.max(0.25, speed - 0.25))}
+              className="remote-control-btn squared-btn speed-btn"
+              disabled={!selectedScriptId}
+              title="Decrease Speed"
+            >
+              -
+            </button>
+            <span className="remote-control-value">{speed.toFixed(2)}x</span>
+            <button 
+              onClick={() => changeSpeed(Math.min(2.5, speed + 0.25))}
+              className="remote-control-btn squared-btn speed-btn"
+              disabled={!selectedScriptId}
+              title="Increase Speed"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        
+        {/* Font size controls */}
+        <div className="remote-control-group">
+          <span className="remote-control-label">Font</span>
+          <div className="remote-control-buttons">
+            <button 
+              onClick={() => changeFontSize(Math.max(16, fontSize - 1))}
+              className="remote-control-btn squared-btn font-btn"
+              disabled={!selectedScriptId}
+              title="Decrease Font Size"
+            >
+              -
+            </button>
+            <span className="remote-control-value">{fontSize - remoteScaleFactor}px</span>
+            <button 
+              onClick={() => changeFontSize(Math.min(48, fontSize + 1))}
+              className="remote-control-btn squared-btn font-btn"
+              disabled={!selectedScriptId}
+              title="Increase Font Size"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        
+        {/* High DPI Mode Toggle */}
+        <button
+          onClick={() => setIsHighDPI(!isHighDPI)}
+          className={`remote-control-btn squared-btn dpi-btn ${isHighDPI ? 'active' : ''}`}
+          title="Toggle High DPI mode for faster scrolling on high-resolution screens"
+        >
+          {isHighDPI ? 'HQ ON' : 'HQ OFF'}
+        </button>
       </div>
       
       {/* Script Selection Popup Modal */}

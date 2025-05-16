@@ -686,7 +686,7 @@ const RemoteScriptViewer = forwardRef(({
     );
   }
   
-  if (!script) {
+  if (!script || !scriptId) {
     return (
       <div className="no-script-message" style={{ 
         color: 'white', 
@@ -694,9 +694,12 @@ const RemoteScriptViewer = forwardRef(({
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '100%'
+        height: '100%',
+        flexDirection: 'column',
+        gap: '20px'
       }}>
-        No script selected
+        <div style={{ fontSize: '24px' }}>Please select a script</div>
+        <div style={{ fontSize: '16px', opacity: '0.7' }}>Click the script icon to choose a script</div>
       </div>
     );
   }
