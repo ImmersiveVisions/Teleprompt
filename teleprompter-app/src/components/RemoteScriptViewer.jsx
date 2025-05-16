@@ -73,20 +73,33 @@ const RemoteScriptViewer = forwardRef(({
               if (el.parentNode) el.parentNode.removeChild(el);
             });
             
-            // Create a subtle highlight
+            // Create a green highlight with fade animation
             const marker = document.createElement('div');
             marker.className = 'search-position-marker';
+            
+            // Add style for animation
+            const style = iframe.contentDocument.createElement('style');
+            style.textContent = `
+              @keyframes greenFadeOut {
+                0% { opacity: 0.7; }
+                100% { opacity: 0; }
+              }
+            `;
+            iframe.contentDocument.head.appendChild(style);
+            
             marker.style.cssText = `
               position: absolute;
               left: 0;
               width: 100%;
               height: 80px;
-              background-color: rgba(255, 165, 0, 0.3);
-              border-top: 2px solid orange;
-              border-bottom: 2px solid orange;
+              background-color: rgba(40, 167, 69, 0.4);
+              border-top: 2px solid #28a745;
+              border-bottom: 2px solid #28a745;
               top: ${targetPosition - 40}px;
               z-index: 1000;
               pointer-events: none;
+              animation: greenFadeOut 0.5s ease-out forwards;
+              animation-delay: 0.5s;
             `;
             scrollContainer.appendChild(marker);
             
@@ -102,10 +115,11 @@ const RemoteScriptViewer = forwardRef(({
               });
             }, 50);
             
-            // Remove marker after a delay
+            // Remove marker after animation completes
             setTimeout(() => {
               if (marker.parentNode) marker.parentNode.removeChild(marker);
-            }, 3000);
+              if (style.parentNode) style.parentNode.removeChild(style);
+            }, 1200);
           } catch (markErr) {
             // Silently ignore marker errors
           }

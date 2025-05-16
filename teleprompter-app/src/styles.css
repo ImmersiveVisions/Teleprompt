@@ -1466,6 +1466,12 @@ html body #teleprompter-frame p:contains("DISSOLVE TO:") {
   padding: 2rem;
 }
 
+/* Green highlight fade animation */
+@keyframes green-fade-out {
+  0% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
 /* Remote Page */
 .remote-page {
   display: flex;

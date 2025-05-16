@@ -369,16 +369,9 @@ const ViewerPage = ({ directScriptId }) => {
                     // Add style for animations
                     const style = iframe.contentDocument.createElement('style');
                     style.textContent = `
-                      @keyframes pulse-animation {
-                        0% { opacity: 0.9; background-color: rgba(255, 0, 0, 0.8); }
-                        50% { opacity: 0.5; background-color: rgba(255, 255, 0, 0.8); }
-                        100% { opacity: 0.9; background-color: rgba(255, 0, 0, 0.8); }
-                      }
-                      
-                      @keyframes border-pulse {
-                        0% { border-color: red; }
-                        50% { border-color: yellow; }
-                        100% { border-color: red; }
+                      @keyframes green-fade-out {
+                        0% { opacity: 0.7; }
+                        100% { opacity: 0; }
                       }
                     `;
                     iframe.contentDocument.head.appendChild(style);
@@ -389,8 +382,9 @@ const ViewerPage = ({ directScriptId }) => {
                     
                     // Special styling for remote-originated updates
                     const isFromRemote = data.origin === 'remote' || data.fromRemote;
-                    const bgColor = isFromRemote ? 'rgba(0, 0, 255, 0.7)' : 'rgba(255, 0, 0, 0.7)';
-                    const borderColor = isFromRemote ? 'blue' : 'red';
+                    // Always use green highlight for better consistency
+                    const bgColor = 'rgba(40, 167, 69, 0.4)';
+                    const borderColor = '#28a745';
                     const label = isFromRemote ? '📱 REMOTE SYNC 📱' : 'POSITION';
                     
                     highlight.style.cssText = `
@@ -404,7 +398,8 @@ const ViewerPage = ({ directScriptId }) => {
                       top: ${scrollTo - 50}px;
                       z-index: 10000;
                       pointer-events: none;
-                      animation: pulse-animation 1s infinite, border-pulse 1s infinite;
+                      animation: green-fade-out 0.5s ease-out forwards;
+                      animation-delay: 0.5s;
                     `;
                     
                     // Add a label for remote updates
