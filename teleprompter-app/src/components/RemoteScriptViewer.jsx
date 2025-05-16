@@ -691,10 +691,40 @@ const RemoteScriptViewer = forwardRef(({
   
   if (isLoading) {
     return (
-      <div className="loading-screen">
-        <div className="loading-content">
-          <div className="loading-spinner"></div>
-          <div className="loading-message">Loading script...</div>
+      <div className="loading-screen" style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#1a1a1a',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999
+      }}>
+        <div className="loading-content" style={{
+          textAlign: 'center',
+          color: 'white'
+        }}>
+          <div className="loading-spinner" style={{
+            border: '4px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '50%',
+            borderTop: '4px solid #3498db',
+            width: '50px',
+            height: '50px',
+            margin: '0 auto 1.5rem',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          <div className="loading-message" style={{
+            fontSize: '1.5rem'
+          }}>Loading script...</div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       </div>
     );
@@ -710,10 +740,44 @@ const RemoteScriptViewer = forwardRef(({
         alignItems: 'center',
         height: '100%',
         flexDirection: 'column',
-        gap: '20px'
+        gap: '20px',
+        background: 'radial-gradient(circle, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 100%)'
       }}>
-        <div style={{ fontSize: '24px' }}>Please select a script</div>
-        <div style={{ fontSize: '16px', opacity: '0.7' }}>Click the script icon to choose a script</div>
+        <div style={{ 
+          fontSize: '30px', 
+          fontWeight: 'bold', 
+          marginBottom: '20px',
+          textShadow: '0 0 10px rgba(255,255,255,0.3)'
+        }}>No Script Selected</div>
+        
+        <div style={{ 
+          fontSize: '18px', 
+          opacity: '0.9', 
+          marginBottom: '30px',
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          padding: '15px 25px',
+          borderRadius: '10px',
+          maxWidth: '80%'
+        }}>
+          Click the <span style={{fontSize: '24px'}}>📄</span> icon on the left side to select a script
+        </div>
+        
+        <div style={{ 
+          fontSize: '50px', 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          padding: '20px 30px',
+          borderRadius: '15px',
+          animation: 'pulse 1.5s infinite',
+          filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.3))'
+        }}>👈</div>
+        
+        <style>{`
+          @keyframes pulse {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(-15px); }
+            100% { transform: translateX(0); }
+          }
+        `}</style>
       </div>
     );
   }

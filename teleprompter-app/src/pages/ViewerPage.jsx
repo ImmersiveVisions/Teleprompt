@@ -408,28 +408,13 @@ const ViewerPage = ({ directScriptId }) => {
                     }
                     iframe.contentDocument.body.appendChild(highlight);
                     
-                    // Create a line number indicator
-                    const textMarker = iframe.contentDocument.createElement('div');
-                    textMarker.className = 'search-position-marker';
-                    textMarker.style.cssText = `
-                      position: absolute;
-                      left: 50%;
-                      transform: translateX(-50%);
-                      top: ${scrollTo}px;
-                      padding: 5px 15px;
-                      background-color: black;
-                      color: white;
-                      border: 2px solid yellow;
-                      border-radius: 20px;
-                      font-weight: bold;
-                      z-index: 10001;
-                      pointer-events: none;
-                      text-align: center;
-                      font-size: 16px;
-                    `;
-                    // Display line number with +1 for 1-based display
-                    textMarker.innerText = `Line ${data.lineIndex}`;
-                    iframe.contentDocument.body.appendChild(textMarker);
+                    // Line number indicator disabled in production
+                    /* 
+                    // Create a line number indicator - disabled in production
+                    const textMarker = document.createElement('div');
+                    */
+                    // Just create an empty element for reference but don't display it
+                    const textMarker = document.createElement('div');
                     
                     // Method 3c: Use scrollIntoView on the marker
                     console.log('Method 3c: Using scrollIntoView on marker - at top 20%');
@@ -467,44 +452,23 @@ const ViewerPage = ({ directScriptId }) => {
                           behavior: 'auto'
                         });
                         
-                        // Create a debug overlay for monitoring
+                        // Debug overlay disabled for production
+                        /* 
                         try {
-                          const debugOverlay = iframe.contentDocument.createElement('div');
-                          debugOverlay.style.cssText = `
-                            position: fixed;
-                            top: 10px;
-                            right: 10px;
-                            background: rgba(0,0,0,0.8);
-                            color: lime;
-                            padding: 5px;
-                            z-index: 10002;
-                            font-size: 12px;
-                            border: 1px solid lime;
-                          `;
-                          debugOverlay.innerHTML = `
-                            <div>Line: ${data.lineIndex}/${data.totalLines}</div>
-                            <div>Position: ${scrollTo}px</div>
-                            <div>Top 20%: ${topPosition}px</div>
-                            <div>Ratio: ${lineRatio.toFixed(4)}</div>
-                          `;
-                          iframe.contentDocument.body.appendChild(debugOverlay);
-                          
-                          // Remove debug overlay after a delay
-                          setTimeout(() => {
-                            if (debugOverlay.parentNode) debugOverlay.parentNode.removeChild(debugOverlay);
-                          }, 7000);
+                          // Debug overlay code removed
                         } catch (debugErr) {
                           console.error('Error creating debug overlay:', debugErr);
                         }
+                        */
                       }, 100);
                     }, 200);
                     
-                    // Remove markers after delay
+                    // Remove markers after animation completes
                     setTimeout(() => {
                       if (highlight.parentNode) highlight.parentNode.removeChild(highlight);
                       if (textMarker.parentNode) textMarker.parentNode.removeChild(textMarker);
                       if (style.parentNode) style.parentNode.removeChild(style);
-                    }, 8000); // Longer visibility time
+                    }, 1200); // 0.5s delay + 0.5s animation + buffer
                   } catch (markerErr) {
                     console.error('Error creating line markers:', markerErr);
                   }
